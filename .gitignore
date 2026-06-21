@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.keystore
+
+# builds
+dist/
+build/
+.next/
+.turbo/
+out/
+*.tsbuildinfo
+
+# expo / react-native
+.expo/
+.expo-shared/
+*.orig.*
+web-build/
+
+# move
+packages/move/build/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

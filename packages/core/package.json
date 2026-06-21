@@ -1,0 +1,11 @@
+{
+  "name": "@umbra/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Sui client, contract bindings, Walrus/Seal/Enoki wrappers, Zod schemas. Single source of business logic for web + mobile.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

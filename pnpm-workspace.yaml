@@ -1,0 +1,5 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+# packages/move is a Sui Move package (no package.json) and is ignored by pnpm.

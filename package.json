@@ -1,0 +1,24 @@
+{
+  "name": "umbra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Umbra — a Sui-native decentralized social superapp (Phase 1).",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "move:build": "sui move build --path packages/move",
+    "move:test": "sui move test --path packages/move",
+    "move:publish": "node packages/move/scripts/publish.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.8",
+    "typescript": "^5.7.3"
+  }
+}

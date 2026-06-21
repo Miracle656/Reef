@@ -1,0 +1,11 @@
+{
+  "name": "@umbra/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared neobrutalist design tokens (color/spacing/typography) + headless components for web + mobile.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

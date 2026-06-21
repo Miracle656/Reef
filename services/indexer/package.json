@@ -1,0 +1,11 @@
+{
+  "name": "@umbra/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sui checkpoint indexer -> Postgres + typed feed/profile/graph API (tRPC). Also hosts the Enoki sponsor endpoint.",
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"indexer not yet implemented — see root CLAUDE.md\" && exit 0",
+    "typecheck": "tsc --noEmit"
+  }
+}
