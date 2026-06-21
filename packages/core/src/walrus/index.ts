@@ -38,7 +38,11 @@ export async function uploadBlob(
   for (const base of walrus.publishers) {
     const endpoint = `${base.replace(/\/$/, "")}?epochs=${epochs}`;
     try {
-      const res = await fetch(endpoint, { method: "PUT", body: data });
+      // Wrap in a Blob so the body type is portable across node + DOM lib
+      // typings. Re-allocating into a fresh ArrayBuffer-backed array avoids the
+      // TS 5.7 `Uint8Array<ArrayBufferLike>` vs `BlobPart` mismatch under DOM lib.
+      const body = data instanceof Blob ? data : new Blob([new Uint8Array(data)]);
+      const res = await fetch(endpoint, { method: "PUT", body });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       const json = (await res.json()) as WalrusPublisherResponse;
       const found = extractBlobId(json);

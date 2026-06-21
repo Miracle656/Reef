@@ -250,8 +250,9 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [ ] Publish package to testnet, record IDs.
 - [x] `@umbra/core`: client factory, bindings, Enoki sponsor helper, Walrus module, Zod schemas (12 tests).
 - [x] `services/indexer`: event poller → Postgres (Prisma) → tRPC feed API + sponsor endpoint + reactions + SuiNS mint stub (typechecked, 3 tests).
-- [ ] `packages/ui`: neobrutalist tokens.
-- [ ] `apps/web` then `apps/mobile`.
+- [x] `packages/ui`: smooth-neobrutalist design tokens + Tailwind v4 theme.
+- [x] `apps/web`: Next 15 App Router — sign-in, onboarding, feed, compose, profile, follow, likes; gasless via core. **`next build` clean (4 routes)**, typechecks.
+- [ ] `apps/mobile` (Expo) — same feature set, shares `@umbra/core`.
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
 - [ ] Walrus epoch renewal job (server-side, `@mysten/walrus`).
 

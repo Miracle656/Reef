@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@umbra/ui/theme.css";
+@import "@mysten/dapp-kit/dist/index.css";
+
+/* scan app + components for class usage */
+@source "../app";
+@source "../components";
+
+html {
+  scroll-behavior: smooth;
+}

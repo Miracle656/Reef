@@ -49,6 +49,16 @@ export const appRouter = router({
     return toProfile(row, followersCount, followingCount);
   }),
 
+  profileByAddress: publicProcedure.input(z.object({ address: SuiAddress })).query(async ({ ctx, input }) => {
+    const row = await ctx.prisma.profile.findUnique({ where: { owner: input.address } });
+    if (!row) return null;
+    const [followersCount, followingCount] = await Promise.all([
+      ctx.prisma.follow.count({ where: { followee: row.owner } }),
+      ctx.prisma.follow.count({ where: { follower: row.owner } }),
+    ]);
+    return toProfile(row, followersCount, followingCount);
+  }),
+
   // --- single post ---
   post: publicProcedure.input(z.object({ id: SuiAddress })).query(async ({ ctx, input }) => {
     const row = await ctx.prisma.post.findUnique({ where: { id: input.id } });
@@ -74,6 +84,18 @@ export const appRouter = router({
           replyTo: null,
           ...(input.beforeMs ? { createdAtMs: { lt: BigInt(input.beforeMs) } } : {}),
         },
+        orderBy: { createdAtMs: "desc" },
+        take: input.limit,
+      });
+      return rows.map((r) => toPost(r));
+    }),
+
+  // --- posts by a single author (profile timeline) ---
+  postsByAuthor: publicProcedure
+    .input(z.object({ address: SuiAddress, limit: z.number().int().min(1).max(100).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.post.findMany({
+        where: { author: input.address, deleted: false, replyTo: null },
         orderBy: { createdAtMs: "desc" },
         take: input.limit,
       });

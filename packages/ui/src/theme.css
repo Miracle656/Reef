@@ -1,0 +1,113 @@
+/**
+ * Umbra web theme — Tailwind v4. Smooth, clean neobrutalism.
+ * Import after `@import "tailwindcss";` in the app's globals.css.
+ */
+
+:root {
+  --background: #fbfbf9;
+  --surface: #ffffff;
+  --surface-muted: #f3f3f0;
+  --ink: #1b1b1f;
+  --ink-soft: #52525b;
+  --ink-faint: #a1a1aa;
+  --border: #e5e5e1;
+  --border-strong: #1b1b1f;
+  --accent: #2da89e;
+  --accent-ink: #0f4c47;
+  --danger: #d2483f;
+  --on-accent: #ffffff;
+  --on-ink: #fbfbf9;
+
+  --shadow-color: var(--border-strong);
+  --radius: 10px;
+}
+
+.dark {
+  --background: #121214;
+  --surface: #1a1a1d;
+  --surface-muted: #222226;
+  --ink: #f4f4f5;
+  --ink-soft: #a1a1aa;
+  --ink-faint: #6b6b73;
+  --border: #2c2c31;
+  --border-strong: #f4f4f5;
+  --accent: #34c3b7;
+  --accent-ink: #a7e8e1;
+  --danger: #e5675e;
+  --on-accent: #0b2c29;
+  --on-ink: #121214;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --color-on-accent: var(--on-accent);
+  --color-on-ink: var(--on-ink);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-neo-sm: 2px 2px 0 0 var(--shadow-color);
+  --shadow-neo: 4px 4px 0 0 var(--shadow-color);
+  --shadow-neo-lg: 6px 6px 0 0 var(--shadow-color);
+
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-ink);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* The neobrutalist "press" interaction — hard offset shadow that collapses on
+   click, transitions smoothly. Used by buttons/cards. */
+@utility neo {
+  border: 2px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-neo-sm);
+  transition:
+    box-shadow var(--ease-smooth) 200ms,
+    transform var(--ease-smooth) 200ms;
+}
+
+@utility neo-press {
+  &:hover {
+    box-shadow: var(--shadow-neo);
+    transform: translate(-1px, -1px);
+  }
+  &:active {
+    box-shadow: 0 0 0 0 transparent;
+    transform: translate(2px, 2px);
+  }
+}
+
+/* minimal scrollbar — keeps the clean feel */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+  opacity: 0.4;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

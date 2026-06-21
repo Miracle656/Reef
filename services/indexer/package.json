@@ -4,6 +4,9 @@
   "private": true,
   "description": "Sui event indexer -> Postgres + typed tRPC feed/profile/graph API. Hosts the Enoki sponsor + SuiNS subname endpoints.",
   "type": "module",
+  "exports": {
+    "./router": "./src/trpc/router.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",

@@ -23,9 +23,11 @@ and gasless UX are non-negotiable.
 
 | Area | State |
 |---|---|
-| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ complete, 16 tests passing |
-| Monorepo scaffold + `.env.example` | ✅ |
-| `@umbra/core`, indexer, UI apps | ⏳ deferred until design review (see `CLAUDE.md`) |
+| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ 16 tests |
+| `@umbra/core` (client, bindings, Walrus, Enoki, schemas) | ✅ 12 tests |
+| `services/indexer` (poller → Postgres, tRPC API, sponsor, reactions) | ✅ typechecked, 3 tests |
+| `packages/ui` + `apps/web` (Next 15, gasless, neobrutalist) | ✅ `next build` clean |
+| `apps/mobile` (Expo) | ⏳ next |
 
 ## Quick start
 
