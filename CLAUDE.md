@@ -247,7 +247,7 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [x] Scaffold monorepo (pnpm + Turbo) + `.env.example`.
 - [x] `profile` / `post` / `follow` / `registry` Move modules + 16 tests + publish script.
 - [x] **Review checkpoint** — object model, interfaces, Enoki flow reviewed; D-3 (SuiNS subname) + D-7 (editable posts) decided.
-- [ ] Publish package to testnet, record IDs.
+- [x] Publish package to testnet (via WSL sui 1.72, owner `0x669f…ec58`). Package `0x2e066a2176aaaf4e61064b74d3b4d9ea80d10ceca1372a9cd4bda36412ff761f`, Registry `0x1abe492364bcaff32648a432ca5ca4cf91d9fa0307b4f389ecf1a9c36daad933` (see `packages/move/deployments/testnet.json`).
 - [x] `@umbra/core`: client factory, bindings, Enoki sponsor helper, Walrus module, Zod schemas (12 tests).
 - [x] `services/indexer`: event poller → Postgres (Prisma) → tRPC feed API + sponsor endpoint + reactions + SuiNS mint stub (typechecked, 3 tests).
 - [x] `packages/ui`: smooth-neobrutalist design tokens + Tailwind v4 theme.
