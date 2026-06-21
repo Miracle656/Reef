@@ -1,0 +1,17 @@
+[package]
+name = "umbra"
+edition = "2024.beta"
+version = "0.1.0"
+# Umbra — Sui-native social superapp. Phase 1 on-chain object model:
+# profiles, posts, and the follow graph. Reactions are intentionally OFF-chain
+# (see CLAUDE.md) and aggregated by the indexer.
+
+# No explicit framework dependency: the installed Sui CLI auto-injects the
+# system packages (MoveStdlib, Sui, ...) that match the binary, which avoids
+# the version skew you get from pinning a moving `framework/testnet` git rev.
+[dependencies]
+
+[addresses]
+umbra = "0x0"
+
+[dev-dependencies]
