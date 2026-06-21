@@ -29,6 +29,7 @@ fun create_and_read_profile() {
             b"Alice A",
             b"gm from Lagos",
             option::some(b"blob-avatar-1"),
+            option::some(b"alice.umbra.sui"),
             &clk,
             sc.ctx(),
         );
@@ -45,6 +46,7 @@ fun create_and_read_profile() {
         assert!(p.handle() == string::utf8(b"alice"), 3);
         assert!(p.display_name() == string::utf8(b"Alice A"), 4);
         assert!(p.avatar_blob_id() == option::some(string::utf8(b"blob-avatar-1")), 5);
+        assert!(p.suins_name() == option::some(string::utf8(b"alice.umbra.sui")), 6);
         sc.return_to_sender(p);
     };
     sc.end();
@@ -57,10 +59,10 @@ fun duplicate_handle_aborts() {
     sc.next_tx(ALICE);
     let mut reg = sc.take_shared<Registry>();
     let clk = clock::create_for_testing(sc.ctx());
-    profile::create_profile(&mut reg, b"alice", b"A", b"", option::none(), &clk, sc.ctx());
+    profile::create_profile(&mut reg, b"alice", b"A", b"", option::none(), option::none(), &clk, sc.ctx());
     // BOB tries to claim the same handle
     sc.next_tx(BOB);
-    profile::create_profile(&mut reg, b"Alice", b"B", b"", option::none(), &clk, sc.ctx());
+    profile::create_profile(&mut reg, b"Alice", b"B", b"", option::none(), option::none(), &clk, sc.ctx());
     clk.destroy_for_testing();
     ts::return_shared(reg);
     sc.end();
@@ -73,8 +75,8 @@ fun two_profiles_same_address_aborts() {
     sc.next_tx(ALICE);
     let mut reg = sc.take_shared<Registry>();
     let clk = clock::create_for_testing(sc.ctx());
-    profile::create_profile(&mut reg, b"alice", b"A", b"", option::none(), &clk, sc.ctx());
-    profile::create_profile(&mut reg, b"alice2", b"A", b"", option::none(), &clk, sc.ctx());
+    profile::create_profile(&mut reg, b"alice", b"A", b"", option::none(), option::none(), &clk, sc.ctx());
+    profile::create_profile(&mut reg, b"alice2", b"A", b"", option::none(), option::none(), &clk, sc.ctx());
     clk.destroy_for_testing();
     ts::return_shared(reg);
     sc.end();
@@ -87,7 +89,7 @@ fun invalid_handle_char_aborts() {
     sc.next_tx(ALICE);
     let mut reg = sc.take_shared<Registry>();
     let clk = clock::create_for_testing(sc.ctx());
-    profile::create_profile(&mut reg, b"bad handle!", b"A", b"", option::none(), &clk, sc.ctx());
+    profile::create_profile(&mut reg, b"bad handle!", b"A", b"", option::none(), option::none(), &clk, sc.ctx());
     clk.destroy_for_testing();
     ts::return_shared(reg);
     sc.end();
@@ -100,7 +102,7 @@ fun update_and_change_handle() {
     {
         let mut reg = sc.take_shared<Registry>();
         let clk = clock::create_for_testing(sc.ctx());
-        profile::create_profile(&mut reg, b"alice", b"A", b"old bio", option::none(), &clk, sc.ctx());
+        profile::create_profile(&mut reg, b"alice", b"A", b"old bio", option::none(), option::none(), &clk, sc.ctx());
         clk.destroy_for_testing();
         ts::return_shared(reg);
     };

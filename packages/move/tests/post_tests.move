@@ -102,6 +102,30 @@ fun too_many_media_aborts() {
 }
 
 #[test]
+fun edit_post_ok() {
+    let mut sc = ts::begin(ALICE);
+    {
+        let clk = clock::create_for_testing(sc.ctx());
+        post::create_post(b"typo heer", vector[], option::none(), &clk, sc.ctx());
+        clk.destroy_for_testing();
+    };
+    sc.next_tx(ALICE);
+    {
+        let mut p = sc.take_from_sender<Post>();
+        let mut clk = clock::create_for_testing(sc.ctx());
+        clk.increment_for_testing(1000);
+        post::edit_post(&mut p, b"typo here", vector[b"blob-x"], &clk, sc.ctx());
+        assert!(p.text() == string::utf8(b"typo here"), 0);
+        assert!(p.media().length() == 1, 1);
+        assert!(p.updated_at_ms() == 1000, 2);
+        assert!(p.created_at_ms() == 0, 3);
+        clk.destroy_for_testing();
+        sc.return_to_sender(p);
+    };
+    sc.end();
+}
+
+#[test]
 fun delete_post_ok() {
     let mut sc = ts::begin(ALICE);
     {

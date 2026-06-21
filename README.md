@@ -23,7 +23,7 @@ and gasless UX are non-negotiable.
 
 | Area | State |
 |---|---|
-| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ complete, 15 tests passing |
+| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ complete, 16 tests passing |
 | Monorepo scaffold + `.env.example` | ✅ |
 | `@umbra/core`, indexer, UI apps | ⏳ deferred until design review (see `CLAUDE.md`) |
 

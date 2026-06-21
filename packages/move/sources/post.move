@@ -37,6 +37,8 @@ public struct Post has key, store {
     /// parent post ID if this is a reply
     reply_to: Option<ID>,
     created_at_ms: u64,
+    /// equals created_at_ms until the post is edited
+    updated_at_ms: u64,
 }
 
 public struct PostCreated has copy, drop {
@@ -46,6 +48,14 @@ public struct PostCreated has copy, drop {
     media: vector<String>,
     reply_to: Option<ID>,
     created_at_ms: u64,
+}
+
+public struct PostEdited has copy, drop {
+    post_id: ID,
+    author: address,
+    text: String,
+    media: vector<String>,
+    updated_at_ms: u64,
 }
 
 public struct PostDeleted has copy, drop {
@@ -77,6 +87,7 @@ public fun create_post(
         media: media_strings,
         reply_to,
         created_at_ms: now,
+        updated_at_ms: now,
     };
     let post_id = object::id(&post);
 
@@ -92,10 +103,38 @@ public fun create_post(
     transfer::transfer(post, author);
 }
 
+/// Edit an owned post's text/media. Emits `PostEdited`; the indexer updates the
+/// materialized row. Reply linkage and `created_at_ms` are preserved.
+public fun edit_post(
+    post: &mut Post,
+    text: vector<u8>,
+    media: vector<vector<u8>>,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    assert!(post.author == ctx.sender(), ENotAuthor);
+    let t = string::utf8(text);
+    assert!(t.length() <= MAX_TEXT_LEN, ETextLen);
+    let media_strings = to_strings(media);
+    assert!(t.length() > 0 || media_strings.length() > 0, EEmpty);
+
+    post.text = t;
+    post.media = media_strings;
+    post.updated_at_ms = clock.timestamp_ms();
+
+    event::emit(PostEdited {
+        post_id: object::id(post),
+        author: post.author,
+        text: clone(&post.text),
+        media: clone_vec(&post.media),
+        updated_at_ms: post.updated_at_ms,
+    });
+}
+
 /// Delete an owned post. Emits `PostDeleted` so the indexer can tombstone it.
 public fun delete_post(post: Post, ctx: &TxContext) {
     assert!(post.author == ctx.sender(), ENotAuthor);
-    let Post { id, author, text: _, media: _, reply_to: _, created_at_ms: _ } = post;
+    let Post { id, author, .. } = post;
     let post_id = id.to_inner();
     id.delete();
     event::emit(PostDeleted { post_id, author });
@@ -137,3 +176,4 @@ public fun text(p: &Post): String { clone(&p.text) }
 public fun media(p: &Post): vector<String> { clone_vec(&p.media) }
 public fun reply_to(p: &Post): Option<ID> { p.reply_to }
 public fun created_at_ms(p: &Post): u64 { p.created_at_ms }
+public fun updated_at_ms(p: &Post): u64 { p.updated_at_ms }

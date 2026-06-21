@@ -54,6 +54,7 @@ public struct ProfileCreated has copy, drop {
     display_name: String,
     bio: String,
     avatar_blob_id: Option<String>,
+    suins_name: Option<String>,
     created_at_ms: u64,
 }
 
@@ -72,12 +73,16 @@ public struct ProfileUpdated has copy, drop {
 /// Self-transfer is intentional: onboarding mints the profile straight to the
 /// new (zkLogin) owner inside a single sponsored transaction.
 #[allow(lint(self_transfer))]
+/// `suins_name` is the full auto-minted leaf subname (e.g. "alice.umbra.sui")
+/// that the backend mints to this address during onboarding; pass
+/// `option::none()` if the subname is linked later via `set_suins_name`.
 public fun create_profile(
     reg: &mut Registry,
     handle: vector<u8>,
     display_name: vector<u8>,
     bio: vector<u8>,
     avatar_blob_id: Option<vector<u8>>,
+    suins_name: Option<vector<u8>>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
@@ -85,6 +90,7 @@ public fun create_profile(
     let dn = validate_display(display_name);
     let b = validate_bio(bio);
     let avatar = opt_string(avatar_blob_id);
+    let suins = opt_string(suins_name);
     let now = clock.timestamp_ms();
     let owner = ctx.sender();
 
@@ -95,7 +101,7 @@ public fun create_profile(
         display_name: clone(&dn),
         bio: clone(&b),
         avatar_blob_id: clone_opt(&avatar),
-        suins_name: option::none(),
+        suins_name: clone_opt(&suins),
         created_at_ms: now,
         updated_at_ms: now,
     };
@@ -111,6 +117,7 @@ public fun create_profile(
         display_name: dn,
         bio: b,
         avatar_blob_id: avatar,
+        suins_name: suins,
         created_at_ms: now,
     });
 

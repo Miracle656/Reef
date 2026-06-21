@@ -85,7 +85,7 @@ and it is touched on just two cold paths: profile creation and handle change.
 |---|---|---|
 | `Registry` | shared | Global invariants need a single point of truth: one profile/address, unique handles. Low write frequency, so serialization is cheap. |
 | `Profile` | owned by user | Only the user edits their profile → parallel. |
-| `Post` | owned by author | Posting touches no shared state → fully parallel. Edit/delete by author is a feature. |
+| `Post` | owned by author | Posting touches no shared state → fully parallel. **Owned + editable/deletable** (D-7): `edit_post`/`delete_post`, author-gated, emit `PostEdited`/`PostDeleted`. |
 | `FollowSet` | owned by follower | Each user mutates only their own follow set → parallel. Edges are dynamic fields keyed by followee for O(1) dup-detection. |
 
 The hot paths (`create_post`, `follow`, `unfollow`) **never read or write a
@@ -100,16 +100,32 @@ off-chain, the indexer verifies the signature and aggregates counts. The Post
 `post_id` is stable, so reactions **could** be settled on-chain later without
 migrating posts.
 
-### D-3 — Handles: app-registry now, SuiNS link reserved **(needs your call)**
+### D-3 — Handles: free auto-minted SuiNS leaf-subname under an app parent *(decided)*
 
-The locked architecture maps handles → SuiNS. But registering a real SuiNS name
-on testnet costs gas and a purchase flow, which conflicts with *instant, free*
-onboarding for Lagos-first users. **Decision taken:** Phase 1 uses an app-level
-handle claimed in our `Registry` (instant, gasless, unique), and `Profile` keeps
-a reserved `suins_name: Option<String>` + `set_suins_name` entry to link a real
-SuiNS name later (Phase 1.5/2). This is a deliberate deviation from "handles =
-SuiNS" — flagging it for your approval. Alternative: require SuiNS at signup
-(adds cost/friction). I recommend the app-registry approach.
+Every user gets a real SuiNS name from day one **for free**: an app-owned parent
+name `umbra.sui` mints each user a **leaf subname** `<handle>.umbra.sui` pointing
+at their zkLogin address. Leaf subnames are the right tool — the parent owner
+creates/controls them, the user owns nothing and pays nothing, and the backend
+(holder of the parent name) sponsors creation.
+
+Our shared `Registry` still owns the fast invariants (one profile/address; label
+uniqueness + quick reverse lookup); SuiNS enforces global subname uniqueness
+on-chain as a backstop. `Profile.handle` = the label (`alice`);
+`Profile.suins_name` = the full subname (`alice.umbra.sui`), recorded at creation.
+
+**Onboarding is two transactions** (both gasless to the user):
+1. **Backend-signed tx** — backend owns the `umbra.sui` parent `SuinsRegistration`
+   and creates the leaf subname `<handle>.umbra.sui` → user address. (Must be a
+   separate tx: the parent NFT is owned by the backend, so it can't be referenced
+   inside a user-signed PTB.)
+2. **User sponsored PTB** — `create_profile(... suins_name: "alice.umbra.sui")` +
+   `create_follow_set()`.
+
+> TODO before wiring `@umbra/core`: verify the `@mysten/suins` 1.2.1 leaf-subname
+> creation API and the testnet parent-name registration flow, and register/fund
+> the `umbra.sui` (or chosen) parent name on testnet. Fallback if leaf subnames
+> are impractical on testnet: app-registry handle only, link SuiNS later via
+> `set_suins_name`.
 
 ### Move module interfaces (Phase 1)
 
@@ -119,16 +135,17 @@ SuiNS" — flagging it for your approval. Alternative: require SuiNS at signup
 - views: `has_profile`, `handle_taken`, `profile_of`.
 
 `profile` (owned `Profile { owner, handle, display_name, bio, avatar_blob_id, suins_name, created_at_ms, updated_at_ms }`):
-- `create_profile(reg, handle, display_name, bio, avatar_blob_id: Option, clock, ctx)`
+- `create_profile(reg, handle, display_name, bio, avatar_blob_id: Option, suins_name: Option, clock, ctx)`
 - `update_profile(profile, display_name, bio, avatar_blob_id, clock, ctx)`
 - `change_handle(reg, profile, new_handle, clock, ctx)`
 - `set_suins_name(profile, suins_name, clock, ctx)`
-- Events: `ProfileCreated`, `ProfileUpdated`. Handles normalized to `[a-z0-9_]`, 3–20 chars.
+- Events: `ProfileCreated` (incl. `suins_name`), `ProfileUpdated`. Handles normalized to `[a-z0-9_]`, 3–20 chars.
 
-`post` (owned `Post { author, text, media: vector<String>, reply_to: Option<ID>, created_at_ms }`):
+`post` (owned `Post { author, text, media: vector<String>, reply_to: Option<ID>, created_at_ms, updated_at_ms }`):
 - `create_post(text, media: vector<vector<u8>>, reply_to: Option<ID>, clock, ctx)` — text ≤560, media ≤4, non-empty.
+- `edit_post(post, text, media, clock, ctx)` — author-gated; preserves `created_at_ms` + reply linkage.
 - `delete_post(post, ctx)`
-- Events: `PostCreated`, `PostDeleted`.
+- Events: `PostCreated`, `PostEdited`, `PostDeleted`.
 
 `follow` (owned `FollowSet { owner, following_count }` + dynamic-field edges):
 - `create_follow_set(ctx)` — once at onboarding (same PTB as `create_profile`).
@@ -194,7 +211,7 @@ would need a separate schema/codegen step for the same safety. ORM: **Prisma**
 ```bash
 # Move contracts (works today)
 pnpm move:build
-pnpm move:test          # 15 tests, all passing
+pnpm move:test          # 16 tests, all passing
 pnpm move:publish       # testnet; needs a funded sui client (see below)
 
 # Monorepo (shells only until apps are built)
@@ -215,17 +232,18 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 
 - **D-1** Owned-object-first; `Registry` the only shared object. Hot paths touch no shared state.
 - **D-2** Reactions off-chain, indexer-aggregated; stable `post_id` keeps on-chain settlement open.
-- **D-3** Handles via app-registry now, SuiNS link reserved. **Pending your approval.**
+- **D-3** Handles = free auto-minted SuiNS **leaf-subname** `<handle>.umbra.sui` under an app-owned parent, recorded on `Profile.suins_name`. Onboarding is 2 gasless txs (backend mints subname; user PTB creates profile+follow set). *Decided.*
 - **D-4** Indexer API = tRPC + Prisma + Postgres.
 - **D-5** Framework dep: no pinned git `framework/testnet` rev (it outran CLI 1.60 and broke the build); rely on the CLI's bundled system packages.
 - **D-6** Sponsor endpoint co-located in `services/indexer` for Phase 1.
+- **D-7** Posts are owned + **editable/deletable** (`edit_post`/`delete_post`), not frozen. *Decided.*
 
 ## TODO
 
 - [x] Verify SDK versions.
 - [x] Scaffold monorepo (pnpm + Turbo) + `.env.example`.
-- [x] `profile` / `post` / `follow` / `registry` Move modules + 15 tests + publish script.
-- [ ] **Review checkpoint** — get sign-off on object model, module interfaces, Enoki flow, D-3.
+- [x] `profile` / `post` / `follow` / `registry` Move modules + 16 tests + publish script.
+- [x] **Review checkpoint** — object model, interfaces, Enoki flow reviewed; D-3 (SuiNS subname) + D-7 (editable posts) decided.
 - [ ] Publish package to testnet, record IDs.
 - [ ] `@umbra/core`: client factory, bindings, Enoki auth + sponsor helper, Walrus module, Zod schemas.
 - [ ] `services/indexer`: checkpoint ingest → Postgres → tRPC feed API + sponsor endpoint + reactions.
@@ -234,9 +252,13 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 
 ---
 
-## Review checkpoint (STOP — awaiting your sign-off)
+## Review checkpoint — DONE
 
-Per the kickoff, UI is not scaffolded until you review: (1) the object-model
-decisions (D-1, D-2), (2) the Move module interfaces above, (3) the Enoki
-sponsored-tx flow, and (4) the SuiNS deviation (D-3). Once approved, next slice
-is `@umbra/core` + the indexer/sponsor endpoint, then the apps.
+Object model (D-1/D-2), module interfaces, and the Enoki flow were reviewed.
+Decisions locked: **D-3** free SuiNS leaf-subname `<handle>.umbra.sui`; **D-7**
+editable/deletable posts. Contract layer updated + re-tested (16/16).
+
+**Next slice (not yet started):** publish to testnet → `@umbra/core` (client,
+bindings, Enoki auth + sponsor helper, Walrus, Zod schemas) → `services/indexer`
+(checkpoint ingest → Postgres → tRPC + sponsor endpoint + SuiNS subname minting)
+→ `packages/ui` tokens → `apps/web` → `apps/mobile`.
