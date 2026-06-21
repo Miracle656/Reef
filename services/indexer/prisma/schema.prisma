@@ -1,0 +1,69 @@
+// Umbra indexer — Postgres schema. The chain is canonical; these tables are a
+// materialized, queryable projection built from package events.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Per-module ingestion cursor (event pagination is per MoveModule filter).
+model IngestCursor {
+  module    String  @id // "profile" | "post" | "follow"
+  txDigest  String
+  eventSeq  String
+  updatedAt DateTime @updatedAt
+}
+
+model Profile {
+  id             String  @id // Sui object id
+  owner          String  @unique
+  handle         String  @unique
+  displayName    String
+  bio            String  @default("")
+  avatarBlobId   String?
+  suinsName      String?
+  createdAtMs    BigInt
+  updatedAtMs    BigInt
+
+  @@index([handle])
+}
+
+model Post {
+  id          String   @id // Sui object id
+  author      String
+  text        String
+  media       String[] // Walrus blob ids
+  replyTo     String?
+  createdAtMs BigInt
+  updatedAtMs BigInt
+  deleted     Boolean  @default(false)
+
+  @@index([author, createdAtMs])
+  @@index([replyTo])
+}
+
+model Follow {
+  follower    String
+  followee    String
+  createdAtMs BigInt
+
+  @@id([follower, followee])
+  @@index([followee])
+  @@index([follower])
+}
+
+/// Off-chain signed reactions, verified then aggregated (latest intent wins).
+model Reaction {
+  postId    String
+  reactor   String
+  kind      String // "like" | "repost"
+  value     Int // 1 = active, 0 = removed
+  timestamp BigInt
+
+  @@id([postId, reactor, kind])
+  @@index([postId, kind, value])
+}

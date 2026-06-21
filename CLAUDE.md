@@ -237,6 +237,9 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - **D-5** Framework dep: no pinned git `framework/testnet` rev (it outran CLI 1.60 and broke the build); rely on the CLI's bundled system packages.
 - **D-6** Sponsor endpoint co-located in `services/indexer` for Phase 1.
 - **D-7** Posts are owned + **editable/deletable** (`edit_post`/`delete_post`), not frozen. *Decided.*
+- **D-8** `@mysten/sui` v2 API notes (verified): RPC client is `SuiJsonRpcClient` from `@mysten/sui/jsonRpc` (`new SuiJsonRpcClient({ url, network })`); `@mysten/sui/client` exports the `ClientWithCoreApi` interface; sig verify via `@mysten/sui/verify`. Core uses extensionless imports (moduleResolution: Bundler).
+- **D-9** Indexer ingests via `queryEvents` polling per MoveModule with a persisted cursor (not raw checkpoint streaming) — simpler + resumable for Phase 1; swappable later.
+- **D-10** `@umbra/core` split entrypoints: client-safe `@umbra/core` vs server-only `@umbra/core/server` (Enoki private key), so the key can't be bundled into apps.
 
 ## TODO
 
@@ -245,10 +248,12 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [x] `profile` / `post` / `follow` / `registry` Move modules + 16 tests + publish script.
 - [x] **Review checkpoint** — object model, interfaces, Enoki flow reviewed; D-3 (SuiNS subname) + D-7 (editable posts) decided.
 - [ ] Publish package to testnet, record IDs.
-- [ ] `@umbra/core`: client factory, bindings, Enoki auth + sponsor helper, Walrus module, Zod schemas.
-- [ ] `services/indexer`: checkpoint ingest → Postgres → tRPC feed API + sponsor endpoint + reactions.
+- [x] `@umbra/core`: client factory, bindings, Enoki sponsor helper, Walrus module, Zod schemas (12 tests).
+- [x] `services/indexer`: event poller → Postgres (Prisma) → tRPC feed API + sponsor endpoint + reactions + SuiNS mint stub (typechecked, 3 tests).
 - [ ] `packages/ui`: neobrutalist tokens.
 - [ ] `apps/web` then `apps/mobile`.
+- [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
+- [ ] Walrus epoch renewal job (server-side, `@mysten/walrus`).
 
 ---
 

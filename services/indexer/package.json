@@ -2,10 +2,33 @@
   "name": "@umbra/indexer",
   "version": "0.1.0",
   "private": true,
-  "description": "Sui checkpoint indexer -> Postgres + typed feed/profile/graph API (tRPC). Also hosts the Enoki sponsor endpoint.",
+  "description": "Sui event indexer -> Postgres + typed tRPC feed/profile/graph API. Hosts the Enoki sponsor + SuiNS subname endpoints.",
   "type": "module",
   "scripts": {
-    "dev": "echo \"indexer not yet implemented — see root CLAUDE.md\" && exit 0",
-    "typecheck": "tsc --noEmit"
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@hono/trpc-server": "^0.3.4",
+    "@mysten/enoki": "^1.1.1",
+    "@mysten/sui": "^2.19.0",
+    "@prisma/client": "^6.2.1",
+    "@trpc/server": "^11.0.0",
+    "@umbra/core": "workspace:*",
+    "hono": "^4.6.15",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
   }
 }
