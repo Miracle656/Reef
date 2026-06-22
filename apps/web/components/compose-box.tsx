@@ -14,6 +14,7 @@ export function ComposeBox() {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tokenize, setTokenize] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const run = useGasless();
   const qc = useQueryClient();
@@ -87,6 +88,28 @@ export function ComposeBox() {
           Post
         </Button>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setTokenize((t) => !t)}
+        className="mt-3 flex w-full items-center justify-between rounded-2xl border border-[color:var(--glass-border)] bg-surface-muted px-3 py-2 text-left"
+      >
+        <span className="flex items-center gap-2 text-sm">
+          <span aria-hidden>🪙</span>
+          <span>
+            <span className="font-medium">Tokenize</span> — make this post a tradable coin
+          </span>
+        </span>
+        <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${tokenize ? "bg-accent" : "bg-ink-faint/40"}`}>
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${tokenize ? "left-[22px]" : "left-0.5"}`} />
+        </span>
+      </button>
+      {tokenize ? (
+        <p className="mt-1 text-xs text-ink-faint">
+          Mints a coin + a DEEP pool for this post (you own it) — needs 500 DEEP in your linked wallet. Minting
+          engine is the next build; for now this posts normally.
+        </p>
+      ) : null}
     </Card>
   );
 }
