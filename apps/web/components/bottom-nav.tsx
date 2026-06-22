@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSocialAccount } from "@/lib/account";
 import { trpc } from "@/lib/trpc";
+import { ComposeModal } from "./compose-modal";
 
 function HomeIcon({ className }: { className?: string }) {
   return (
@@ -41,7 +43,7 @@ function PlusIcon({ className }: { className?: string }) {
 export function BottomNav() {
   const account = useSocialAccount();
   const pathname = usePathname();
-  const router = useRouter();
+  const [composeOpen, setComposeOpen] = useState(false);
   const profile = useQuery({
     queryKey: ["profile-by-addr", account?.address],
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
@@ -55,28 +57,32 @@ export function BottomNav() {
   const profileActive = pathname.startsWith("/u/") || pathname === "/onboarding";
 
   return (
-    <nav className="fixed bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-2 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl">
-      <NavTab href="/" label="Home" active={homeActive}>
-        <HomeIcon className="h-5 w-5" />
-      </NavTab>
+    <>
+      <nav className="fixed bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-2 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl">
+        <NavTab href="/" label="Home" active={homeActive}>
+          <HomeIcon className="h-5 w-5" />
+        </NavTab>
 
-      <NavTab href="/trade" label="Trade" active={pathname.startsWith("/trade")}>
-        <MarketsIcon className="h-5 w-5" />
-      </NavTab>
+        <NavTab href="/trade" label="Trade" active={pathname.startsWith("/trade")}>
+          <MarketsIcon className="h-5 w-5" />
+        </NavTab>
 
-      <button
-        type="button"
-        aria-label="New post"
-        onClick={() => router.push("/")}
-        className="lift mx-1 grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
-      >
-        <PlusIcon className="h-5 w-5" />
-      </button>
+        <button
+          type="button"
+          aria-label="New post"
+          onClick={() => setComposeOpen(true)}
+          className="lift mx-1 grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
+        >
+          <PlusIcon className="h-5 w-5" />
+        </button>
 
-      <NavTab href={profileHref} label="Profile" active={profileActive}>
-        <UserIcon className="h-5 w-5" />
-      </NavTab>
-    </nav>
+        <NavTab href={profileHref} label="Profile" active={profileActive}>
+          <UserIcon className="h-5 w-5" />
+        </NavTab>
+      </nav>
+
+      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
+    </>
   );
 }
 
