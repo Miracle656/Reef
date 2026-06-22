@@ -22,6 +22,14 @@ function UserIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+function MarketsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="M7 14l3-4 3 3 4-6" />
+    </svg>
+  );
+}
 function PlusIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -50,6 +58,10 @@ export function BottomNav() {
     <nav className="fixed bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-2 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl">
       <NavTab href="/" label="Home" active={homeActive}>
         <HomeIcon className="h-5 w-5" />
+      </NavTab>
+
+      <NavTab href="/markets" label="Markets" active={pathname.startsWith("/markets")}>
+        <MarketsIcon className="h-5 w-5" />
       </NavTab>
 
       <button
