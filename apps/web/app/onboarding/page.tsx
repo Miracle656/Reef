@@ -1,13 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import { useEffect, useRef, useState } from "react";
+import { useCurrentAccount, useCurrentWallet } from "@mysten/dapp-kit";
+import { getSession } from "@mysten/enoki";
 import { buildOnboardTx, walrus } from "@umbra/core";
 import { AppNav } from "@/components/app-nav";
 import { Avatar, Button, Card, Input, Spinner, Textarea } from "@/components/ui";
 import { SUINS_MINT_URL, umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
+
+/** Decode a JWT payload (UTF-8 safe). */
+function decodeJwt(jwt: string): { name?: string; picture?: string; email?: string } {
+  const b64 = (jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "===".slice((b64.length + 3) % 4);
+  return JSON.parse(decodeURIComponent(escape(atob(padded))));
+}
 
 export default function OnboardingPage() {
   const account = useCurrentAccount();
@@ -22,6 +30,31 @@ export default function OnboardingPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googlePicture, setGooglePicture] = useState<string | null>(null);
+  const { currentWallet } = useCurrentWallet();
+
+  // Pre-fill name + avatar from the signed-in Google account (fully editable).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!currentWallet) return;
+      try {
+        const session = await getSession(currentWallet);
+        const claims = session?.jwt ? decodeJwt(session.jwt) : null;
+        if (cancelled || !claims) return;
+        if (claims.name) setDisplayName((d) => d || claims.name!);
+        if (claims.picture) {
+          setGooglePicture(claims.picture);
+          setAvatarPreview((p) => p ?? claims.picture!);
+        }
+      } catch {
+        /* no Google claims available */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWallet]);
 
   const handleOk = /^[a-z0-9_]{3,20}$/.test(handle);
 
@@ -30,12 +63,19 @@ export default function OnboardingPage() {
     setBusy(true);
     setError(null);
     try {
-      // 1. avatar -> Walrus (optional)
+      // 1. avatar -> Walrus: custom upload, else the Google picture
       let avatarBlobId: string | null = null;
+      let bytes: Uint8Array | null = null;
       if (avatar) {
-        const bytes = new Uint8Array(await avatar.arrayBuffer());
-        avatarBlobId = (await walrus.upload(umbraConfig, bytes)).blobId;
+        bytes = new Uint8Array(await avatar.arrayBuffer());
+      } else if (googlePicture) {
+        try {
+          bytes = new Uint8Array(await (await fetch(googlePicture)).arrayBuffer());
+        } catch {
+          /* Google image not fetchable (CORS) — proceed without avatar */
+        }
       }
+      if (bytes) avatarBlobId = (await walrus.upload(umbraConfig, bytes)).blobId;
       // 2. ask backend to mint the SuiNS leaf subname (best-effort)
       let suinsName: string | null = null;
       try {
@@ -75,7 +115,7 @@ export default function OnboardingPage() {
                 <button type="button" onClick={() => fileRef.current?.click()} className="font-medium text-accent">
                   Upload avatar
                 </button>
-                <p className="text-xs">Stored on Walrus</p>
+                <p className="text-xs">JPG or PNG</p>
               </div>
               <input
                 ref={fileRef}
