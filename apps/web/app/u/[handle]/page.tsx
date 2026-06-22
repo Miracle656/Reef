@@ -29,7 +29,7 @@ export default function ProfilePage() {
   return (
     <>
       <AppNav />
-      <main className="mx-auto max-w-2xl px-4 py-6">
+      <main className="mx-auto max-w-2xl px-4 py-6 pb-28">
         {profile.isLoading ? (
           <div className="grid place-items-center py-12"><Spinner /></div>
         ) : !p ? (

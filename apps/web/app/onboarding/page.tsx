@@ -101,7 +101,7 @@ export default function OnboardingPage() {
   return (
     <>
       <AppNav />
-      <main className="mx-auto max-w-md px-4 py-8">
+      <main className="mx-auto max-w-md px-4 py-8 pb-28">
         <h1 className="text-2xl font-bold">Create your profile</h1>
         {!account ? (
           <p className="mt-4 text-sm text-ink-soft">Sign in first to claim a handle.</p>

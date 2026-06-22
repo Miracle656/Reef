@@ -22,7 +22,7 @@ export default function HomePage() {
   return (
     <>
       <AppNav />
-      <main className="mx-auto max-w-2xl px-4 py-6">
+      <main className="mx-auto max-w-2xl px-4 py-6 pb-28">
         {!isConfigured ? <ConfigBanner /> : null}
         {!account ? (
           <Hero />
