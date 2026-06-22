@@ -1,0 +1,12 @@
+[package]
+name = "creator_coin"
+edition = "2024.beta"
+version = "0.1.0"
+# A creator-coin template: one published instance = one tradeable Coin<T> that
+# DeepBook can make a permissionless pool for. Edit the symbol/name per creator
+# (or generate per-creator bytecode later) and publish.
+
+[dependencies]
+
+[addresses]
+creator_coin = "0x0"

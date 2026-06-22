@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mysten/deepbook-v3": "^1.5.1",
     "@mysten/enoki": "^1.1.1",
     "@mysten/sui": "^2.19.0",
     "zod": "^3.24.1"
