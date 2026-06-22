@@ -2,20 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { deepbook } from "@umbra/core";
-import { PAIRS, useDeepBook } from "@/lib/deepbook";
+import { ORACLE_ASSETS, fetchCandles } from "@/lib/oracle";
+import { CandleChart } from "./candle-chart";
 import { CoinIcon } from "./market-select";
 
 /**
- * Mobile-style predict feed: a vertical snap-scroll of markets (swipe up for
- * the next). Each card shows the price, UP/DOWN predict buttons, and live
- * "pops" — trades floating up like hearts on a livestream, then fading.
+ * Predict feed: binary up/down on oracle prices (BTC/ETH/SOL) — not the
+ * DeepBook token pairs. Real candles + spot from GMX's public keeper. Swipe up
+ * for the next market; trades "pop" up the screen like livestream hearts.
  */
 export function PredictFeed() {
   return (
-    <div className="mt-4 h-[72vh] snap-y snap-mandatory overflow-y-auto rounded-3xl border border-[color:var(--glass-border)]">
-      {PAIRS.map((p) => (
-        <PredictCard key={p.key} pairKey={p.key} base={p.base} quote={p.quote} />
+    <div className="mt-4 h-[74vh] snap-y snap-mandatory overflow-y-auto rounded-3xl border border-[color:var(--glass-border)]">
+      {ORACLE_ASSETS.map((a) => (
+        <PredictCard key={a} asset={a} />
       ))}
     </div>
   );
@@ -23,43 +23,45 @@ export function PredictFeed() {
 
 type Pop = { id: number; dir: "up" | "down"; x: number };
 
-function PredictCard({ pairKey, base, quote }: { pairKey: string; base: string; quote: string }) {
-  const db = useDeepBook();
-  const mid = useQuery({
-    queryKey: ["predict-mid", pairKey],
-    queryFn: () => deepbook.getMidPrice(db, pairKey),
-    refetchInterval: 5000,
+function PredictCard({ asset }: { asset: string }) {
+  const candles = useQuery({
+    queryKey: ["candles", asset],
+    queryFn: () => fetchCandles(asset, "1m", 60),
+    refetchInterval: 15000,
   });
+  const data = candles.data ?? [];
+  const last = data[data.length - 1];
+  const first = data[0];
+  const price = last?.close ?? 0;
+  const change = first && last && first.open > 0 ? ((last.close - first.open) / first.open) * 100 : 0;
+  const up = change >= 0;
 
   const [pops, setPops] = useState<Pop[]>([]);
   const idRef = useRef(0);
-
-  const spawn = useCallback((dir: "up" | "down", x = 30 + Math.random() * 40) => {
+  const spawn = useCallback((dir: "up" | "down", x = 25 + Math.random() * 50) => {
     const id = idRef.current++;
     setPops((p) => [...p, { id, dir, x }]);
     setTimeout(() => setPops((p) => p.filter((q) => q.id !== id)), 2200);
   }, []);
 
-  // simulated live trades popping on the venue
   useEffect(() => {
     const loop = () => {
       spawn(Math.random() > 0.5 ? "up" : "down");
-      timer = setTimeout(loop, 600 + Math.random() * 900);
+      t = setTimeout(loop, 600 + Math.random() * 900);
     };
-    let timer = setTimeout(loop, 400);
-    return () => clearTimeout(timer);
+    let t = setTimeout(loop, 400);
+    return () => clearTimeout(t);
   }, [spawn]);
 
-  const price = mid.data ?? 0;
+  const fmtUsd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 })}`;
 
   return (
-    <section className="relative flex h-[72vh] snap-start flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-surface to-surface-muted px-6 text-center">
-      {/* pops */}
+    <section className="relative flex h-[74vh] snap-start flex-col bg-gradient-to-b from-surface to-surface-muted p-5">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {pops.map((p) => (
           <span
             key={p.id}
-            className="pop absolute bottom-28 text-base font-semibold"
+            className="pop absolute bottom-36 text-base font-semibold"
             style={{ left: `${p.x}%`, color: p.dir === "up" ? "var(--accent)" : "var(--danger)" }}
           >
             {p.dir === "up" ? "▲" : "▼"}
@@ -67,22 +69,40 @@ function PredictCard({ pairKey, base, quote }: { pairKey: string; base: string; 
         ))}
       </div>
 
-      <CoinIcon symbol={base} size={56} />
-      <h2 className="mt-3 text-3xl font-semibold">
-        {base} <span className="text-ink-faint">/ {quote}</span>
-      </h2>
-      <p className="mt-2 text-2xl tabular-nums">
-        {price > 0 ? (price < 1 ? price.toPrecision(4) : price.toLocaleString(undefined, { maximumFractionDigits: 4 })) : "—"}{" "}
-        <span className="text-base text-ink-soft">{quote}</span>
-      </p>
-      <p className="mt-1 text-xs text-ink-faint">Will it go up or down?</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <CoinIcon symbol={asset} size={44} />
+          <div>
+            <p className="text-lg font-semibold">
+              {asset} <span className="text-ink-faint">/ USD</span>
+            </p>
+            <p className="text-xs text-ink-soft">oracle · GMX keeper</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-medium tabular-nums">{price > 0 ? fmtUsd(price) : "—"}</p>
+          <p className={`text-sm font-medium ${up ? "text-accent" : "text-danger"}`}>
+            {up ? "▲" : "▼"} {Math.abs(change).toFixed(2)}%
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-8 flex items-center gap-6">
+      <div className="my-4 flex-1">
+        {candles.isLoading ? (
+          <div className="grid h-full place-items-center text-sm text-ink-faint">Loading {asset} candles…</div>
+        ) : data.length === 0 ? (
+          <div className="grid h-full place-items-center text-sm text-ink-faint">Oracle feed unavailable.</div>
+        ) : (
+          <CandleChart candles={data} height={240} />
+        )}
+      </div>
+
+      <p className="text-center text-sm text-ink-soft">Will {asset} be higher in the next minute?</p>
+      <div className="mt-3 flex items-center justify-center gap-8">
         <PredictButton dir="down" onPress={() => spawn("down", 38)} />
         <PredictButton dir="up" onPress={() => spawn("up", 58)} />
       </div>
-
-      <p className="absolute bottom-5 text-[11px] text-ink-faint">swipe up for the next market</p>
+      <p className="mt-3 text-center text-[11px] text-ink-faint">swipe up for the next market</p>
     </section>
   );
 }
@@ -93,9 +113,7 @@ function PredictButton({ dir, onPress }: { dir: "up" | "down"; onPress: () => vo
     <button
       type="button"
       onClick={onPress}
-      className={`lift grid h-20 w-20 place-items-center rounded-full text-2xl font-bold text-white shadow-[var(--shadow-glass)] ${
-        up ? "bg-accent" : "bg-danger"
-      }`}
+      className={`lift grid h-20 w-20 place-items-center rounded-full text-2xl font-bold text-white shadow-[var(--shadow-glass)] ${up ? "bg-accent" : "bg-danger"}`}
       aria-label={up ? "Predict up" : "Predict down"}
     >
       {up ? "▲" : "▼"}

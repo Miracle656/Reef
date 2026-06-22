@@ -13,6 +13,9 @@ const COIN_COLORS: Record<string, string> = {
   WAL: "#0ea5a4",
   DBTC: "#f7931a",
   SULTAN: "#7c3aed",
+  BTC: "#f7931a",
+  ETH: "#627eea",
+  SOL: "#9945ff",
 };
 
 /** Swap-in point for real icons later: map symbol -> image URL. */
