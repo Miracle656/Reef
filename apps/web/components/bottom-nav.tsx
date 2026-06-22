@@ -60,7 +60,7 @@ export function BottomNav() {
         <HomeIcon className="h-5 w-5" />
       </NavTab>
 
-      <NavTab href="/markets" label="Markets" active={pathname.startsWith("/markets")}>
+      <NavTab href="/trade" label="Trade" active={pathname.startsWith("/trade")}>
         <MarketsIcon className="h-5 w-5" />
       </NavTab>
 

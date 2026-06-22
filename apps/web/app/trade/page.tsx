@@ -6,18 +6,36 @@ import { deepbook } from "@umbra/core";
 import { AppNav } from "@/components/app-nav";
 import { Button, Card, Spinner } from "@/components/ui";
 import { CoinIcon, MarketSelect } from "@/components/market-select";
+import { PredictFeed } from "@/components/predict-feed";
+import { PriceChart } from "@/components/price-chart";
 import { PAIRS, useDeepBook } from "@/lib/deepbook";
 
-export default function MarketsPage() {
+export default function TradePage() {
   const [mounted, setMounted] = useState(false);
+  const [mode, setMode] = useState<"trade" | "predict">("trade");
   useEffect(() => setMounted(true), []);
+
   return (
     <>
       <AppNav />
       <main className="mx-auto max-w-3xl px-4 py-6 pb-28">
-        <h1 className="text-2xl font-semibold">Markets</h1>
-        <p className="mt-1 text-sm text-ink-soft">Trade on DeepBook v3.</p>
-        {mounted ? <Terminal /> : null}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">{mode === "trade" ? "Trade" : "Predict"}</h1>
+          <div className="flex gap-1 rounded-full bg-surface-muted p-1">
+            {(["trade", "predict"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize transition-colors ${
+                  mode === m ? "bg-ink text-on-ink" : "text-ink-soft"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+        {mounted ? mode === "trade" ? <Terminal /> : <PredictFeed /> : null}
       </main>
     </>
   );
@@ -45,7 +63,7 @@ function Terminal() {
   const spread = bids[0] && asks[0] ? asks[0].price - bids[0].price : undefined;
 
   return (
-    <div className="mt-5 space-y-4">
+    <div className="mt-4 space-y-4">
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
         <MarketSelect value={pairKey} onChange={setPairKey} />
         <div className="text-right">
@@ -54,6 +72,10 @@ function Terminal() {
             {fmtPrice(mid)} <span className="text-sm text-ink-soft">{pair.quote}</span>
           </p>
         </div>
+      </Card>
+
+      <Card className="p-3">
+        <PriceChart poolKey={pairKey} />
       </Card>
 
       <div className="grid gap-4 md:grid-cols-[1.3fr_1fr]">
@@ -121,7 +143,9 @@ function TradePanel({ pair, mid }: { pair: { base: string; quote: string }; mid:
     <Card className="p-4">
       <div className="flex items-center gap-2">
         <CoinIcon symbol={pair.base} size={20} />
-        <span className="text-sm font-medium">{pair.base} / {pair.quote}</span>
+        <span className="text-sm font-medium">
+          {pair.base} / {pair.quote}
+        </span>
       </div>
 
       <div className="mt-3 flex gap-1 rounded-full bg-surface-muted p-1">

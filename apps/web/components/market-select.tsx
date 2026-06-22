@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PAIRS } from "@/lib/deepbook";
 
 /** Placeholder coin colors until real icon images are provided. */
@@ -48,13 +49,21 @@ export function PairIcons({ base, quote, size = 22 }: { base: string; quote: str
 
 export function MarketSelect({ value, onChange }: { value: string; onChange: (key: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const cur = PAIRS.find((p) => p.key === value) ?? PAIRS[0]!;
 
+  const toggle = () => {
+    setRect(btnRef.current?.getBoundingClientRect() ?? null);
+    setOpen((o) => !o);
+  };
+
   return (
-    <div className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="flex items-center gap-2.5 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-3 py-2 shadow-[var(--shadow-glass)] backdrop-blur-xl"
       >
         <PairIcons base={cur.base} quote={cur.quote} />
@@ -64,31 +73,38 @@ export function MarketSelect({ value, onChange }: { value: string; onChange: (ke
         <span className="text-ink-soft">▾</span>
       </button>
 
-      {open ? (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-surface shadow-[var(--shadow-glass-lg)]">
-            {PAIRS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => {
-                  onChange(p.key);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted ${
-                  p.key === value ? "bg-surface-muted" : ""
-                }`}
+      {/* Portal to body so the menu escapes the glass cards' stacking contexts. */}
+      {open && rect
+        ? createPortal(
+            <>
+              <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
+              <div
+                className="fixed z-[101] max-h-[60vh] w-64 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface shadow-[var(--shadow-glass-lg)]"
+                style={{ top: rect.bottom + 8, left: rect.left }}
               >
-                <PairIcons base={p.base} quote={p.quote} size={20} />
-                <span className="font-medium">
-                  {p.base} <span className="text-ink-faint">/</span> {p.quote}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
+                {PAIRS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => {
+                      onChange(p.key);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted ${
+                      p.key === value ? "bg-surface-muted" : ""
+                    }`}
+                  >
+                    <PairIcons base={p.base} quote={p.quote} size={20} />
+                    <span className="font-medium">
+                      {p.base} <span className="text-ink-faint">/</span> {p.quote}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
