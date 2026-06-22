@@ -52,23 +52,40 @@ export function createDeepBookClient(s: DeepBookSetup): DeepBookClient {
 // ---- reads -----------------------------------------------------------------
 
 export async function getMidPrice(db: DeepBookClient, poolKey: string): Promise<number> {
-  return db.midPrice(poolKey);
+  return db.midPrice(poolKey).catch(() => 0);
 }
 
+export interface BookLevel {
+  price: number;
+  size: number;
+}
 export interface OrderBook {
   mid: number;
-  bids: Level2Range;
-  asks: Level2Range;
+  /** best (highest) first */
+  bids: BookLevel[];
+  /** best (lowest) first */
+  asks: BookLevel[];
 }
 
-/** Fetch mid price + level-2 bids/asks for a pool. */
-export async function getOrderBook(db: DeepBookClient, poolKey: string): Promise<OrderBook> {
-  const mid = await db.midPrice(poolKey).catch(() => 0);
-  const hi = mid > 0 ? mid * 4 : 1_000_000_000;
-  const [bids, asks] = await Promise.all([
-    db.getLevel2Range(poolKey, 0, mid > 0 ? mid : hi, true),
-    db.getLevel2Range(poolKey, mid > 0 ? mid : 0, hi, false),
-  ]);
+/**
+ * Order book via `get_level2_ticks_from_mid` (N ticks each side of mid) —
+ * prices/sizes are human-scaled by the SDK. Mid falls back to best bid/ask
+ * when the pool is one-sided (midPrice aborts without both sides).
+ */
+export async function getOrderBook(db: DeepBookClient, poolKey: string, ticks = 12): Promise<OrderBook> {
+  const t = await db.getLevel2TicksFromMid(poolKey, ticks).catch(() => null);
+  const zip = (prices: number[] = [], qty: number[] = []): BookLevel[] =>
+    prices.map((price, i) => ({ price, size: qty[i] ?? 0 })).filter((l) => l.size > 0);
+
+  const bids = zip(t?.bid_prices, t?.bid_quantities).sort((a, b) => b.price - a.price);
+  const asks = zip(t?.ask_prices, t?.ask_quantities).sort((a, b) => a.price - b.price);
+
+  let mid = await db.midPrice(poolKey).catch(() => 0);
+  if (!mid) {
+    const bb = bids[0]?.price;
+    const ba = asks[0]?.price;
+    mid = bb && ba ? (bb + ba) / 2 : (bb ?? ba ?? 0);
+  }
   return { mid, bids, asks };
 }
 

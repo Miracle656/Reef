@@ -15,8 +15,8 @@
   --ink-faint: #9a9aa6;
   --border: rgba(22, 22, 26, 0.08);
   --border-strong: rgba(22, 22, 26, 0.14);
-  --accent: #1fb8a6; /* a touch brighter for the glassy look, still calm */
-  --accent-ink: #0c4a44;
+  --accent: #0a84ff; /* Sui blue */
+  --accent-ink: #0a4ea3;
   --danger: #e2554a;
   --on-accent: #ffffff;
   --on-ink: #f7f8fa;
@@ -39,10 +39,10 @@
   --ink-faint: #6a6a76;
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --accent: #2fd0bd;
-  --accent-ink: #aef0e8;
+  --accent: #4da2ff;
+  --accent-ink: #bfe0ff;
   --danger: #ef6a60;
-  --on-accent: #062c28;
+  --on-accent: #04243f;
   --on-ink: #0e0e11;
 
   --glass-border: rgba(255, 255, 255, 0.1);
