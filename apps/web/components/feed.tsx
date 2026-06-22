@@ -1,13 +1,13 @@
 "use client";
 
-import { useCurrentAccount } from "@mysten/dapp-kit";
 import { useQuery } from "@tanstack/react-query";
+import { useSocialAccount } from "@/lib/account";
 import { trpc } from "@/lib/trpc";
 import { PostCard } from "./post-card";
 import { Spinner } from "./ui";
 
 export function Feed() {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const feed = useQuery({
     queryKey: ["feed", account?.address],
     queryFn: () => trpc.feed.query({ address: account!.address }),

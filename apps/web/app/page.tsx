@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCurrentAccount } from "@mysten/dapp-kit";
 import { useQuery } from "@tanstack/react-query";
+import { useSocialAccount } from "@/lib/account";
 import { AppNav } from "@/components/app-nav";
 import { ComposeBox } from "@/components/compose-box";
 import { Feed } from "@/components/feed";
@@ -12,7 +12,7 @@ import { isConfigured } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 
 export default function HomePage() {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const profile = useQuery({
     queryKey: ["profile-by-addr", account?.address],
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),

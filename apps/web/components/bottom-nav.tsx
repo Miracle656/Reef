@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCurrentAccount } from "@mysten/dapp-kit";
 import { useQuery } from "@tanstack/react-query";
+import { useSocialAccount } from "@/lib/account";
 import { trpc } from "@/lib/trpc";
 
 function HomeIcon({ className }: { className?: string }) {
@@ -31,7 +31,7 @@ function PlusIcon({ className }: { className?: string }) {
 }
 
 export function BottomNav() {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const pathname = usePathname();
   const router = useRouter();
   const profile = useQuery({

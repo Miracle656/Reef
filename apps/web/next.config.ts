@@ -10,6 +10,15 @@ const nextConfig: NextConfig = {
     // Walrus aggregators serve user media.
     remotePatterns: [{ protocol: "https", hostname: "*.walrus.space" }],
   },
+  async headers() {
+    // Let the Google OAuth popup (zkLogin) talk back to the opener.
+    return [
+      {
+        source: "/(.*)",
+        headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

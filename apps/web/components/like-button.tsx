@@ -1,12 +1,13 @@
 "use client";
 
-import { useCurrentAccount, useSignPersonalMessage } from "@mysten/dapp-kit";
+import { useSignPersonalMessage } from "@mysten/dapp-kit";
+import { useSocialAccount } from "@/lib/account";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { canonicalReactionBytes, type Post, type ReactionMessage } from "@umbra/core";
 import { trpc } from "@/lib/trpc";
 
 export function LikeButton({ post }: { post: Post }) {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
   const qc = useQueryClient();
 
@@ -25,7 +26,7 @@ export function LikeButton({ post }: { post: Post }) {
         timestamp: Date.now(),
         value: 1,
       };
-      const { signature } = await signPersonalMessage({ message: canonicalReactionBytes(message) });
+      const { signature } = await signPersonalMessage({ message: canonicalReactionBytes(message), account });
       return trpc.addReaction.mutate({ message, signature });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reactions", post.id] }),

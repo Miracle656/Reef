@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useCurrentAccount, useCurrentWallet } from "@mysten/dapp-kit";
+import { useCurrentWallet } from "@mysten/dapp-kit";
 import { getSession } from "@mysten/enoki";
+import { useSocialAccount } from "@/lib/account";
 import { buildOnboardTx, walrus } from "@umbra/core";
 import { AppNav } from "@/components/app-nav";
 import { Avatar, Button, Card, Input, Spinner, Textarea } from "@/components/ui";
@@ -18,7 +19,7 @@ function decodeJwt(jwt: string): { name?: string; picture?: string; email?: stri
 }
 
 export default function OnboardingPage() {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const router = useRouter();
   const run = useGasless();
   const fileRef = useRef<HTMLInputElement>(null);

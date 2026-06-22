@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCurrentAccount, useDisconnectWallet } from "@mysten/dapp-kit";
+import { useDisconnectWallet } from "@mysten/dapp-kit";
+import { useSocialAccount } from "@/lib/account";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
@@ -10,7 +11,7 @@ import { Avatar, Button } from "./ui";
 import { SignInButton } from "./sign-in-button";
 
 export function AppNav() {
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const { mutate: disconnect } = useDisconnectWallet();
 
   const profile = useQuery({

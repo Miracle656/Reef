@@ -1,9 +1,10 @@
 "use client";
 
-import { useCurrentAccount, useSignTransaction, useSuiClient } from "@mysten/dapp-kit";
+import { useSignTransaction, useSuiClient } from "@mysten/dapp-kit";
 import { sponsorAndExecute } from "@umbra/core";
 import type { Transaction } from "@mysten/sui/transactions";
 import { useCallback } from "react";
+import { useSocialAccount } from "./account";
 import { NETWORK, SPONSOR_API_URL } from "./config";
 
 /**
@@ -13,7 +14,7 @@ import { NETWORK, SPONSOR_API_URL } from "./config";
  */
 export function useGasless() {
   const client = useSuiClient();
-  const account = useCurrentAccount();
+  const account = useSocialAccount();
   const { mutateAsync: signTransaction } = useSignTransaction();
 
   return useCallback(
@@ -26,7 +27,9 @@ export function useGasless() {
         sender: account.address,
         network: NETWORK,
         sign: async (sponsoredBytes) => {
-          const { signature } = await signTransaction({ transaction: sponsoredBytes });
+          // sign with the social (zkLogin) account explicitly, even if a bound
+          // external wallet is dapp-kit's "current" account
+          const { signature } = await signTransaction({ transaction: sponsoredBytes, account });
           return { signature };
         },
       });
