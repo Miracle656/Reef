@@ -7,17 +7,17 @@ type ButtonVariant = "primary" | "accent" | "outline" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "neo neo-press bg-ink text-on-ink",
-  accent: "neo neo-press bg-accent text-on-accent",
-  outline: "neo neo-press bg-surface text-ink",
-  danger: "neo neo-press bg-danger text-white",
-  ghost: "bg-transparent text-ink hover:bg-surface-muted rounded-md transition-colors",
+  primary: "lift bg-ink text-on-ink shadow-[var(--shadow-glass)]",
+  accent: "lift bg-accent text-on-accent shadow-[var(--shadow-glass)]",
+  outline: "lift bg-surface-glass backdrop-blur-xl border border-[color:var(--glass-border)] text-ink shadow-[var(--shadow-glass)]",
+  danger: "lift bg-danger text-white shadow-[var(--shadow-glass)]",
+  ghost: "text-ink hover:bg-surface-muted transition-colors",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
-  lg: "h-12 px-6 text-base",
+  sm: "h-9 px-4 text-sm",
+  md: "h-11 px-5 text-sm",
+  lg: "h-14 px-7 text-base",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -30,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 font-semibold disabled:opacity-50 disabled:pointer-events-none select-none",
+        "inline-flex items-center justify-center gap-2 rounded-full font-semibold select-none disabled:opacity-50 disabled:pointer-events-none",
         variants[variant],
         sizes[size],
         className,
@@ -41,51 +41,35 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-// ---- Card ------------------------------------------------------------------
+// ---- Card (frosted glass) --------------------------------------------------
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("neo bg-surface", className)} {...props} />;
+  return <div className={cn("glass", className)} {...props} />;
 }
 
 // ---- Input / Textarea ------------------------------------------------------
 
+const fieldBase =
+  "w-full rounded-2xl bg-surface-glass backdrop-blur-xl border border-[color:var(--glass-border)] px-4 text-[15px] " +
+  "placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--accent)_45%,transparent)] transition";
+
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input
-      ref={ref}
-      className={cn(
-        "h-10 w-full rounded-md border-2 border-border-strong bg-surface px-3 text-sm",
-        "placeholder:text-ink-faint focus:outline-none focus:shadow-[var(--shadow-neo-sm)] transition-shadow",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => <input ref={ref} className={cn("h-11", fieldBase, className)} {...props} />,
 );
 Input.displayName = "Input";
 
 export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  ({ className, ...props }, ref) => (
-    <textarea
-      ref={ref}
-      className={cn(
-        "w-full rounded-md border-2 border-border-strong bg-surface px-3 py-2 text-sm resize-none",
-        "placeholder:text-ink-faint focus:outline-none focus:shadow-[var(--shadow-neo-sm)] transition-shadow",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => <textarea ref={ref} className={cn("py-3 resize-none", fieldBase, className)} {...props} />,
 );
 Textarea.displayName = "Textarea";
 
-// ---- Avatar ----------------------------------------------------------------
+// ---- Avatar (circle) -------------------------------------------------------
 
-export function Avatar({ src, name, size = 40 }: { src?: string | null; name: string; size?: number }) {
+export function Avatar({ src, name, size = 44 }: { src?: string | null; name: string; size?: number }) {
   const initials = name.replace(/^@/, "").slice(0, 2).toUpperCase();
   return (
     <span
-      className="inline-grid place-items-center overflow-hidden rounded-md border-2 border-border-strong bg-surface-muted font-bold text-ink"
+      className="inline-grid place-items-center overflow-hidden rounded-full border border-[color:var(--glass-border)] bg-surface-muted font-bold text-ink shadow-[var(--shadow-glass)]"
       style={{ width: size, height: size, fontSize: size * 0.36 }}
     >
       {src ? (
@@ -103,7 +87,7 @@ export function Avatar({ src, name, size = 40 }: { src?: string | null; name: st
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
-      className={cn("inline-block h-4 w-4 animate-spin rounded-full border-2 border-ink border-t-transparent", className)}
+      className={cn("inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent", className)}
       aria-label="loading"
     />
   );
@@ -113,7 +97,7 @@ export function Badge({ className, ...props }: React.HTMLAttributes<HTMLSpanElem
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-border-strong bg-surface px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full bg-surface-glass backdrop-blur-xl border border-[color:var(--glass-border)] px-3 py-1 text-xs font-medium",
         className,
       )}
       {...props}

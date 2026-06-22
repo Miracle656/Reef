@@ -21,7 +21,7 @@ export function AppNav() {
   const p = profile.data;
 
   return (
-    <header className="sticky top-0 z-10 border-b-2 border-border-strong bg-background/90 backdrop-blur">
+    <header className="bg-transparent">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
         <Link href="/" className="text-lg font-bold tracking-tight lowercase">
           umbra

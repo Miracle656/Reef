@@ -40,7 +40,7 @@ export function PostCard({ post }: { post: Post }) {
                   key={blob}
                   src={walrus.urlFor(umbraConfig, blob)}
                   alt=""
-                  className="max-h-72 w-full rounded-md border-2 border-border-strong object-cover"
+                  className="max-h-80 w-full rounded-2xl border border-[color:var(--glass-border)] object-cover"
                 />
               ))}
             </div>

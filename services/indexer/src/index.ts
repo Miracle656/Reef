@@ -1,5 +1,13 @@
+import process from "node:process";
 import { serve } from "@hono/node-server";
 import { loadEnv } from "./config";
+
+// Load services/indexer/.env (Node built-in; no dotenv dep).
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env file — rely on ambient env */
+}
 import { startPoller } from "./indexer/poller";
 import { createServer } from "./server";
 

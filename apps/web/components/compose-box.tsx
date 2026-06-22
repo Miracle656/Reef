@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { buildCreatePostTx, walrus } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
-import { Button, Card, Spinner, Textarea } from "./ui";
+import { Button, Card, Spinner } from "./ui";
 
 const MAX = 560;
 
@@ -43,18 +43,18 @@ export function ComposeBox() {
 
   return (
     <Card className="p-4">
-      <Textarea
+      <textarea
         rows={3}
         value={text}
         maxLength={MAX}
         onChange={(e) => setText(e.target.value)}
         placeholder="What's happening in Lagos?"
-        className="border-0 focus:shadow-none p-0"
+        className="w-full resize-none bg-transparent text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
       {files.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
           {files.map((f, i) => (
-            <span key={i} className="rounded-md border border-border-strong bg-surface-muted px-2 py-1 text-xs">
+            <span key={i} className="rounded-full border border-[color:var(--glass-border)] bg-surface-muted px-3 py-1 text-xs">
               {f.name}
             </span>
           ))}

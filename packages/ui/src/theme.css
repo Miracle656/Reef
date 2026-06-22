@@ -1,46 +1,59 @@
 /**
- * Umbra web theme — Tailwind v4. Smooth, clean neobrutalism.
- * Import after `@import "tailwindcss";` in the app's globals.css.
+ * Umbra web theme — Tailwind v4. "Liquid neobrutalism":
+ * frosted translucent surfaces, soft shadows, a subtle gradient backdrop, and
+ * big rounded corners — but confident bold type and solid accent fills keep the
+ * brutalist backbone.
  */
 
 :root {
-  --background: #fbfbf9;
+  --background: #f5f6f9;
   --surface: #ffffff;
-  --surface-muted: #f3f3f0;
-  --ink: #1b1b1f;
-  --ink-soft: #52525b;
-  --ink-faint: #a1a1aa;
-  --border: #e5e5e1;
-  --border-strong: #1b1b1f;
-  --accent: #2da89e;
-  --accent-ink: #0f4c47;
-  --danger: #d2483f;
+  --surface-glass: rgba(255, 255, 255, 0.62);
+  --surface-muted: #eceef2;
+  --ink: #16161a;
+  --ink-soft: #565660;
+  --ink-faint: #9a9aa6;
+  --border: rgba(22, 22, 26, 0.08);
+  --border-strong: rgba(22, 22, 26, 0.14);
+  --accent: #1fb8a6; /* a touch brighter for the glassy look, still calm */
+  --accent-ink: #0c4a44;
+  --danger: #e2554a;
   --on-accent: #ffffff;
-  --on-ink: #fbfbf9;
+  --on-ink: #f7f8fa;
 
-  --shadow-color: var(--border-strong);
-  --radius: 10px;
+  --glass-border: rgba(22, 22, 26, 0.08);
+  --glass-shadow: 0 10px 34px rgba(22, 22, 26, 0.1), 0 2px 6px rgba(22, 22, 26, 0.05);
+  --glass-shadow-lg: 0 18px 48px rgba(22, 22, 26, 0.14), 0 3px 8px rgba(22, 22, 26, 0.06);
+  --blur: 18px;
+
+  --radius: 22px;
 }
 
 .dark {
-  --background: #121214;
-  --surface: #1a1a1d;
-  --surface-muted: #222226;
-  --ink: #f4f4f5;
-  --ink-soft: #a1a1aa;
-  --ink-faint: #6b6b73;
-  --border: #2c2c31;
-  --border-strong: #f4f4f5;
-  --accent: #34c3b7;
-  --accent-ink: #a7e8e1;
-  --danger: #e5675e;
-  --on-accent: #0b2c29;
-  --on-ink: #121214;
+  --background: #0e0e11;
+  --surface: #18181c;
+  --surface-glass: rgba(30, 30, 36, 0.55);
+  --surface-muted: #232329;
+  --ink: #f3f3f5;
+  --ink-soft: #a7a7b2;
+  --ink-faint: #6a6a76;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --accent: #2fd0bd;
+  --accent-ink: #aef0e8;
+  --danger: #ef6a60;
+  --on-accent: #062c28;
+  --on-ink: #0e0e11;
+
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --glass-shadow-lg: 0 20px 52px rgba(0, 0, 0, 0.55), 0 3px 8px rgba(0, 0, 0, 0.4);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-glass: var(--surface-glass);
   --color-surface-muted: var(--surface-muted);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
@@ -53,13 +66,13 @@
   --color-on-accent: var(--on-accent);
   --color-on-ink: var(--on-ink);
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 30px;
 
-  --shadow-neo-sm: 2px 2px 0 0 var(--shadow-color);
-  --shadow-neo: 4px 4px 0 0 var(--shadow-color);
-  --shadow-neo-lg: 6px 6px 0 0 var(--shadow-color);
+  --shadow-glass: var(--glass-shadow);
+  --shadow-glass-lg: var(--glass-shadow-lg);
 
   --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -69,44 +82,50 @@
     border-color: var(--color-border);
   }
   body {
-    background-color: var(--color-background);
     color: var(--color-ink);
-    font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    /* subtle gradient backdrop so frosted surfaces have something to blur */
+    background-color: var(--background);
+    background-image:
+      radial-gradient(60rem 60rem at 85% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+      radial-gradient(50rem 50rem at -10% 110%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%);
+    background-attachment: fixed;
   }
 }
 
-/* The neobrutalist "press" interaction — hard offset shadow that collapses on
-   click, transitions smoothly. Used by buttons/cards. */
-@utility neo {
-  border: 2px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-neo-sm);
-  transition:
-    box-shadow var(--ease-smooth) 200ms,
-    transform var(--ease-smooth) 200ms;
+/* Frosted glass surface — the core of the liquid look. */
+@utility glass {
+  background-color: var(--surface-glass);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.4);
+  backdrop-filter: blur(var(--blur)) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
 }
 
-@utility neo-press {
+/* Soft, smooth press interaction (lift on hover, settle on click). */
+@utility lift {
+  transition:
+    box-shadow var(--ease-smooth) 220ms,
+    transform var(--ease-smooth) 220ms;
   &:hover {
-    box-shadow: var(--shadow-neo);
-    transform: translate(-1px, -1px);
+    transform: translateY(-2px);
+    box-shadow: var(--glass-shadow-lg);
   }
   &:active {
-    box-shadow: 0 0 0 0 transparent;
-    transform: translate(2px, 2px);
+    transform: translateY(0);
+    box-shadow: var(--glass-shadow);
   }
 }
 
-/* minimal scrollbar — keeps the clean feel */
+/* minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: 4px;
-  opacity: 0.4;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
