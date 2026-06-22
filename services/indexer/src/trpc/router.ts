@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { SignedReactionSchema, type Post, type Profile } from "@umbra/core";
+import { SignedReactionSchema, SignedWalletLinkSchema, type Post, type Profile } from "@umbra/core";
 import type { Post as PostRow, Profile as ProfileRow } from "@prisma/client";
 import { applyReaction } from "../reactions";
+import { applyWalletLink } from "../links";
 import { publicProcedure, router } from "./trpc";
 
 const SuiAddress = z.string().regex(/^0x[0-9a-fA-F]+$/);
@@ -120,6 +121,22 @@ export const appRouter = router({
     const reposts = await ctx.prisma.reaction.count({ where: { postId: input.postId, kind: "repost", value: 1 } });
     return { likes, reposts };
   }),
+
+  // --- wallet linking (verified external addresses) ---
+  linkWallet: publicProcedure.input(SignedWalletLinkSchema).mutation(async ({ ctx, input }) => {
+    const ok = await applyWalletLink(ctx.prisma, input);
+    return { ok };
+  }),
+  linkedWallets: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
+    const rows = await ctx.prisma.linkedAddress.findMany({ where: { owner: input.owner }, orderBy: { createdAtMs: "asc" } });
+    return rows.map((r) => r.linked);
+  }),
+  unlinkWallet: publicProcedure
+    .input(z.object({ owner: SuiAddress, linked: SuiAddress }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.linkedAddress.deleteMany({ where: { owner: input.owner, linked: input.linked } });
+      return { ok: true };
+    }),
 });
 
 export type AppRouter = typeof appRouter;

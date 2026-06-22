@@ -1,0 +1,9 @@
+{
+  "network": "testnet",
+  "symbol": "SULTAN",
+  "packageId": "0x052a466afe35f5db6c6143ed62dcc2e2c28bb64f909b773ed409b71a8b5e0f4b",
+  "coinType": "0x052a466afe35f5db6c6143ed62dcc2e2c28bb64f909b773ed409b71a8b5e0f4b::creator_coin::CREATOR_COIN",
+  "treasuryCap": "0x616a4d54d46a62b4ff6974f4ccd05968fd6574057a2d81c1c9cb04f063e21e12",
+  "decimals": 9,
+  "note": "Demo creator coin. DeepBook pool (SULTAN/DUSDC) to be created next with POOL_CREATION_FEE_DEEP."
+}

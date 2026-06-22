@@ -136,3 +136,31 @@ export function canonicalReactionBytes(m: ReactionMessage): Uint8Array {
   const canonical = `umbra:reaction:${m.kind}:${m.postId}:${m.reactor}:${m.value}:${m.timestamp}`;
   return new TextEncoder().encode(canonical);
 }
+
+// ---- wallet linking (verified addresses, Farcaster-style) ------------------
+
+/**
+ * Bind an external (funded) wallet to a zkLogin social account. The EXTERNAL
+ * wallet signs this, proving control of `linked` + intent to link it to `owner`
+ * (the social/zkLogin address). The indexer verifies the signature.
+ */
+export const WalletLinkMessageSchema = z.object({
+  /** zkLogin / social address the wallet is being linked to */
+  owner: SuiAddress,
+  /** external wallet being linked (the signer) */
+  linked: SuiAddress,
+  timestamp: z.number().int(),
+});
+
+export const SignedWalletLinkSchema = z.object({
+  message: WalletLinkMessageSchema,
+  /** base64 personal-message signature by `linked` over canonicalWalletLinkBytes */
+  signature: z.string(),
+});
+
+export type WalletLinkMessage = z.infer<typeof WalletLinkMessageSchema>;
+export type SignedWalletLink = z.infer<typeof SignedWalletLinkSchema>;
+
+export function canonicalWalletLinkBytes(m: WalletLinkMessage): Uint8Array {
+  return new TextEncoder().encode(`umbra:link:${m.owner}:${m.linked}:${m.timestamp}`);
+}

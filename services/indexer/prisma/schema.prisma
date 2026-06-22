@@ -56,6 +56,18 @@ model Follow {
   @@index([follower])
 }
 
+/// Verified external wallets linked to a zkLogin social account (the external
+/// wallet signed the link). Farcaster-style "verified addresses".
+model LinkedAddress {
+  owner       String // zkLogin / social address
+  linked      String // external wallet (the signer)
+  createdAtMs BigInt
+
+  @@id([owner, linked])
+  @@index([owner])
+  @@index([linked])
+}
+
 /// Off-chain signed reactions, verified then aggregated (latest intent wins).
 model Reaction {
   postId    String
