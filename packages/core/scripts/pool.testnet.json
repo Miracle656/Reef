@@ -1,0 +1,11 @@
+{
+  "network": "testnet",
+  "poolKey": "SULTAN_DEEP",
+  "poolId": "0xa642193580f83b979fda6e3bcb765cfa15bfaeba3227f059bed124631a1e29f8",
+  "baseType": "0x052a466afe35f5db6c6143ed62dcc2e2c28bb64f909b773ed409b71a8b5e0f4b::creator_coin::CREATOR_COIN",
+  "quote": "DEEP",
+  "tickSize": 0.001,
+  "lotSize": 1,
+  "minSize": 1,
+  "digest": "9bWLUZWbW2Wxm7VHmwkWAfcinmeqqjwq9DNfQzZZi3aS"
+}

@@ -8,6 +8,7 @@ node_modules/
 .env.*.local
 *.key
 *.keystore
+.signer.json
 
 # builds
 dist/
