@@ -6,14 +6,15 @@
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import { canonicalReactionBytes, type SignedReaction } from "@umbra/core";
 import type { PrismaClient } from "@prisma/client";
+import { suiClient } from "./sui";
 
 /** True iff the signature is valid AND was produced by `message.reactor`. */
 export async function verifyReaction(signed: SignedReaction): Promise<boolean> {
   try {
-    const pk = await verifyPersonalMessageSignature(
-      canonicalReactionBytes(signed.message),
-      signed.signature,
-    );
+    const pk = await verifyPersonalMessageSignature(canonicalReactionBytes(signed.message), signed.signature, {
+      client: suiClient,
+      address: signed.message.reactor,
+    });
     return pk.toSuiAddress() === signed.message.reactor;
   } catch {
     return false;
