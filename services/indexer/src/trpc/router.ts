@@ -76,8 +76,8 @@ export const appRouter = router({
     .input(z.object({ address: SuiAddress, limit: z.number().int().min(1).max(100).default(30), beforeMs: z.number().int().optional() }))
     .query(async ({ ctx, input }) => {
       const follows = await ctx.prisma.follow.findMany({ where: { follower: input.address }, select: { followee: true } });
-      const authors = follows.map((f) => f.followee);
-      if (authors.length === 0) return [] as Post[];
+      // include the user's own posts alongside the accounts they follow
+      const authors = [...new Set([...follows.map((f) => f.followee), input.address])];
       const rows = await ctx.prisma.post.findMany({
         where: {
           author: { in: authors },
