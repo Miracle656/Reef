@@ -122,6 +122,20 @@ export const appRouter = router({
     return { likes, reposts };
   }),
 
+  // --- creator coins (tokenized content) ---
+  creatorCoins: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
+    const rows = await ctx.prisma.creatorCoin.findMany({ where: { owner: input.owner }, orderBy: { createdAtMs: "desc" } });
+    return rows.map((r) => ({
+      coinType: r.coinType,
+      owner: r.owner,
+      symbol: r.symbol,
+      name: r.name,
+      poolId: r.poolId,
+      postId: r.postId,
+      createdAtMs: Number(r.createdAtMs),
+    }));
+  }),
+
   // --- wallet linking (verified external addresses) ---
   linkWallet: publicProcedure.input(SignedWalletLinkSchema).mutation(async ({ ctx, input }) => {
     const ok = await applyWalletLink(ctx.prisma, input);

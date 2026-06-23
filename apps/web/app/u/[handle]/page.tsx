@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { AppNav } from "@/components/app-nav";
+import { CoinIcon } from "@/components/market-select";
 import { FollowButton } from "@/components/follow-button";
 import { PostCard } from "@/components/post-card";
-import { Avatar, Card, Spinner } from "@/components/ui";
+import { Avatar, Button, Card, Spinner } from "@/components/ui";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 
@@ -23,6 +25,12 @@ export default function ProfilePage() {
   const posts = useQuery({
     queryKey: ["posts-by-author", p?.owner],
     queryFn: () => trpc.postsByAuthor.query({ address: p!.owner }),
+    enabled: Boolean(p),
+  });
+
+  const coins = useQuery({
+    queryKey: ["creator-coins", p?.owner],
+    queryFn: () => trpc.creatorCoins.query({ owner: p!.owner }),
     enabled: Boolean(p),
   });
 
@@ -54,6 +62,28 @@ export default function ProfilePage() {
                 <span><b>{p.followersCount}</b> <span className="text-ink-soft">Followers</span></span>
               </div>
             </Card>
+
+            {coins.data && coins.data.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Creator coins</p>
+                {coins.data.map((c) => (
+                  <Card key={c.coinType} className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-3">
+                      <CoinIcon symbol={c.symbol} size={40} />
+                      <div>
+                        <p className="font-semibold">${c.symbol}</p>
+                        <p className="text-xs text-ink-soft">{c.name}</p>
+                      </div>
+                    </div>
+                    <Link href="/trade">
+                      <Button size="sm" variant="accent">
+                        Trade
+                      </Button>
+                    </Link>
+                  </Card>
+                ))}
+              </div>
+            ) : null}
 
             <div className="mt-4 space-y-3">
               {posts.data?.length ? (

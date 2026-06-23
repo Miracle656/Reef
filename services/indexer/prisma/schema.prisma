@@ -68,6 +68,20 @@ model LinkedAddress {
   @@index([linked])
 }
 
+/// Creator coins — a tokenized post's Coin<T> + its DeepBook pool, owned by the
+/// creator. Populated by the tokenize/mint flow (seeded for the demo).
+model CreatorCoin {
+  coinType    String  @id
+  owner       String
+  symbol      String
+  name        String
+  poolId      String?
+  postId      String?
+  createdAtMs BigInt
+
+  @@index([owner])
+}
+
 /// Off-chain signed reactions, verified then aggregated (latest intent wins).
 model Reaction {
   postId    String
