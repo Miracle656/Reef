@@ -122,6 +122,21 @@ export const appRouter = router({
     return { likes, reposts };
   }),
 
+  // like count + whether the viewer has liked (per-user, persisted on-chain-signed)
+  likeState: publicProcedure
+    .input(z.object({ postId: SuiAddress, viewer: SuiAddress.optional() }))
+    .query(async ({ ctx, input }) => {
+      const likes = await ctx.prisma.reaction.count({ where: { postId: input.postId, kind: "like", value: 1 } });
+      let liked = false;
+      if (input.viewer) {
+        const r = await ctx.prisma.reaction.findUnique({
+          where: { postId_reactor_kind: { postId: input.postId, reactor: input.viewer, kind: "like" } },
+        });
+        liked = r?.value === 1;
+      }
+      return { likes, liked };
+    }),
+
   // --- creator coins (tokenized content) ---
   creatorCoins: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
     const rows = await ctx.prisma.creatorCoin.findMany({ where: { owner: input.owner }, orderBy: { createdAtMs: "desc" } });

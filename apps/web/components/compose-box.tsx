@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { buildCreatePostTx, walrus } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
+import { toast } from "./toaster";
 import { Button, Card, Spinner } from "./ui";
 
 const MAX = 560;
@@ -62,7 +63,14 @@ export function ComposeForm({
       setText("");
       setFiles([]);
       setPreviews([]);
-      await qc.invalidateQueries({ queryKey: ["feed"] });
+      toast("Posted ✓ — appearing shortly");
+      // refetch now + again after the indexer ingests (~4s)
+      const refresh = () => {
+        qc.invalidateQueries({ queryKey: ["feed"] });
+        qc.invalidateQueries({ queryKey: ["posts-by-author"] });
+      };
+      refresh();
+      setTimeout(refresh, 4500);
       onPosted?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to post");

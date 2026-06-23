@@ -18,8 +18,8 @@ const COIN_COLORS: Record<string, string> = {
   SOL: "#9945ff",
 };
 
-/** Swap-in point for real icons later: map symbol -> image URL. */
-const COIN_IMAGES: Record<string, string> = {};
+/** Real icon images by symbol (others fall back to a colored letter circle). */
+const COIN_IMAGES: Record<string, string> = { SUI: "/sui.png" };
 
 export function CoinIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
   const img = COIN_IMAGES[symbol];
