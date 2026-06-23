@@ -85,7 +85,7 @@ export function ComposeForm({
           {previews.map((src, i) => (
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" className="max-h-56 w-full rounded-xl border border-[color:var(--glass-border)] object-cover" />
+              <img src={src} alt="" className="max-h-72 w-full rounded-xl border border-[color:var(--glass-border)] bg-surface-muted object-contain" />
               <button
                 type="button"
                 onClick={() => removeAt(i)}
