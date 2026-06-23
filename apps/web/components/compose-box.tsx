@@ -8,6 +8,7 @@ import { useGasless } from "@/lib/gasless";
 import { Button, Card, Spinner } from "./ui";
 
 const MAX = 560;
+const MAX_IMAGES = 2;
 
 /** Shared composer. `withTokenize` shows the tokenize toggle (modal/full mode). */
 export function ComposeForm({
@@ -32,10 +33,12 @@ export function ComposeForm({
   const canPost = (text.trim().length > 0 || files.length > 0) && text.length <= MAX && !busy;
 
   function pickFiles(list: FileList | null) {
+    const incoming = Array.from(list ?? []);
+    if (incoming.length === 0) return;
+    const merged = [...files, ...incoming].slice(0, MAX_IMAGES); // append, cap at 2
     previews.forEach((u) => URL.revokeObjectURL(u));
-    const arr = Array.from(list ?? []).slice(0, 4);
-    setFiles(arr);
-    setPreviews(arr.map((f) => URL.createObjectURL(f)));
+    setFiles(merged);
+    setPreviews(merged.map((f) => URL.createObjectURL(f)));
   }
   function removeAt(i: number) {
     setFiles((f) => f.filter((_, j) => j !== i));
@@ -103,10 +106,25 @@ export function ComposeForm({
 
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-medium text-ink-soft hover:text-accent">
-            + Image
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={files.length >= MAX_IMAGES}
+            className="text-sm font-medium text-ink-soft hover:text-accent disabled:opacity-40"
+          >
+            + Image{files.length > 0 ? ` (${files.length}/${MAX_IMAGES})` : ""}
           </button>
-          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => pickFiles(e.target.files)} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              pickFiles(e.target.files);
+              e.currentTarget.value = "";
+            }}
+          />
           <span className={`text-xs ${text.length > MAX ? "text-danger" : "text-ink-faint"}`}>{text.length}/{MAX}</span>
         </div>
         <Button size="sm" disabled={!canPost} onClick={submit}>
