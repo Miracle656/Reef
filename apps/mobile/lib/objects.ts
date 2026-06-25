@@ -1,16 +1,19 @@
-import { createSuiClient } from "@umbra/core";
-import { umbraConfig } from "./config";
+import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { umbraConfig } from './config';
 
-const client = createSuiClient(umbraConfig);
-
-async function findOwned(owner: string, typeSuffix: string): Promise<string | null> {
+async function findOwned(client: SuiJsonRpcClient, owner: string, typeSuffix: string): Promise<string | null> {
+  const structType = `${umbraConfig.packageId}::${typeSuffix}`;
   const res = await client.getOwnedObjects({
     owner,
-    filter: { StructType: `${umbraConfig.packageId}::${typeSuffix}` },
+    filter: { StructType: structType },
     options: { showType: true },
     limit: 1,
   });
   return res.data[0]?.data?.objectId ?? null;
 }
 
-export const getFollowSetId = (owner: string) => findOwned(owner, "follow::FollowSet");
+export const getFollowSetId = (client: SuiJsonRpcClient, owner: string) =>
+  findOwned(client, owner, 'follow::FollowSet');
+
+export const getProfileId = (client: SuiJsonRpcClient, owner: string) =>
+  findOwned(client, owner, 'profile::Profile');
