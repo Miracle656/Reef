@@ -1,51 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { buildFollowTx, buildUnfollowTx } from '@umbra/core';
-import { useSocialAccount } from '@/lib/account';
-import { suiClient, umbraConfig } from '@/lib/config';
-import { useGasless } from '@/lib/gasless';
-import { getFollowSetId } from '@/lib/objects';
-import { trpc } from '@/lib/trpc';
-import { Button } from './ui';
+import { useState } from 'react';
+import { Button } from '@/components/ui';
 
-export function FollowButton({ target }: { target: string }) {
-  const account = useSocialAccount();
-  const run = useGasless();
-  const qc = useQueryClient();
-
-  const following = useQuery({
-    queryKey: ['following', account?.address],
-    queryFn: async () => {
-      const rows = await trpc.following.query({ address: account!.address });
-      return rows.map((r) => r.followee);
-    },
-    enabled: Boolean(account),
-  });
-  const isFollowing = following.data?.includes(target) ?? false;
-  const isSelf = account?.address === target;
-
-  const toggle = useMutation({
-    mutationFn: async () => {
-      if (!account) throw new Error('Sign in first');
-      const setId = await getFollowSetId(suiClient, account.address);
-      if (!setId) throw new Error('No follow set — finish onboarding first');
-      const tx = isFollowing
-        ? buildUnfollowTx(umbraConfig, setId, target)
-        : buildFollowTx(umbraConfig, setId, target);
-      return run(tx);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['following', account?.address] }),
-  });
-
-  if (isSelf) return null;
-
+export function FollowButton({ handle }: { handle: string }) {
+  const [following, setFollowing] = useState(false);
   return (
     <Button
-      variant={isFollowing ? 'outline' : 'accent'}
+      variant={following ? 'outline' : 'accent'}
       size="sm"
-      disabled={!account || toggle.isPending}
-      onPress={() => toggle.mutate()}
+      onPress={() => setFollowing((v) => !v)}
     >
-      {toggle.isPending ? '…' : isFollowing ? 'Following' : 'Follow'}
+      {following ? 'Following' : 'Follow'}
     </Button>
   );
 }

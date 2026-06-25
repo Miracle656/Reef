@@ -1,22 +1,27 @@
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { Card, Heading, useTheme } from '@/components/ui';
+import { View, Text, StyleSheet } from 'react-native';
+import { Card, useTheme } from '@/components/ui';
 
-export default function MessagesScreen() {
+export default function MessagesTab() {
   const t = useTheme();
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.container}>
-      <Heading>Messages</Heading>
-      <Card style={{ marginTop: 20, padding: 32, alignItems: 'center' }}>
-        <Text style={{ fontSize: 36 }}>✉️</Text>
-        <Text style={{ color: t.ink, fontSize: 16, fontWeight: '600', marginTop: 12 }}>Coming soon</Text>
-        <Text style={{ color: t.inkSoft, fontSize: 14, textAlign: 'center', marginTop: 4, lineHeight: 20 }}>
-          Direct messages &amp; group chat — Phase 3, on the Sui Stack Messaging SDK (Seal-managed keys, Walrus attachments).
+    <View style={[styles.center, { backgroundColor: t.background }]}>
+      <Text style={[styles.heading, { color: t.ink }]}>Messages</Text>
+      <Card style={styles.card}>
+        <Text style={styles.icon}>✉️</Text>
+        <Text style={[styles.title, { color: t.ink }]}>Coming soon</Text>
+        <Text style={[styles.sub, { color: t.inkSoft }]}>
+          Direct messages & group chat — Phase 3, on the Sui Stack Messaging SDK (Seal-managed keys, Walrus attachments).
         </Text>
       </Card>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 100 },
+  center: { flex: 1, padding: 24 },
+  heading: { fontSize: 22, fontWeight: '700', marginBottom: 20 },
+  card: { padding: 32, alignItems: 'center' },
+  icon: { fontSize: 36, marginBottom: 12 },
+  title: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  sub: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
 });

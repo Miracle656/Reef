@@ -18,6 +18,8 @@ export const LightColors = {
   tint: '#0a84ff',
   tabIconDefault: '#9a9aa6',
   tabIconSelected: '#0a84ff',
+  text: '#16161a',
+  icon: '#9a9aa6',
 };
 
 export const DarkColors = {
@@ -38,6 +40,8 @@ export const DarkColors = {
   tint: '#4da2ff',
   tabIconDefault: '#6a6a76',
   tabIconSelected: '#4da2ff',
+  text: '#f3f3f5',
+  icon: '#6a6a76',
 };
 
 export const Colors = {
