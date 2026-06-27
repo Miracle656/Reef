@@ -121,17 +121,23 @@ function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const scheme = useColorScheme();
+  const t      = Colors[scheme ?? 'light'];
+
   return (
-    <Tabs
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen name="index"    options={{ title: 'Home'    }} />
-      <Tabs.Screen name="trade"    options={{ title: 'Trade'   }} />
-      <Tabs.Screen name="compose"  options={{ title: 'Compose' }} />
-      <Tabs.Screen name="messages" options={{ title: 'Inbox'   }} />
-      <Tabs.Screen name="profile"  options={{ title: 'Profile' }} />
-    </Tabs>
+    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: t.background }}>
+      <Tabs
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        <Tabs.Screen name="index"    options={{ title: 'Home'    }} />
+        <Tabs.Screen name="trade"    options={{ title: 'Trade'   }} />
+        <Tabs.Screen name="compose"  options={{ title: 'Compose' }} />
+        <Tabs.Screen name="messages" options={{ title: 'Inbox'   }} />
+        <Tabs.Screen name="profile"  options={{ title: 'Profile' }} />
+      </Tabs>
+    </View>
   );
 }
 
