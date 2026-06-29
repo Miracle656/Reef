@@ -30,8 +30,9 @@ It's a pnpm-workspace package, so build/run from the **repo root**.
 
 **Commands**
 ```bash
-# install (workspace root)
-pnpm install --frozen-lockfile
+# install (workspace root). --no-frozen-lockfile because the mobile app's
+# package.json is intentionally not committed, so the lockfile can be ahead of it.
+pnpm install --no-frozen-lockfile
 # generate client + apply schema to the DB (first deploy / migrations)
 pnpm --filter @umbra/indexer db:generate
 pnpm --filter @umbra/indexer exec prisma migrate deploy   # or: db:push for a fresh DB
