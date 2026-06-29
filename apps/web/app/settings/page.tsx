@@ -1,22 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AppNav } from "@/components/app-nav";
+import { useDisconnectWallet } from "@mysten/dapp-kit";
+import { AppShell } from "@/components/app-shell";
 import { LinkWallet } from "@/components/link-wallet";
+import { Button } from "@/components/ui";
 
 export default function SettingsPage() {
   // Render wallet-dependent UI only after mount (dapp-kit hooks are client-only).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const { mutate: disconnect } = useDisconnectWallet();
 
   return (
-    <>
-      <AppNav />
-      <main className="mx-auto max-w-md px-4 py-6 pb-28">
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-sm text-ink-soft">Manage your account.</p>
-        <div className="mt-5 space-y-4">{mounted ? <LinkWallet /> : null}</div>
-      </main>
-    </>
+    <AppShell title="Settings">
+      <p className="text-sm text-ink-soft">Manage your account.</p>
+      <div className="mt-5 space-y-4">{mounted ? <LinkWallet /> : null}</div>
+      {mounted ? (
+        <Button variant="outline" className="mt-6" onClick={() => disconnect()}>
+          Sign out
+        </Button>
+      ) : null}
+    </AppShell>
   );
 }

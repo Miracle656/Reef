@@ -38,7 +38,17 @@ export function FollowButton({ target }: { target: string }) {
         : buildFollowTx(umbraConfig, setId, target);
       return run(tx);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["following", account?.address] }),
+    onSuccess: () => {
+      // Indexer lags a few seconds behind the on-chain Followed event — refresh
+      // the graph, feed and profile counts now and again shortly after.
+      const bump = () =>
+        ["following", "feed", "profile-by-handle", "profile-by-addr"].forEach((k) =>
+          qc.invalidateQueries({ queryKey: [k] }),
+        );
+      bump();
+      setTimeout(bump, 3500);
+      setTimeout(bump, 8000);
+    },
   });
 
   if (isSelf) return null;

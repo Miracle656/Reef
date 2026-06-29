@@ -19,6 +19,7 @@
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "@hono/trpc-server": "^0.3.4",
+    "@mysten/deepbook-v3": "^1.5.1",
     "@mysten/enoki": "^1.1.1",
     "@mysten/sui": "^2.19.0",
     "@prisma/client": "^6.2.1",

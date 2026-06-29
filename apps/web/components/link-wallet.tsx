@@ -8,6 +8,7 @@ import { canonicalWalletLinkBytes, type WalletLinkMessage } from "@umbra/core";
 import { trpc } from "@/lib/trpc";
 import { shortAddr } from "@/lib/utils";
 import { Button, Card, Spinner } from "./ui";
+import { CopyButton } from "./copy-button";
 
 type Wallets = ReturnType<typeof useWallets>;
 type Wallet = Wallets[number];
@@ -69,7 +70,7 @@ export function LinkWallet() {
     <Card className="p-5">
       <h2 className="text-lg font-bold">Bind a crypto wallet</h2>
       <p className="mt-1 text-sm text-ink-soft">
-        Link a Sui wallet you control to trade and pay with its balances. Your wallet signs a proof — Umbra
+        Link a Sui wallet you control to trade and pay with its balances. Your wallet signs a proof — ReeF
         never holds your keys.
       </p>
 
@@ -79,7 +80,10 @@ export function LinkWallet() {
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Linked</p>
           {linked.data.map((addr) => (
             <div key={addr} className="flex items-center justify-between rounded-2xl border border-[color:var(--glass-border)] px-3 py-2">
-              <span className="font-mono text-sm">{shortAddr(addr)}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm">{shortAddr(addr)}</span>
+                <CopyButton value={addr} />
+              </div>
               <button type="button" onClick={() => unlink.mutate(addr)} className="text-xs font-medium text-danger hover:underline">
                 Unlink
               </button>
@@ -115,7 +119,10 @@ export function LinkWallet() {
                 <div className="mt-2 space-y-1.5">
                   {w.accounts.map((acc) => (
                     <div key={acc.address} className="flex items-center justify-between">
-                      <span className="font-mono text-sm">{shortAddr(acc.address)}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{shortAddr(acc.address)}</span>
+                        <CopyButton value={acc.address} />
+                      </div>
                       {linkedSet.has(acc.address) ? (
                         <span className="text-xs font-medium text-accent">Linked</span>
                       ) : (

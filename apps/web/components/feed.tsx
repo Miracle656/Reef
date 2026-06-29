@@ -12,6 +12,7 @@ export function Feed() {
     queryKey: ["feed", account?.address],
     queryFn: () => trpc.feed.query({ address: account!.address }),
     enabled: Boolean(account),
+    refetchInterval: 20000,
   });
 
   if (!account) return null;
@@ -24,7 +25,7 @@ export function Feed() {
     return <p className="py-12 text-center text-sm text-ink-soft">Your feed is quiet. Follow people to fill it up.</p>;
 
   return (
-    <div className="space-y-3">
+    <div>
       {posts.map((p) => (
         <PostCard key={p.id} post={p} />
       ))}

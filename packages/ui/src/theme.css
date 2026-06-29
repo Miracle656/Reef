@@ -6,25 +6,32 @@
  */
 
 :root {
-  --background: #f5f6f9;
-  --surface: #ffffff;
-  --surface-glass: rgba(255, 255, 255, 0.62);
-  --surface-muted: #eceef2;
-  --ink: #16161a;
-  --ink-soft: #565660;
+  /* Warm "beach sand" cream — the redesigned ReeF base (see Landing/Web App). */
+  --background: #e7e4dc;
+  --surface: #f6f5f1;
+  --surface-glass: rgba(255, 255, 255, 0.6);
+  --surface-muted: #e0dbd0;
+  --ink: #15151a;
+  --ink-soft: #3a3a42;
   --ink-faint: #9a9aa6;
-  --border: rgba(22, 22, 26, 0.08);
-  --border-strong: rgba(22, 22, 26, 0.14);
+  --border: rgba(21, 21, 26, 0.1);
+  --border-strong: rgba(21, 21, 26, 0.14);
   --accent: #0a84ff; /* Sui blue */
   --accent-ink: #0a4ea3;
   --danger: #e2554a;
   --on-accent: #ffffff;
-  --on-ink: #f7f8fa;
+  --on-ink: #eae7df;
 
-  --glass-border: rgba(22, 22, 26, 0.08);
-  --glass-shadow: 0 10px 34px rgba(22, 22, 26, 0.1), 0 2px 6px rgba(22, 22, 26, 0.05);
-  --glass-shadow-lg: 0 18px 48px rgba(22, 22, 26, 0.14), 0 3px 8px rgba(22, 22, 26, 0.06);
-  --blur: 18px;
+  /* reef brand spectrum */
+  --aqua: #18c2c2;
+  --mint: #7cfcd8;
+  --coral: #ff8a5b;
+  --sun: #ffd166;
+
+  --glass-border: rgba(21, 21, 26, 0.1);
+  --glass-shadow: 0 10px 34px rgba(21, 21, 26, 0.1), 0 2px 6px rgba(21, 21, 26, 0.05);
+  --glass-shadow-lg: 0 24px 60px -24px rgba(21, 21, 26, 0.4), 0 3px 8px rgba(21, 21, 26, 0.06);
+  --blur: 16px;
 
   --radius: 22px;
 }
@@ -51,6 +58,11 @@
 }
 
 @theme inline {
+  /* Brand typeface (Expose) drives everything; --font-expose is set by
+     next/font/local on <html>. Generic stacks are fallbacks only. */
+  --font-sans: var(--font-expose), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-glass: var(--surface-glass);
@@ -65,6 +77,10 @@
   --color-danger: var(--danger);
   --color-on-accent: var(--on-accent);
   --color-on-ink: var(--on-ink);
+  --color-aqua: var(--aqua);
+  --color-mint: var(--mint);
+  --color-coral: var(--coral);
+  --color-sun: var(--sun);
 
   --radius-sm: 14px;
   --radius-md: 18px;
@@ -81,15 +97,30 @@
   * {
     border-color: var(--color-border);
   }
+  html,
+  body {
+    /* Reference --font-expose directly: it's a real CSS var emitted by
+       next/font on <html>. (--font-sans lives in @theme inline, which is
+       substituted into utilities only and is NOT a runtime variable.) */
+    font-family: var(--font-expose), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
   body {
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
-    /* subtle gradient backdrop so frosted surfaces have something to blur */
+    /* flat warm cream — the redesigned base. The grain overlay below gives it
+       texture; frosted surfaces blur against the solid sand. */
     background-color: var(--background);
-    background-image:
-      radial-gradient(60rem 60rem at 85% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
-      radial-gradient(50rem 50rem at -10% 110%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%);
-    background-attachment: fixed;
+  }
+  /* fine fractal-noise grain over the whole app (matches the redesign) */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.4;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.3'/%3E%3C/svg%3E");
   }
 }
 

@@ -60,6 +60,43 @@ export const appRouter = router({
     return toProfile(row, followersCount, followingCount);
   }),
 
+  // --- suggested profiles to follow (most recent, excluding the viewer) ---
+  suggestedProfiles: publicProcedure
+    .input(z.object({ viewer: SuiAddress.optional(), limit: z.number().int().min(1).max(20).default(5) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.profile.findMany({
+        where: input.viewer ? { owner: { not: input.viewer } } : {},
+        orderBy: { createdAtMs: "desc" },
+        take: input.limit + 3,
+      });
+      const out = await Promise.all(
+        rows.slice(0, input.limit).map(async (r) => {
+          const followersCount = await ctx.prisma.follow.count({ where: { followee: r.owner } });
+          return toProfile(r, followersCount, 0);
+        }),
+      );
+      return out;
+    }),
+
+  // --- search profiles by handle or display name ---
+  searchProfiles: publicProcedure
+    .input(z.object({ q: z.string().min(1).max(64), limit: z.number().int().min(1).max(20).default(12) }))
+    .query(async ({ ctx, input }) => {
+      const q = input.q.trim().replace(/^@/, "");
+      if (!q) return [];
+      const rows = await ctx.prisma.profile.findMany({
+        where: {
+          OR: [
+            { handle: { contains: q, mode: "insensitive" } },
+            { displayName: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        orderBy: { handle: "asc" },
+        take: input.limit,
+      });
+      return rows.map((r) => toProfile(r));
+    }),
+
   // --- single post ---
   post: publicProcedure.input(z.object({ id: SuiAddress })).query(async ({ ctx, input }) => {
     const row = await ctx.prisma.post.findUnique({ where: { id: input.id } });
@@ -135,6 +172,59 @@ export const appRouter = router({
         liked = r?.value === 1;
       }
       return { likes, liked };
+    }),
+
+  // --- replies (comments) to a post ---
+  repliesForPost: publicProcedure
+    .input(z.object({ postId: SuiAddress, limit: z.number().int().min(1).max(100).default(50) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.post.findMany({
+        where: { replyTo: input.postId, deleted: false },
+        orderBy: { createdAtMs: "asc" },
+        take: input.limit,
+      });
+      return rows.map((r) => toPost(r));
+    }),
+
+  // --- posts a user reacted to with a given kind (repost / bookmark) ---
+  reactedPosts: publicProcedure
+    .input(z.object({ address: SuiAddress, kind: z.enum(["repost", "bookmark"]), limit: z.number().int().min(1).max(100).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const reactions = await ctx.prisma.reaction.findMany({
+        where: { reactor: input.address, kind: input.kind, value: 1 },
+        orderBy: { timestamp: "desc" },
+        take: input.limit,
+        select: { postId: true },
+      });
+      const ids = reactions.map((r) => r.postId);
+      if (ids.length === 0) return [];
+      const rows = await ctx.prisma.post.findMany({ where: { id: { in: ids }, deleted: false } });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      return ids.map((id) => byId.get(id)).filter((r): r is PostRow => Boolean(r)).map((r) => toPost(r));
+    }),
+
+  // --- combined per-post action state (like/repost/bookmark counts + viewer) ---
+  postActions: publicProcedure
+    .input(z.object({ postId: SuiAddress, viewer: SuiAddress.optional() }))
+    .query(async ({ ctx, input }) => {
+      const count = (kind: string) => ctx.prisma.reaction.count({ where: { postId: input.postId, kind, value: 1 } });
+      const mine = (kind: string) =>
+        input.viewer
+          ? ctx.prisma.reaction
+              .findUnique({ where: { postId_reactor_kind: { postId: input.postId, reactor: input.viewer, kind } } })
+              .then((r) => r?.value === 1)
+          : Promise.resolve(false);
+
+      const [likes, reposts, bookmarks, liked, reposted, bookmarked, replyCount] = await Promise.all([
+        count("like"),
+        count("repost"),
+        count("bookmark"),
+        mine("like"),
+        mine("repost"),
+        mine("bookmark"),
+        ctx.prisma.post.count({ where: { replyTo: input.postId, deleted: false } }),
+      ]);
+      return { likes, reposts, bookmarks, liked, reposted, bookmarked, replyCount };
     }),
 
   // --- creator coins (tokenized content) ---

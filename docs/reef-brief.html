@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ReeF — Product & Design Brief</title>
+<style>
+  :root{
+    --background:#f5f6f9; --surface:#ffffff; --surface-glass:rgba(255,255,255,.62);
+    --surface-muted:#eceef2; --ink:#16161a; --ink-soft:#565660; --ink-faint:#9a9aa6;
+    --border:rgba(22,22,26,.08); --accent:#0a84ff; --accent-ink:#0a4ea3; --danger:#e2554a;
+    --aqua:#18c2c2; --coral:#ff8a5b; --sun:#ffd166; --mint:#7cfcd8;
+    --radius:22px; --shadow:0 10px 34px rgba(22,22,26,.10),0 2px 6px rgba(22,22,26,.05);
+    --shadow-lg:0 18px 48px rgba(22,22,26,.14),0 3px 8px rgba(22,22,26,.06);
+    --ocean:linear-gradient(120deg,#04263f,#0a84ff 32%,#18c2c2 58%,#ff8a5b 82%,#ffd166);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;color:var(--ink);background:var(--background);
+    font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(60rem 60rem at 85% -10%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 60%),
+      radial-gradient(50rem 50rem at -10% 110%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 55%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  h1,h2,h3{letter-spacing:-.02em;line-height:1.12;margin:0}
+  h2{font-size:clamp(1.6rem,3.4vw,2.4rem);font-weight:800;margin:0 0 6px}
+  h3{font-size:1.15rem;font-weight:700;margin:0 0 4px}
+  p{margin:.5rem 0}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:ui-monospace,"SF Mono",Menlo,monospace;background:var(--surface-muted);
+    padding:.1em .4em;border-radius:6px;font-size:.86em}
+  .muted{color:var(--ink-soft)}
+  .faint{color:var(--ink-faint)}
+
+  /* hero */
+  header.hero{position:relative;overflow:hidden;color:#fff;text-align:center;
+    padding:96px 22px 120px;background:var(--ocean);background-size:280% 280%;
+    animation:shift 18s ease infinite}
+  @keyframes shift{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+  header.hero .sun{position:absolute;top:34px;right:9%;width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle,#fff3c4,#ffd166 45%,#ff8a5b 85%);filter:blur(1px);
+    box-shadow:0 0 110px 36px rgba(255,209,102,.5)}
+  header.hero .bubble{position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.10)}
+  header.hero h1{font-size:clamp(4rem,16vw,9rem);font-weight:900;text-shadow:0 8px 40px rgba(4,38,63,.45)}
+  header.hero .tag{display:inline-flex;gap:8px;align-items:center;margin-bottom:18px;
+    background:var(--surface-glass);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.35);
+    padding:7px 16px;border-radius:999px;font-size:.85rem;font-weight:600}
+  header.hero .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 10px var(--mint)}
+  header.hero .sub{max-width:640px;margin:14px auto 0;font-size:1.15rem;color:rgba(255,255,255,.92)}
+  .waves{position:absolute;left:0;right:0;bottom:-1px;line-height:0}
+  .waves svg{width:100%;height:110px;display:block}
+
+  /* layout */
+  section{padding:54px 0}
+  .eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow)}
+  .glass{background:var(--surface-glass);backdrop-filter:blur(18px) saturate(1.4);
+    border:1px solid var(--border);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow)}
+  .chip{display:inline-block;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:999px;
+    background:var(--surface-muted);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+    background:var(--surface-muted);font-weight:600;font-size:.9rem;margin:4px 6px 4px 0}
+  .ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;margin-bottom:12px;font-size:1.1rem}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:.95rem}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.74rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);font-weight:700}
+  tr td:first-child{font-weight:600;white-space:nowrap}
+
+  /* status */
+  .status{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+  .badge{flex:none;font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .ok{background:rgba(22,199,132,.14);color:#0f9d63}
+  .wip{background:rgba(10,132,255,.12);color:var(--accent-ink)}
+  .park{background:rgba(154,154,166,.18);color:var(--ink-soft)}
+
+  /* swatches */
+  .swatch{border-radius:14px;height:78px;border:1px solid var(--border);display:flex;align-items:flex-end;
+    padding:8px 10px;color:#fff;font-size:.74rem;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.35)}
+  .swrow{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  @media(max-width:760px){.swrow{grid-template-columns:repeat(3,1fr)}}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 22px;border-radius:999px;
+    font-weight:700;border:0;cursor:default}
+  .btn-accent{background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(10,132,255,.35)}
+  .btn-ghost{background:var(--surface-glass);backdrop-filter:blur(14px);border:1px solid var(--border);color:var(--ink)}
+  .btn-outline{background:var(--surface);border:1px solid var(--border);color:var(--ink)}
+
+  footer{padding:40px 0 60px;text-align:center;color:var(--ink-soft);border-top:1px solid var(--border)}
+  .lead{font-size:1.08rem;max-width:760px}
+  hr.sep{border:0;border-top:1px solid var(--border);margin:0}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="sun"></div>
+  <span class="bubble" style="left:8%;top:24%;width:90px;height:90px"></span>
+  <span class="bubble" style="left:20%;top:62%;width:42px;height:42px"></span>
+  <span class="bubble" style="left:78%;top:54%;width:120px;height:120px"></span>
+  <span class="bubble" style="left:62%;top:20%;width:24px;height:24px"></span>
+  <div class="wrap">
+    <span class="tag"><span class="dot"></span> Sui-native social · walletless · gasless</span>
+    <h1>ReeF</h1>
+    <p class="sub">The social layer of Sui. Own your identity, your posts, and your audience —
+      no seed phrases, no gas, no middlemen. Mobile-first, Lagos-first.</p>
+  </div>
+  <div class="waves" aria-hidden="true">
+    <svg viewBox="0 0 1440 120" preserveAspectRatio="none">
+      <path fill="rgba(255,255,255,.4)" d="M0,64 C220,24 520,104 760,72 C1000,40 1240,0 1440,44 L1440,120 L0,120 Z"></path>
+      <path fill="#f5f6f9" d="M0,86 C240,56 560,116 820,94 C1080,72 1280,48 1440,78 L1440,120 L0,120 Z"></path>
+    </svg>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- WHAT IS IT -->
+  <section>
+    <div class="eyebrow">What we're building</div>
+    <h2>A decentralized social superapp on Sui</h2>
+    <p class="lead muted">ReeF (codename <em>umbra</em> in code) is a Farcaster/Base-app-style social network where
+      identity, the social graph, content, payments and markets are <strong>native Sui primitives</strong> rather than
+      rows in a company's database. The product is built for <strong>mainstream, mobile-first users</strong> — Lagos-first —
+      so <strong>walletless onboarding</strong> and <strong>gasless UX</strong> are hard requirements, not nice-to-haves.</p>
+
+    <div class="grid g3" style="margin-top:22px">
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#0a84ff,#18c2c2)">🔑</div>
+        <h3>Walletless sign-in</h3>
+        <p class="muted">Continue with Google → zkLogin (Enoki) mints a self-custodial Sui address. No seed phrases.</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#18c2c2,#7cfcd8)">⛽</div>
+        <h3>Gasless by default</h3>
+        <p class="muted">Every action — post, follow, like, trade — is sponsored via Enoki. Users never hold gas.</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#ff8a5b,#ffd166)">🪸</div>
+        <h3>You own it</h3>
+        <p class="muted">Profiles, posts and follows are owned Sui objects — portable & censorship-resistant.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- CAPABILITY MAP -->
+  <section>
+    <div class="eyebrow">Architecture</div>
+    <h2>Every capability maps to a Sui primitive</h2>
+    <p class="muted">Durable, valuable state lives on-chain. High-frequency, low-value actions (likes, reposts, bookmarks)
+      are off-chain and aggregated by an indexer — deliberately avoiding on-chain state-bloat.</p>
+    <div class="card" style="margin-top:16px;padding:6px 6px">
+      <table>
+        <thead><tr><th>Capability</th><th>Primitive / tool</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Identity (walletless)</td><td>zkLogin via <strong>Enoki</strong> (Google → self-custodial address)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Gasless transactions</td><td><strong>Enoki sponsored transactions</strong> (server-signed gas)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Profiles / posts / follows</td><td><strong>Sui Move objects</strong> (owned-first for parallelism)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Replies / comments</td><td>Posts with <code>reply_to</code> (same Move object)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Likes / reposts / bookmarks</td><td>Off-chain <strong>signed reactions</strong> → indexer aggregates counts</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Media storage</td><td><strong>Walrus</strong> blobs (served via an indexer image proxy)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Handles</td><td>App registry now; <strong>SuiNS</strong> leaf-subname <code>&lt;handle&gt;.umbra.sui</code> reserved</td><td><span class="chip">partial</span></td></tr>
+          <tr><td>Trading</td><td><strong>DeepBook v3</strong> — gasless market swaps (SUI ⇄ DEEP)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Prediction markets</td><td><strong>DeepBook Predict</strong> — on-chain BTC binary options (mint)</td><td><span class="chip">live</span></td></tr>
+          <tr><td>Creator coins</td><td>Per-creator <code>Coin</code> + DeepBook pool</td><td><span class="chip">parked</span></td></tr>
+          <tr><td>Feed / discovery</td><td>Off-chain <strong>indexer → Postgres → tRPC API</strong></td><td><span class="chip">live</span></td></tr>
+          <tr><td>DMs / groups</td><td>Sui <strong>Messaging SDK</strong></td><td><span class="chip">planned</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- WHAT'S BUILT -->
+  <section>
+    <div class="eyebrow">Shipped this build</div>
+    <h2>What works today</h2>
+    <div class="grid g2" style="margin-top:8px">
+      <div class="glass">
+        <h3>Web app · Next.js 15</h3>
+        <div class="status"><span class="badge ok">done</span><div><strong>Awwwards-style landing</strong> — GSAP intro reveal, ocean/beach gradient, letter & shape transitions, scroll-reactive marquee, magnetic CTAs, custom cursor, click bubbles.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>3-column app shell</strong> — left vertical floating nav rail (icon-only, hover-expands), center feed, right sidebar.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>Feed</strong> — compose (text + images), flat post rows, comment / repost / like (Sui logo) / bookmark / share, threads.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>Trade</strong> — gasless DeepBook market swaps with live balances; <strong>Predict market pages</strong> (chart, odds, bet panel).</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>Search</strong> (people + token pairs), <strong>profiles</strong> (posts / reposts / bookmarks tabs), wallet linking + copy.</div></div>
+      </div>
+      <div class="glass">
+        <h3>Mobile app · Expo SDK 54</h3>
+        <div class="status"><span class="badge ok">done</span><div><strong>Beach-party splash</strong> → animated ocean gradient + springing ReeF wordmark.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>zkLogin sign-in</strong> over an HTTPS bounce page; <strong>session persists</strong> across restarts.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>Floating bottom nav</strong> (Home · Search · Trade · ➕ · Inbox · Profile-pfp), Telegram-clean feed, image proxy.</div></div>
+        <div class="status"><span class="badge ok">done</span><div><strong>Trade terminal</strong> — base.app-style swap + token detail; <strong>TikTok-style Predict feed</strong>.</div></div>
+        <div class="status"><span class="badge wip">note</span><div>Trade <em>reads</em> are proxied through the indexer (Node) to dodge a Metro/Hermes module-init crash.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- DESIGN SYSTEM -->
+  <section>
+    <div class="eyebrow">Design language</div>
+    <h2>“Liquid neobrutalism”, dialed to the reef</h2>
+    <p class="muted">Frosted translucent surfaces, soft shadows and big rounded corners — but confident bold type and
+      solid accent fills keep a brutalist backbone. The palette is Sui-blue led, warmed with aqua / coral / sun for
+      a coral-reef-meets-beach-party energy.</p>
+
+    <h3 style="margin-top:26px">Core palette</h3>
+    <div class="swrow" style="margin-top:10px">
+      <div class="swatch" style="background:#0a84ff">Accent<br>#0A84FF</div>
+      <div class="swatch" style="background:#18c2c2">Aqua<br>#18C2C2</div>
+      <div class="swatch" style="background:#7cfcd8;color:#06382f;text-shadow:none">Mint<br>#7CFCD8</div>
+      <div class="swatch" style="background:#ff8a5b">Coral<br>#FF8A5B</div>
+      <div class="swatch" style="background:#ffd166;color:#5a4300;text-shadow:none">Sun<br>#FFD166</div>
+      <div class="swatch" style="background:#16161a">Ink<br>#16161A</div>
+    </div>
+    <div class="swrow" style="margin-top:10px">
+      <div class="swatch" style="background:#f5f6f9;color:#565660;text-shadow:none;border-color:#e6e8ee">BG<br>#F5F6F9</div>
+      <div class="swatch" style="background:#eceef2;color:#565660;text-shadow:none">Muted<br>#ECEEF2</div>
+      <div class="swatch" style="background:#565660">Ink soft<br>#565660</div>
+      <div class="swatch" style="background:#9a9aa6">Ink faint<br>#9A9AA6</div>
+      <div class="swatch" style="background:#e2554a">Danger<br>#E2554A</div>
+      <div class="swatch" style="background:var(--ocean);background-size:200%">Ocean grad</div>
+    </div>
+
+    <div class="grid g3" style="margin-top:26px">
+      <div class="card">
+        <h3>Typography</h3>
+        <p class="muted"><strong>Expose</strong> (Fontshare) across the whole product — Regular / Medium / Bold / Black.
+          Big black weights for wordmarks & numbers, soft body for reading.</p>
+        <p class="faint" style="font-size:.85rem">Static weights for reliable rendering on web (next/font) and native (expo-font).</p>
+      </div>
+      <div class="card">
+        <h3>Surfaces &amp; motion</h3>
+        <p class="muted">Glass cards (<code>backdrop-blur</code> + hairline border + soft shadow), radius <code>14–30px</code>,
+          a “lift” hover, and the smooth easing <code>cubic-bezier(.22,1,.36,1)</code>. GSAP drives landing motion.</p>
+      </div>
+      <div class="card">
+        <h3>Iconography</h3>
+        <p class="muted">Clean line icons (Ionicons on native, inline SVG on web). Real circular token logos —
+          SUI, DEEP, WAL, USDC, USDT, BTC.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:30px">Components in the wild</h3>
+    <div class="glass" style="margin-top:12px">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <button class="btn btn-accent">Continue with Google</button>
+        <button class="btn btn-outline">Following</button>
+        <button class="btn btn-ghost">Explore the reef ↓</button>
+        <span class="pill">▲ Up · 62%</span>
+        <span class="pill">🔖 Bookmark</span>
+        <span class="chip">Live</span>
+      </div>
+      <p class="faint" style="margin-top:14px;font-size:.85rem">Pill buttons, glass nav, segmented toggles, and a green-✓ glass toast that slides up.</p>
+    </div>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- ON-CHAIN MODEL -->
+  <section>
+    <div class="eyebrow">On-chain model</div>
+    <h2>Owned-object-first for parallelism</h2>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Why owned objects</h3>
+        <p class="muted"><code>Profile</code>, <code>Post</code> and <code>FollowSet</code> are <strong>owned</strong> by the acting user.
+          Owned-object transactions skip consensus and run in parallel — two users posting or following never contend.
+          The only <strong>shared</strong> object is <code>Registry</code> (global handle/profile uniqueness), touched only on
+          cold paths.</p>
+      </div>
+      <div class="card">
+        <h3>Reactions stay off-chain</h3>
+        <p class="muted">Likes / reposts / bookmarks are <strong>signed messages</strong>, not objects — the indexer verifies the
+          signature and aggregates counts. The stable <code>post_id</code> keeps on-chain settlement open for later.</p>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><span class="chip">contract</span><h3 style="margin-top:8px">Move package</h3><p class="muted">profile · post · follow · registry — published to <strong>testnet</strong>.</p></div>
+      <div class="card"><span class="chip">core</span><h3 style="margin-top:8px">@umbra/core</h3><p class="muted">Sui client, tx builders, Enoki sponsor, Walrus, DeepBook, Zod schemas.</p></div>
+      <div class="card"><span class="chip">service</span><h3 style="margin-top:8px">Indexer</h3><p class="muted">Event poller → Postgres → tRPC API + sponsor + image / DeepBook proxies.</p></div>
+    </div>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- STACK -->
+  <section>
+    <div class="eyebrow">Stack</div>
+    <h2>Monorepo at a glance</h2>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Apps &amp; packages</h3>
+        <p><span class="pill">Next.js 15</span><span class="pill">Expo SDK 54</span><span class="pill">React 19</span>
+           <span class="pill">Tailwind v4 / NativeWind</span><span class="pill">TypeScript strict</span>
+           <span class="pill">GSAP</span><span class="pill">React Query</span></p>
+      </div>
+      <div class="card">
+        <h3>Sui &amp; backend</h3>
+        <p><span class="pill">@mysten/sui 2.x</span><span class="pill">Enoki (zkLogin + sponsor)</span>
+           <span class="pill">Walrus</span><span class="pill">DeepBook v3</span><span class="pill">tRPC</span>
+           <span class="pill">Prisma + Postgres</span><span class="pill">Hono</span></p>
+      </div>
+    </div>
+    <p class="faint" style="margin-top:12px;font-size:.86rem">pnpm workspaces + Turborepo · <strong>testnet only</strong> ·
+      <code>apps/web</code> · <code>apps/mobile</code> · <code>packages/move</code> · <code>packages/core</code> ·
+      <code>packages/ui</code> · <code>services/indexer</code></p>
+  </section>
+
+  <hr class="sep"/>
+
+  <!-- STATUS -->
+  <section>
+    <div class="eyebrow">Where it stands</div>
+    <h2>Status snapshot</h2>
+    <div class="card">
+      <div class="status"><span class="badge ok">working</span><div>Walletless sign-in, onboarding, feed, posting, replies, reactions, search, profiles, follow — web &amp; mobile.</div></div>
+      <div class="status"><span class="badge ok">working</span><div>Gasless DeepBook market swaps (SUI ⇄ DEEP) and on-chain BTC prediction bets, signed by the zkLogin account.</div></div>
+      <div class="status"><span class="badge wip">in progress</span><div>SuiNS leaf-subname minting; mobile trade execution; turning the web Predict tab into a desktop market grid.</div></div>
+      <div class="status"><span class="badge park">parked</span><div>Creator-coin (SULTAN/DEEP) trading — the testnet pool can't price DEEP fees; needs recreating under the current DeepBook package.</div></div>
+      <div class="status" style="border-bottom:0"><span class="badge park">later</span><div>Limit orders (DeepBook BalanceManager), DMs (Messaging SDK), Seal-gated content, AI agents (Nautilus).</div></div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <strong style="font-size:1.3rem;color:var(--ink)">ReeF</strong> — the social layer of Sui.
+    <p class="faint">Product &amp; design brief · testnet build · generated for internal reference.</p>
+  </div>
+</footer>
+
+</body>
+</html>

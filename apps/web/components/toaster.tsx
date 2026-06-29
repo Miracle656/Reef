@@ -30,15 +30,32 @@ export function Toaster() {
 
   if (!mounted) return null;
   return createPortal(
-    <div className="pointer-events-none fixed bottom-24 left-1/2 z-[200] flex -translate-x-1/2 flex-col items-center gap-2">
-      {items.map((i) => (
-        <div
-          key={i.id}
-          className="rounded-full border border-[color:var(--glass-border)] bg-ink px-4 py-2 text-sm font-medium text-on-ink shadow-[var(--shadow-glass-lg)]"
-        >
-          {i.msg}
-        </div>
-      ))}
+    <div className="pointer-events-none fixed bottom-24 left-1/2 z-[200] flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col items-center gap-2">
+      {items.map((i) => {
+        const ok = i.msg.includes("✓");
+        return (
+          <div
+            key={i.id}
+            className="reef-toast flex w-full items-center gap-3 rounded-2xl border border-[color:var(--glass-border)] bg-surface-glass px-4 py-3 text-sm font-medium text-ink shadow-[var(--shadow-glass-lg)] backdrop-blur-xl"
+          >
+            <span
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-white"
+              style={{ background: ok ? "#16c784" : "var(--accent)" }}
+            >
+              {ok ? (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 8v5M12 16h.01" />
+                </svg>
+              )}
+            </span>
+            <span className="leading-snug">{i.msg.replace(/\s*✓\s*$/, "")}</span>
+          </div>
+        );
+      })}
     </div>,
     document.body,
   );

@@ -109,7 +109,7 @@ export type Post = z.infer<typeof PostSchema>;
 
 // ---- off-chain signed reactions (verified + aggregated by the indexer) ------
 
-export const ReactionKindSchema = z.enum(["like", "repost"]);
+export const ReactionKindSchema = z.enum(["like", "repost", "bookmark"]);
 
 /** Payload the client signs (deterministic JSON) for an off-chain reaction. */
 export const ReactionMessageSchema = z.object({

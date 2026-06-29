@@ -20,7 +20,7 @@ import {
   type PlaceLimitOrderParams,
   type PoolMap,
 } from "@mysten/deepbook-v3";
-import type { Transaction } from "@mysten/sui/transactions";
+import { coinWithBalance, type Transaction } from "@mysten/sui/transactions";
 
 export { POOL_CREATION_FEE_DEEP };
 export type { CreatePermissionlessPoolParams, PlaceLimitOrderParams, CoinMap, PoolMap };
@@ -105,4 +105,55 @@ export function addDepositIntoManager(db: DeepBookClient, tx: Transaction, manag
 
 export function addPlaceLimitOrder(db: DeepBookClient, tx: Transaction, params: PlaceLimitOrderParams): void {
   db.deepBook.placeLimitOrder(params)(tx);
+}
+
+/**
+ * Permissionless pools (e.g. a creator coin / DEEP) can't compute DEEP-denominated
+ * fees until a DEEP price point is added from a whitelisted reference pool. Without
+ * it, swaps abort in `deep_price::calculate_order_deep_price`. Call once (it aborts
+ * with EDataPointRecentlyAdded if added too recently — safe to ignore).
+ */
+export function addPrimeDeepPrice(db: DeepBookClient, tx: Transaction, targetPoolKey: string, referencePoolKey = "DEEP_SUI"): void {
+  db.deepBook.addDeepPricePoint(targetPoolKey, referencePoolKey)(tx);
+}
+
+export interface SwapInput {
+  poolKey: string;
+  /** "quoteToBase" spends quote → receives base (e.g. SUI→DEEP, DEEP→SULTAN). */
+  direction: "quoteToBase" | "baseToQuote";
+  /** human amount of the INPUT coin (quote for quoteToBase, base for baseToQuote). */
+  amount: number;
+  /** coin type of the INPUT coin (what's spent). */
+  inputType: string;
+  /** scalar (base units per 1 human unit) of the input coin, e.g. 1e9 for SUI. */
+  inputScalar: number;
+  /** DEEP budget for taker fees; 0 for whitelisted pools. Unused DEEP is returned. */
+  deepAmount?: number;
+  /** slippage floor — minimum OUTPUT amount (human). 0 = accept any. */
+  minOut?: number;
+}
+
+/**
+ * Permissionless DeepBook market swap (no BalanceManager). The input coin is
+ * built from the sender's *owned* coins (useGasCoin:false) so it works inside a
+ * sponsored transaction — otherwise the SDK splits SUI from the gas coin, which
+ * a sponsored tx can't reference ("Cannot use GasCoin as a transaction argument").
+ * The three result coins (output, leftover input, leftover DEEP) go to the sender.
+ */
+export function addSwap(db: DeepBookClient, tx: Transaction, p: SwapInput, sender: string): void {
+  const inputCoin = coinWithBalance({
+    type: p.inputType,
+    balance: BigInt(Math.round(p.amount * p.inputScalar)),
+    useGasCoin: false,
+  });
+  const params = {
+    poolKey: p.poolKey,
+    amount: p.amount,
+    deepAmount: p.deepAmount ?? 0,
+    minOut: p.minOut ?? 0,
+    ...(p.direction === "quoteToBase" ? { quoteCoin: inputCoin } : { baseCoin: inputCoin }),
+  };
+  const build = p.direction === "quoteToBase" ? db.deepBook.swapExactQuoteForBase : db.deepBook.swapExactBaseForQuote;
+  const out = build(params)(tx);
+  tx.transferObjects([out[0], out[1], out[2]], sender);
 }

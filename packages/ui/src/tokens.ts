@@ -7,19 +7,19 @@
 
 export const palette = {
   light: {
-    background: "#FBFBF9", // warm paper
+    background: "#F5F6F9", // cool off-white (matches web)
     surface: "#FFFFFF",
-    surfaceMuted: "#F3F3F0",
-    ink: "#1B1B1F", // near-black — text + brutalist borders
-    inkSoft: "#52525B",
-    inkFaint: "#A1A1AA",
-    border: "#E5E5E1", // subtle divider
-    borderStrong: "#1B1B1F", // the neobrutalist ink edge
-    accent: "#2DA89E", // muted teal — used sparingly
-    accentInk: "#0F4C47",
-    danger: "#D2483F",
+    surfaceMuted: "#ECEEF2",
+    ink: "#16161A",
+    inkSoft: "#565660",
+    inkFaint: "#9A9AA6",
+    border: "#E6E8EE", // soft divider
+    borderStrong: "#D7DAE2", // soft edge (liquid, not brutalist)
+    accent: "#0A84FF", // Sui blue
+    accentInk: "#0A4EA3",
+    danger: "#E2554A",
     onAccent: "#FFFFFF",
-    onInk: "#FBFBF9",
+    onInk: "#F7F8FA",
   },
   dark: {
     background: "#121214",
@@ -30,10 +30,10 @@ export const palette = {
     inkFaint: "#6B6B73",
     border: "#2C2C31",
     borderStrong: "#F4F4F5",
-    accent: "#34C3B7",
-    accentInk: "#A7E8E1",
-    danger: "#E5675E",
-    onAccent: "#0B2C29",
+    accent: "#4DA2FF",
+    accentInk: "#BFE0FF",
+    danger: "#EF6A60",
+    onAccent: "#04243F",
     onInk: "#121214",
   },
 } as const;

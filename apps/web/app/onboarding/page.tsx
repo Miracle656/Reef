@@ -6,7 +6,7 @@ import { useCurrentWallet } from "@mysten/dapp-kit";
 import { getSession } from "@mysten/enoki";
 import { useSocialAccount } from "@/lib/account";
 import { buildOnboardTx, walrus } from "@umbra/core";
-import { AppNav } from "@/components/app-nav";
+import { AppShell } from "@/components/app-shell";
 import { Avatar, Button, Card, Input, Spinner, Textarea } from "@/components/ui";
 import { SUINS_MINT_URL, umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
@@ -100,10 +100,8 @@ export default function OnboardingPage() {
   }
 
   return (
-    <>
-      <AppNav />
-      <main className="mx-auto max-w-md px-4 py-8 pb-28">
-        <h1 className="text-2xl font-bold">Create your profile</h1>
+    <AppShell>
+      <h1 className="text-2xl font-bold">Create your profile</h1>
         {!account ? (
           <p className="mt-4 text-sm text-ink-soft">Sign in first to claim a handle.</p>
         ) : (
@@ -145,7 +143,7 @@ export default function OnboardingPage() {
               {handle && !handleOk ? (
                 <span className="mt-1 block text-xs text-danger">3–20 chars, a–z 0–9 _ only</span>
               ) : handle ? (
-                <span className="mt-1 block text-xs text-ink-faint">{handle}.umbra.sui</span>
+                <span className="mt-1 block text-xs text-ink-faint">{handle}.reef.sui</span>
               ) : null}
             </label>
 
@@ -167,7 +165,6 @@ export default function OnboardingPage() {
             </Button>
           </Card>
         )}
-      </main>
-    </>
+    </AppShell>
   );
 }

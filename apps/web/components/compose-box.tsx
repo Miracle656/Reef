@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { buildCreatePostTx, walrus } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
+import { PAIRS, type Pair } from "@/lib/deepbook";
 import { toast } from "./toaster";
 import { Button, Card, Spinner } from "./ui";
 
@@ -16,10 +17,14 @@ export function ComposeForm({
   withTokenize = false,
   autoFocus = false,
   onPosted,
+  replyTo,
+  placeholder = "What's happening in Lagos?",
 }: {
   withTokenize?: boolean;
   autoFocus?: boolean;
   onPosted?: () => void;
+  replyTo?: string;
+  placeholder?: string;
 }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -27,7 +32,14 @@ export function ComposeForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenize, setTokenize] = useState(false);
+  const [showPairs, setShowPairs] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function shareTrade(p: Pair) {
+    const ref = `${p.base}/${p.quote}`;
+    setText((t) => (t.includes(ref) ? t : (t.trimEnd() + " " + ref).trimStart()));
+    setShowPairs(false);
+  }
   const run = useGasless();
   const qc = useQueryClient();
 
@@ -59,15 +71,19 @@ export function ComposeForm({
         const bytes = new Uint8Array(await f.arrayBuffer());
         media.push((await walrus.upload(umbraConfig, bytes)).blobId);
       }
-      await run(buildCreatePostTx(umbraConfig, { text: text.trim(), media }));
+      await run(buildCreatePostTx(umbraConfig, { text: text.trim(), media, replyTo: replyTo ?? null }));
       setText("");
       setFiles([]);
       setPreviews([]);
-      toast("Posted ✓ — appearing shortly");
+      toast(replyTo ? "Reply posted ✓ — appearing shortly" : "Posted ✓ — appearing shortly");
       // refetch now + again after the indexer ingests (~4s)
       const refresh = () => {
         qc.invalidateQueries({ queryKey: ["feed"] });
         qc.invalidateQueries({ queryKey: ["posts-by-author"] });
+        if (replyTo) {
+          qc.invalidateQueries({ queryKey: ["replies", replyTo] });
+          qc.invalidateQueries({ queryKey: ["post-actions", replyTo] });
+        }
       };
       refresh();
       setTimeout(refresh, 4500);
@@ -87,7 +103,7 @@ export function ComposeForm({
         value={text}
         maxLength={MAX}
         onChange={(e) => setText(e.target.value)}
-        placeholder="What's happening in Lagos?"
+        placeholder={placeholder}
         className="w-full resize-none bg-transparent text-[15px] placeholder:text-ink-faint focus:outline-none"
       />
 
@@ -133,6 +149,29 @@ export function ComposeForm({
               e.currentTarget.value = "";
             }}
           />
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowPairs((v) => !v)}
+              className="text-sm font-medium text-ink-soft hover:text-accent"
+            >
+              + Trade
+            </button>
+            {showPairs ? (
+              <div className="absolute bottom-full left-0 z-30 mb-2 max-h-60 w-44 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+                {PAIRS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => shareTrade(p)}
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium hover:bg-surface-muted"
+                  >
+                    {p.base} <span className="text-ink-faint">/</span> {p.quote}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <span className={`text-xs ${text.length > MAX ? "text-danger" : "text-ink-faint"}`}>{text.length}/{MAX}</span>
         </div>
         <Button size="sm" disabled={!canPost} onClick={submit}>

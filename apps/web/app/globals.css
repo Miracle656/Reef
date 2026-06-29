@@ -10,6 +10,27 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Collapsible labels in the in-flow side rail: hidden when the rail is collapsed
+   (74px), fade in when it expands on hover (238px). */
+.reef-lbl {
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+.group:hover .reef-lbl {
+  opacity: 1;
+}
+
+/* Pin the brand typeface unlayered so it outranks any @layer base / vendor
+   (dapp-kit) rule. --font-expose is set by next/font on <html>. */
+html,
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-expose), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
 /* livestream-style trade "pops" for the predict feed */
 @keyframes umbra-pop {
   0% {
@@ -27,4 +48,200 @@ html {
 }
 .pop {
   animation: umbra-pop 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ---- Landing page: beach / coral-reef ambience ------------------------- */
+
+/* drifting bubbles + floaty shapes */
+@keyframes reef-float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-26px) translateX(10px) rotate(8deg);
+  }
+}
+.reef-float {
+  animation: reef-float var(--dur, 9s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+/* slow sun / glow pulse */
+@keyframes reef-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+.reef-pulse {
+  animation: reef-pulse 7s ease-in-out infinite;
+}
+
+/* edge-to-edge moving headline band */
+@keyframes reef-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.reef-marquee {
+  animation: reef-marquee var(--mq, 28s) linear infinite;
+}
+.reef-marquee-rev {
+  animation: reef-marquee var(--mq, 32s) linear infinite reverse;
+}
+
+/* animated multi-stop ocean gradient */
+@keyframes reef-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.reef-ocean {
+  background: linear-gradient(120deg, #04263f, #0a84ff 32%, #18c2c2 58%, #ff8a5b 82%, #ffd166);
+  background-size: 280% 280%;
+  animation: reef-shift 18s ease infinite;
+}
+
+/* gentle wave bob for the layered SVG waves */
+@keyframes reef-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(8px);
+  }
+}
+.reef-bob {
+  animation: reef-bob var(--bob, 6s) ease-in-out infinite;
+}
+
+/* scroll-bounce cue */
+@keyframes reef-cue {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(8px);
+    opacity: 1;
+  }
+}
+.reef-cue {
+  animation: reef-cue 1.8s ease-in-out infinite;
+}
+
+/* modern toast: glass card sliding up */
+@keyframes reef-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.reef-toast {
+  animation: reef-toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* click / tap burst bubbles */
+.reef-burst {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 75;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #7cfcd8 55%, #0a84ff);
+  box-shadow: 0 0 12px rgba(124, 252, 216, 0.6);
+}
+
+/* film grain for premium texture */
+.reef-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.055;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* scroll progress bar */
+.reef-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  z-index: 70;
+  background: linear-gradient(90deg, #0a84ff, #18c2c2, #ff8a5b, #ffd166);
+}
+
+/* custom cursor */
+.reef-cursor-dot,
+.reef-cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 80;
+  border-radius: 9999px;
+  mix-blend-mode: difference;
+}
+.reef-cursor-dot {
+  width: 8px;
+  height: 8px;
+  background: #fff;
+}
+.reef-cursor-ring {
+  width: 42px;
+  height: 42px;
+  border: 1.5px solid #fff;
+}
+@media (hover: hover) and (pointer: fine) {
+  .reef-cursor-area,
+  .reef-cursor-area a,
+  .reef-cursor-area button {
+    cursor: none;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .reef-cursor-dot,
+  .reef-cursor-ring {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reef-float,
+  .reef-pulse,
+  .reef-marquee,
+  .reef-marquee-rev,
+  .reef-ocean,
+  .reef-bob,
+  .reef-cue {
+    animation: none !important;
+  }
 }

@@ -18,23 +18,53 @@ const COIN_COLORS: Record<string, string> = {
   SOL: "#9945ff",
 };
 
-/** Real icon images by symbol (others fall back to a colored letter circle). */
-const COIN_IMAGES: Record<string, string> = { SUI: "/sui.png" };
+/** Transparent marks that need a white badge + contain (vs full circular logos). */
+const BADGE_IMAGES: Record<string, string> = { SUI: "/sui.png" };
+/** Full circular logos rendered edge-to-edge. */
+const FULL_IMAGES: Record<string, string> = { DEEP: "/deep.webp", WAL: "/wal.png" };
+
+function logoFor(symbol: string): { src: string; badge?: boolean } | null {
+  if (BADGE_IMAGES[symbol]) return { src: BADGE_IMAGES[symbol]!, badge: true };
+  if (/usdc/i.test(symbol)) return { src: "/usdc.png" };
+  if (/usdt/i.test(symbol)) return { src: "/usdt.png" };
+  if (/btc/i.test(symbol)) return { src: "/btc.png" };
+  if (FULL_IMAGES[symbol]) return { src: FULL_IMAGES[symbol]! };
+  return null;
+}
 
 export function CoinIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
-  const img = COIN_IMAGES[symbol];
+  const logo = logoFor(symbol);
   const bg = COIN_COLORS[symbol] ?? "#9aa0ac";
+
+  // Transparent mark (Sui droplet) → white badge + object-contain.
+  if (logo?.badge) {
+    return (
+      <span
+        className="inline-grid shrink-0 place-items-center overflow-hidden rounded-full bg-white ring-2 ring-surface"
+        style={{ width: size, height: size }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo.src} alt={symbol} className="h-full w-full object-contain" style={{ padding: Math.round(size * 0.14) }} />
+      </span>
+    );
+  }
+
+  // Full circular logo (DEEP / USDC / WAL) → edge-to-edge.
+  if (logo) {
+    return (
+      <span className="inline-block shrink-0 overflow-hidden rounded-full ring-2 ring-surface" style={{ width: size, height: size }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo.src} alt={symbol} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
+
   return (
     <span
       className="inline-grid shrink-0 place-items-center overflow-hidden rounded-full font-medium text-white ring-2 ring-surface"
       style={{ width: size, height: size, background: bg, fontSize: size * 0.42 }}
     >
-      {img ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={img} alt={symbol} className="h-full w-full object-cover" />
-      ) : (
-        symbol.slice(0, 1)
-      )}
+      {symbol.slice(0, 1)}
     </span>
   );
 }

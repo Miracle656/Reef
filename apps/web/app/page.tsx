@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useSocialAccount } from "@/lib/account";
-import { AppNav } from "@/components/app-nav";
-import { ComposeBox } from "@/components/compose-box";
+import { walrus } from "@umbra/core";
+import { AppShell } from "@/components/app-shell";
+import { ComposeForm } from "@/components/compose-box";
 import { Feed } from "@/components/feed";
-import { SignInButton } from "@/components/sign-in-button";
-import { Button, Card } from "@/components/ui";
-import { isConfigured } from "@/lib/config";
+import { Landing } from "@/components/landing";
+import { RightSidebar } from "@/components/right-sidebar";
+import { Avatar, Button, Card } from "@/components/ui";
+import { isConfigured, umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 
 export default function HomePage() {
@@ -19,38 +21,42 @@ export default function HomePage() {
     enabled: Boolean(account),
   });
 
-  return (
-    <>
-      <AppNav />
-      <main className="mx-auto max-w-2xl px-4 py-6 pb-28">
-        {!isConfigured ? <ConfigBanner /> : null}
-        {!account ? (
-          <Hero />
-        ) : profile.isLoading ? null : !profile.data ? (
-          <OnboardCta />
-        ) : (
-          <div className="space-y-4">
-            <ComposeBox />
-            <Feed />
-          </div>
-        )}
-      </main>
-    </>
-  );
-}
+  // Signed-out visitors get the full animated landing (no app chrome).
+  if (!account) return <Landing />;
 
-function Hero() {
   return (
-    <div className="py-10">
-      <h1 className="text-4xl font-bold tracking-tight">The social layer of Sui.</h1>
-      <p className="mt-3 max-w-md text-ink-soft">
-        Own your identity, your posts, and your audience — no seed phrases, no gas, no middlemen. Built for
-        Lagos, on Walrus + zkLogin.
-      </p>
-      <div className="mt-6">
-        <SignInButton />
-      </div>
-    </div>
+    <AppShell
+      flush
+      title="Home"
+      header={
+        <div className="flex gap-8 px-6">
+          <button className="border-b-[2.5px] border-accent pb-3 text-[15px] font-bold text-ink">For you</button>
+          <button className="border-b-[2.5px] border-transparent pb-3 text-[15px] font-medium text-ink-faint transition-colors hover:text-ink-soft">Following</button>
+        </div>
+      }
+      right={profile.data ? <RightSidebar /> : undefined}
+    >
+      {!isConfigured ? <div className="px-5 pt-4"><ConfigBanner /></div> : null}
+      {profile.isLoading ? null : !profile.data ? (
+        <div className="p-5"><OnboardCta /></div>
+      ) : (
+        <>
+          <div className="flex gap-3 border-b-[8px] border-[color:color-mix(in_srgb,var(--ink)_5%,transparent)] px-5 py-4">
+            <div className="shrink-0">
+              <Avatar
+                name={profile.data.handle}
+                src={profile.data.avatarBlobId ? walrus.urlFor(umbraConfig, profile.data.avatarBlobId) : null}
+                size={46}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <ComposeForm placeholder="What's happening on the reef?" />
+            </div>
+          </div>
+          <Feed />
+        </>
+      )}
+    </AppShell>
   );
 }
 

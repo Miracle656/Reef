@@ -23,10 +23,7 @@ export function AppNav() {
 
   return (
     <header className="bg-transparent">
-      <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-bold tracking-tight lowercase">
-          umbra
-        </Link>
+      <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-end px-4 md:pl-[96px] md:pr-4">
         <div className="flex items-center gap-3">
           {account ? (
             <>

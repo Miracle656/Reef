@@ -2,6 +2,8 @@ import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { IndexerEnv } from "./config";
+import { deepbookRoutes } from "./deepbook";
+import { imgRoutes } from "./img";
 import { sponsorRoutes } from "./sponsor";
 import { suinsRoutes } from "./suins";
 import { appRouter } from "./trpc/router";
@@ -20,6 +22,8 @@ export function createServer(env: IndexerEnv): Hono {
     trpcServer({ endpoint: "/trpc", router: appRouter, createContext: () => createContext() }),
   );
 
+  app.route("/", imgRoutes(env));
+  app.route("/", deepbookRoutes(env));
   app.route("/", sponsorRoutes(env));
   app.route("/", suinsRoutes(env));
 
