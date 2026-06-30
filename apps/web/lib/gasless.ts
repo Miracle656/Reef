@@ -15,6 +15,37 @@ type SignFeature = {
   }) => Promise<{ signature: string }>;
 };
 
+type SignMessageFeature = {
+  signPersonalMessage: (input: {
+    message: Uint8Array;
+    account: { address: string };
+    chain?: string;
+  }) => Promise<{ signature: string; bytes: string }>;
+};
+
+/**
+ * Sign a personal message (off-chain reactions) with the Enoki (zkLogin) wallet
+ * DIRECTLY — never dapp-kit's `useSignPersonalMessage`, which signs with whatever
+ * wallet is "current". A bound external wallet being current would be (wrongly)
+ * asked to sign for the Enoki account and reject it ("account isn't connected").
+ */
+export function useEnokiSignPersonalMessage() {
+  const wallets = useWallets();
+  const enokiWallet = wallets.find(isEnokiWallet);
+  const enokiAccount = enokiWallet?.accounts[0];
+
+  return useCallback(
+    async (message: Uint8Array): Promise<{ signature: string }> => {
+      if (!enokiWallet || !enokiAccount) throw new Error("Sign in with Google first");
+      const feature = (enokiWallet.features as Record<string, unknown>)["sui:signPersonalMessage"] as SignMessageFeature | undefined;
+      if (!feature?.signPersonalMessage) throw new Error("Enoki wallet can't sign messages");
+      const { signature } = await feature.signPersonalMessage({ message, account: enokiAccount, chain: `sui:${NETWORK}` });
+      return { signature };
+    },
+    [enokiWallet, enokiAccount],
+  );
+}
+
 /**
  * Runs a transaction gaslessly: build kind-bytes -> sponsor (Enoki, server) ->
  * sign the sponsored bytes -> execute. We call the Enoki (zkLogin) wallet's

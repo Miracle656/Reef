@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSignPersonalMessage } from "@mysten/dapp-kit";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { canonicalReactionBytes, type Post, type ReactionMessage } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
+import { useEnokiSignPersonalMessage } from "@/lib/gasless";
 import { trpc } from "@/lib/trpc";
 import { toast } from "./toaster";
 
@@ -12,7 +12,7 @@ type Kind = "like" | "repost" | "bookmark";
 
 export function ActionBar({ post }: { post: Post }) {
   const account = useSocialAccount();
-  const { mutateAsync: sign } = useSignPersonalMessage();
+  const sign = useEnokiSignPersonalMessage();
   const qc = useQueryClient();
 
   const s = useQuery({
@@ -31,7 +31,7 @@ export function ActionBar({ post }: { post: Post }) {
         timestamp: Date.now(),
         value: (active ? 0 : 1) as 0 | 1,
       };
-      const { signature } = await sign({ message: canonicalReactionBytes(message), account });
+      const { signature } = await sign(canonicalReactionBytes(message));
       return trpc.addReaction.mutate({ message, signature });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["post-actions", post.id] }),
