@@ -90,7 +90,7 @@ export function MessageBubble({
           )}
 
           <span className={`mt-0.5 flex items-center justify-end gap-1 ${mine ? "text-on-accent/70" : "text-ink-faint"}`}>
-            {m.expiresAt && !m.isDeleted ? <span className="text-[10px]">⏲</span> : null}
+            {m.expiresAt && !m.isDeleted ? <span className="text-[10px]" title="Disappearing message">⏲ {fmtExpiry(m.expiresAt)}</span> : null}
             {m.isEdited && !m.isDeleted ? <span className="text-[10px]">edited</span> : null}
             <span className="font-mono text-[10px]">{timeShort(m.createdAt)}</span>
             {mine && !m.isDeleted ? <Ticks message={m} /> : null}
@@ -155,6 +155,15 @@ function Content({
       </button>
     );
   }
+  if (m.type === "voice" && m.fileUrl) {
+    return (
+      <span className="flex items-center gap-2">
+        <span>🎤</span>
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <audio controls src={m.fileUrl} className="h-9 max-w-[220px]" />
+      </span>
+    );
+  }
   if (m.type === "poll" && m.poll) return <PollView message={m} mine={mine} onVote={(i) => onVotePoll(m.id, i)} />;
   if (m.type === "image" && m.fileUrl) {
     return (
@@ -202,6 +211,19 @@ function groupReactions(m: Message, meId?: string): { emoji: string; count: numb
     map.set(r.emoji, cur);
   }
   return [...map.entries()].map(([emoji, v]) => ({ emoji, ...v }));
+}
+
+/** Short remaining-time label for a disappearing message. */
+function fmtExpiry(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
 /** Bold @mentions inside message text. */

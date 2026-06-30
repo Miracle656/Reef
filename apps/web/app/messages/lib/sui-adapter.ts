@@ -180,6 +180,21 @@ export class SuiMessaging implements Messaging {
     return TODO("searchUsers");
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  blockUser(_userId: string): Promise<void> {
+    return TODO("blockUser");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  unblockUser(_userId: string): Promise<void> {
+    return TODO("unblockUser");
+  }
+  listBlocked(): Promise<Participant[]> {
+    return TODO("listBlocked");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  reportUser(_userId: string, _reason: string, _chatId?: string): Promise<void> {
+    return TODO("reportUser");
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   uploadMedia(_file: File): Promise<UploadResult> {
     return TODO("uploadMedia");
   }

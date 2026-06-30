@@ -41,6 +41,7 @@ interface DB {
   saved: string[];
   vaultPasscode: string | null;
   statuses: Status[];
+  blocked: string[];
 }
 
 // Built-in dare/truth pack for the Chosen game (user can swap these).
@@ -100,13 +101,14 @@ export class MockMessaging implements Messaging {
           db.saved ??= [];
           db.vaultPasscode ??= null;
           db.statuses ??= [];
+          db.blocked ??= [];
           return db;
         }
       } catch {
         /* fall through to fresh */
       }
     }
-    return { meId: null, users: [...SEED_USERS], chats: [], messages: {}, saved: [], vaultPasscode: null, statuses: [] };
+    return { meId: null, users: [...SEED_USERS], chats: [], messages: {}, saved: [], vaultPasscode: null, statuses: [], blocked: [] };
   }
 
   private save() {
@@ -247,6 +249,7 @@ export class MockMessaging implements Messaging {
     this.requireMe();
     return this.db.chats
       .filter((c) => !c.vaulted)
+      .filter((c) => !(c.type === "direct" && c.participants.some((p) => p.id !== this.me?.id && this.db.blocked.includes(p.id))))
       .slice()
       .sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   }
@@ -817,6 +820,25 @@ export class MockMessaging implements Messaging {
         u.id !== meId &&
         (u.username.toLowerCase().includes(q) || (u.displayName ?? "").toLowerCase().includes(q)),
     );
+  }
+
+  async blockUser(userId: string): Promise<void> {
+    if (!this.db.blocked.includes(userId)) this.db.blocked.push(userId);
+    this.save();
+  }
+
+  async unblockUser(userId: string): Promise<void> {
+    this.db.blocked = this.db.blocked.filter((id) => id !== userId);
+    this.save();
+  }
+
+  async listBlocked(): Promise<Participant[]> {
+    return this.db.blocked.map((id) => this.user(id)).filter((u): u is ChatUser => Boolean(u));
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async reportUser(_userId: string, _reason: string, _chatId?: string): Promise<void> {
+    // mock: a report is a no-op. The onchain/backend adapter records it.
   }
 
   // ── media ────────────────────────────────────────────────────────────────────

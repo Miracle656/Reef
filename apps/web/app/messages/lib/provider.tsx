@@ -276,6 +276,10 @@ interface MessagingContext {
   startDirect: (userId: string) => Promise<string>;
   createGroup: (input: CreateGroupInput) => Promise<string>;
   searchUsers: (q: string) => Promise<Participant[]>;
+  blockUser: (userId: string) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
+  listBlocked: () => Promise<Participant[]>;
+  reportUser: (userId: string, reason: string, chatId?: string) => Promise<void>;
   setTyping: (chatId: string, isTyping: boolean) => void;
   refreshChats: () => Promise<void>;
   // phase B
@@ -468,6 +472,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   );
 
   const searchUsers = useCallback((q: string) => messaging.searchUsers(q), []);
+  const blockUser = useCallback(async (userId: string) => {
+    await messaging.blockUser(userId);
+    await refreshChats();
+  }, [refreshChats]);
+  const unblockUser = useCallback((userId: string) => messaging.unblockUser(userId), []);
+  const listBlocked = useCallback(() => messaging.listBlocked(), []);
+  const reportUser = useCallback((userId: string, reason: string, chatId?: string) => messaging.reportUser(userId, reason, chatId), []);
   const setTyping = useCallback((chatId: string, isTyping: boolean) => messaging.setTyping(chatId, isTyping), []);
   const uploadMedia = useCallback((file: File) => messaging.uploadMedia(file), []);
 
@@ -596,6 +607,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     startDirect,
     createGroup,
     searchUsers,
+    blockUser,
+    unblockUser,
+    listBlocked,
+    reportUser,
     setTyping,
     refreshChats,
     editMessage,

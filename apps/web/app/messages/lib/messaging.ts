@@ -174,6 +174,10 @@ export interface Messaging {
 
   // people ---------------------------------------------------------------
   searchUsers(query: string): Promise<Participant[]>;
+  blockUser(userId: string): Promise<void>;
+  unblockUser(userId: string): Promise<void>;
+  listBlocked(): Promise<Participant[]>;
+  reportUser(userId: string, reason: string, chatId?: string): Promise<void>;
 
   // media ----------------------------------------------------------------
   uploadMedia(file: File): Promise<UploadResult>;

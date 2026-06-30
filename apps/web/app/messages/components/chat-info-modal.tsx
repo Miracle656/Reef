@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Avatar, Button } from "@/components/ui";
+import { toast } from "@/components/toaster";
 import { useMessaging } from "../lib/provider";
 import { chatAvatar, chatName, peerOf } from "../lib/display";
 import type { Chat, Participant } from "../lib/types";
 import { PlusIcon, SearchIcon, XIcon } from "./icons";
 
 export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => void }) {
-  const { me, updateGroup, addParticipants, removeParticipant, setAdmin, leaveGroup, setChatSettings, setChatVaulted } = useMessaging();
+  const { me, updateGroup, addParticipants, removeParticipant, setAdmin, leaveGroup, setChatSettings, setChatVaulted, blockUser, unblockUser, listBlocked, reportUser } = useMessaging();
   const isGroup = chat.type === "group";
   const meId = me?.id;
   const iAmAdmin = isGroup && (chat.adminIds ?? []).includes(meId ?? "");
@@ -19,6 +20,33 @@ export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => vo
   const [name, setName] = useState(chat.name ?? "");
   const [desc, setDesc] = useState(chat.description ?? "");
   const [adding, setAdding] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!peer) return;
+    void listBlocked().then((list) => setBlocked(list.some((u) => u.id === peer.id)));
+  }, [peer, listBlocked]);
+
+  const toggleBlock = async () => {
+    if (!peer) return;
+    if (blocked) {
+      await unblockUser(peer.id);
+      setBlocked(false);
+      toast("Unblocked");
+    } else {
+      await blockUser(peer.id);
+      setBlocked(true);
+      toast("Blocked");
+      onClose();
+    }
+  };
+
+  const report = () => {
+    if (!peer) return;
+    const reason = window.prompt(`Report @${peer.username}? Add a reason (optional):`);
+    if (reason === null) return;
+    void reportUser(peer.id, reason, chat.id).then(() => toast("Report submitted ✓"));
+  };
 
   const saveMeta = async () => {
     if (name.trim() && (name !== chat.name || desc !== chat.description)) {
@@ -115,6 +143,18 @@ export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => vo
               <Button variant="danger" onClick={() => void leaveGroup(chat.id).then(onClose)} className="mt-4 w-full">
                 Leave group
               </Button>
+            </div>
+          ) : null}
+
+          {/* direct chat: block / report */}
+          {!isGroup && peer ? (
+            <div className="mt-3 space-y-2">
+              <button onClick={() => void toggleBlock()} className={`w-full rounded-2xl border px-4 py-2.5 text-left text-[14px] font-semibold ${blocked ? "border-[color:var(--glass-border)] text-ink" : "border-danger/40 text-danger"}`}>
+                {blocked ? `Unblock @${peer.username}` : `Block @${peer.username}`}
+              </button>
+              <button onClick={report} className="w-full rounded-2xl border border-danger/40 px-4 py-2.5 text-left text-[14px] font-semibold text-danger">
+                Report @{peer.username}
+              </button>
             </div>
           ) : null}
         </div>

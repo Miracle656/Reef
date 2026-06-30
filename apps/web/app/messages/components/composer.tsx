@@ -36,12 +36,15 @@ export function Composer({
   const [pollOpen, setPollOpen] = useState(false);
   const otherMembers = participants.filter((p) => p.id !== meId);
   const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const imgRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const viewOnceRef = useRef<HTMLInputElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     if (editing) {
@@ -53,8 +56,11 @@ export function Composer({
   const mentionMatches = useMemo(() => {
     if (mentionQuery == null) return [];
     const q = mentionQuery.toLowerCase();
-    return participants.filter((p) => p.username.toLowerCase().includes(q) || (p.displayName ?? "").toLowerCase().includes(q)).slice(0, 5);
-  }, [mentionQuery, participants]);
+    const base = participants.filter((p) => p.username.toLowerCase().includes(q) || (p.displayName ?? "").toLowerCase().includes(q));
+    const everyone = { id: "everyone", username: "everyone", displayName: "Everyone" } as Participant;
+    const all = otherMembers.length > 1 && "everyone".includes(q) ? [everyone, ...base] : base;
+    return all.slice(0, 5);
+  }, [mentionQuery, participants, otherMembers.length]);
 
   const grow = () => {
     const ta = taRef.current;
@@ -98,6 +104,10 @@ export function Composer({
     for (const m of content.matchAll(/@([a-zA-Z0-9_]+)/g)) {
       const handle = m[1];
       if (!handle) continue;
+      if (handle.toLowerCase() === "everyone") {
+        for (const p of otherMembers) ids.push(p.id);
+        continue;
+      }
       const u = participants.find((p) => p.username.toLowerCase() === handle.toLowerCase());
       if (u) ids.push(u.id);
     }
@@ -133,6 +143,39 @@ export function Composer({
       onCancelReply();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleRecord = async () => {
+    if (recording) {
+      recRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (!blob.size) return;
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+        setBusy(true);
+        try {
+          const up = await uploadMedia(file);
+          await send({ chatId, type: "voice", content: "", fileUrl: up.url, fileName: up.name, fileSize: up.size, mimeType: up.mimeType, replyToId: replyTo?.id });
+          onCancelReply();
+        } finally {
+          setBusy(false);
+        }
+      };
+      recRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch {
+      /* mic denied or unsupported */
     }
   };
 
@@ -266,9 +309,21 @@ export function Composer({
           disabled={busy}
           className="max-h-[140px] min-h-[44px] w-0 flex-1 resize-none rounded-[20px] border border-[color:var(--glass-border)] bg-surface-glass px-4 py-2.5 text-[14.5px] outline-none backdrop-blur-xl placeholder:text-ink-faint focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--accent)_45%,transparent)]"
         />
-        <button type="button" onClick={() => void submit()} disabled={!text.trim() || busy} aria-label={editing ? "Save" : "Send"} className="lift grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)] disabled:opacity-40">
-          <SendIcon className="h-5 w-5" />
-        </button>
+        {!editing && !text.trim() ? (
+          <button
+            type="button"
+            onClick={() => void toggleRecord()}
+            disabled={busy}
+            aria-label={recording ? "Stop recording" : "Record voice"}
+            className={`grid h-11 w-11 shrink-0 place-items-center rounded-full shadow-[var(--shadow-glass)] disabled:opacity-40 ${recording ? "animate-pulse bg-danger text-white" : "bg-accent text-on-accent"}`}
+          >
+            {recording ? <span className="h-3.5 w-3.5 rounded-[3px] bg-white" /> : <span className="text-lg leading-none">🎤</span>}
+          </button>
+        ) : (
+          <button type="button" onClick={() => void submit()} disabled={!text.trim() || busy} aria-label={editing ? "Save" : "Send"} className="lift grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)] disabled:opacity-40">
+            <SendIcon className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {pollOpen ? <PollComposer chatId={chatId} onClose={() => setPollOpen(false)} /> : null}

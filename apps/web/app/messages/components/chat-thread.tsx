@@ -42,9 +42,22 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
   const [savedOpen, setSavedOpen] = useState(false);
   const [chosenOpen, setChosenOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
-  const pinned = useMemo(() => messages.filter((m) => m.isPinned && !m.isDeleted), [messages]);
+  // live tick while a disappearing message is counting down, then it vanishes
+  const hasExpiring = useMemo(() => messages.some((m) => m.expiresAt), [messages]);
+  useEffect(() => {
+    if (!hasExpiring) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [hasExpiring]);
+
+  const visible = useMemo(
+    () => messages.filter((m) => !m.expiresAt || new Date(m.expiresAt).getTime() > nowMs),
+    [messages, nowMs],
+  );
+  const byId = useMemo(() => new Map(visible.map((m) => [m.id, m])), [visible]);
+  const pinned = useMemo(() => visible.filter((m) => m.isPinned && !m.isDeleted), [visible]);
 
   // reset transient UI when switching chats
   useEffect(() => {
@@ -141,10 +154,10 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
 
       {/* messages */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {messages.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="grid h-full place-items-center"><p className="text-sm text-ink-faint">Say hi 👋</p></div>
         ) : (
-          renderRuns(messages, me?.id, chat.type === "group", byId, {
+          renderRuns(visible, me?.id, chat.type === "group", byId, {
             onOpenActions: setActionMsg,
             onOpenImage: setViewerUrl,
             onToggleReaction: (m, e) => void toggleReaction(m, e),
