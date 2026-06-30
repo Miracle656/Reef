@@ -1,19 +1,12 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
-import { Card } from "@/components/ui";
+import { useSocialAccount } from "@/lib/account";
+import { Landing } from "@/components/landing";
+import { MessagesApp } from "./components/messages-app";
 
 export default function MessagesPage() {
-  return (
-    <AppShell title="Messages">
-      <Card className="mt-1 p-8 text-center">
-        <p className="text-3xl">✉️</p>
-        <p className="mt-3 font-semibold">Coming soon</p>
-        <p className="mt-1 text-sm text-ink-soft">
-          Direct messages &amp; group chat — Phase 3, on the Sui Stack Messaging SDK (Seal-managed keys, Walrus
-          attachments).
-        </p>
-      </Card>
-    </AppShell>
-  );
+  const account = useSocialAccount();
+  // Signed-out visitors get the marketing landing (matches the rest of the app).
+  if (!account) return <Landing />;
+  return <MessagesApp />;
 }
