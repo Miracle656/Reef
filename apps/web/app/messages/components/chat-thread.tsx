@@ -109,17 +109,20 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
 
   const av = chatAvatar(chat, me?.id);
   const peer = peerOf(chat, me?.id);
-  const online = peer ? state.onlineUserIds.includes(peer.id) : false;
+  // No presence channel on-chain, so instead of a misleading "offline" a DM
+  // shows the peer's @handle; groups show the member count.
   const statusLine = typing.length
     ? chat.type === "group" ? `${typing.join(", ")} typing…` : "typing…"
-    : chat.type === "group" ? `${chat.participants.length} members` : online ? "online" : "offline";
+    : chat.type === "group" ? `${chat.participants.length} members` : peer?.username ? `@${peer.username}` : "";
 
   const replyName = replyTo ? (replyTo.senderId === me?.id ? "yourself" : replyTo.sender?.displayName || replyTo.sender?.username || "") : undefined;
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
-      {/* header */}
-      <div className="flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] px-3 py-2.5 backdrop-blur-xl">
+      {/* header — relative z-40 lifts it (and its dropdown) above the messages
+          scroll area; backdrop-blur creates a stacking context, so without a
+          positive z-index the later-sibling message bubbles paint over the menu. */}
+      <div className="relative z-40 flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] px-3 py-2.5 backdrop-blur-xl">
         <button onClick={onBack} aria-label="Back" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft hover:bg-surface-muted md:hidden">
           <BackIcon className="h-5 w-5" />
         </button>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildCreatePostTx, walrus } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
 import { PAIRS, type Pair } from "@/lib/deepbook";
+import { listMarkets, toUsd } from "@/lib/predict";
 import { toast } from "./toaster";
 import { Button, Card, Spinner } from "./ui";
 
@@ -33,12 +34,21 @@ export function ComposeForm({
   const [error, setError] = useState<string | null>(null);
   const [tokenize, setTokenize] = useState(false);
   const [showPairs, setShowPairs] = useState(false);
+  const [showMarkets, setShowMarkets] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const markets = useQuery({ queryKey: ["compose-markets"], queryFn: () => listMarkets(12), enabled: showMarkets });
 
   function shareTrade(p: Pair) {
     const ref = `${p.base}/${p.quote}`;
     setText((t) => (t.includes(ref) ? t : (t.trimEnd() + " " + ref).trimStart()));
     setShowPairs(false);
+  }
+
+  function shareMarket(oracleId: string) {
+    const ref = `/m/${oracleId}`;
+    setText((t) => (t.includes(ref) ? t : (t.trimEnd() + " " + ref).trimStart()));
+    setShowMarkets(false);
   }
   const run = useGasless();
   const qc = useQueryClient();
@@ -169,6 +179,38 @@ export function ComposeForm({
                     {p.base} <span className="text-ink-faint">/</span> {p.quote}
                   </button>
                 ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowMarkets((v) => !v)}
+              className="text-sm font-medium text-ink-soft hover:text-accent"
+            >
+              + Predict
+            </button>
+            {showMarkets ? (
+              <div className="absolute bottom-full left-0 z-30 mb-2 max-h-60 w-56 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+                {markets.isLoading ? (
+                  <div className="px-3 py-2 text-sm text-ink-faint">Loading markets…</div>
+                ) : markets.data && markets.data.length > 0 ? (
+                  markets.data.map((m) => (
+                    <button
+                      key={m.oracle_id}
+                      type="button"
+                      onClick={() => shareMarket(m.oracle_id)}
+                      className="block w-full rounded-xl px-3 py-2 text-left hover:bg-surface-muted"
+                    >
+                      <span className="block text-sm font-semibold">{m.underlying_asset} prediction</span>
+                      <span className="block font-mono text-[11px] text-ink-faint">
+                        exp {new Date(m.expiry).toLocaleDateString()} · min ${toUsd(m.min_strike).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-ink-faint">No active markets</div>
+                )}
               </div>
             ) : null}
           </div>

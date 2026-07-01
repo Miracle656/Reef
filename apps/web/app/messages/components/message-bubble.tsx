@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Avatar } from "@/components/ui";
+import { AnimatedEmoji, renderEmoji, isOnlyEmoji } from "@/lib/emoji";
 import { timeShort } from "../lib/format";
 import type { Message } from "../lib/types";
 import { PollView } from "./poll-view";
@@ -105,7 +106,7 @@ export function MessageBubble({
                 onClick={() => onToggleReaction(m, r.emoji)}
                 className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[12px] ${r.mine ? "border-accent bg-accent/15 text-accent-ink" : "border-[color:var(--glass-border)] bg-surface"}`}
               >
-                <span>{r.emoji}</span>
+                <AnimatedEmoji char={r.emoji} size={15} />
                 <span className="font-mono text-[10.5px]">{r.count}</span>
               </button>
             ))}
@@ -180,6 +181,8 @@ function Content({
     );
   }
   if (m.type === "location") return <span className="flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" /> {m.content || "Shared a location"}</span>;
+  // Emoji-only messages render big (jumbo), like Telegram.
+  if (isOnlyEmoji(m.content)) return <span className="flex flex-wrap gap-0.5 leading-none">{renderEmoji(m.content, 44)}</span>;
   return <span className="whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span>;
 }
 
@@ -233,7 +236,7 @@ function highlightMentions(text: string) {
     p.startsWith("@") ? (
       <span key={i} className="font-semibold text-accent-ink underline decoration-accent/40">{p}</span>
     ) : (
-      <span key={i}>{p}</span>
+      <span key={i}>{renderEmoji(p)}</span>
     ),
   );
 }

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { Message } from "../lib/types";
 import { useMessaging } from "../lib/provider";
 import { EditIcon, ForwardIcon, ReplyIcon, TrashIcon } from "./icons";
+import { AnimatedEmoji } from "@/lib/emoji";
 
 const QUICK = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -56,9 +57,9 @@ export function MessageActions({
             <button
               key={e}
               onClick={() => act(() => void toggleReaction(message, e))}
-              className="lift grid h-10 w-10 place-items-center rounded-full text-[20px] hover:bg-surface"
+              className="lift grid h-10 w-10 place-items-center rounded-full hover:bg-surface"
             >
-              {e}
+              <AnimatedEmoji char={e} size={24} />
             </button>
           ))}
         </div>
