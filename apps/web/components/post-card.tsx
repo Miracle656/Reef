@@ -51,8 +51,15 @@ export function PostCard({ post }: { post: Post }) {
             </Link>
           ) : null}
 
-          {post.media.length > 0 ? (
-            <div className={`mt-3 grid gap-2 overflow-hidden rounded-[18px] ${post.media.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+          {post.media.length === 1 ? (
+            // Single image: show it whole (no crop), just capped in height.
+            <div className="mt-3 overflow-hidden rounded-[18px] border border-[color:var(--glass-border)] bg-surface-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={walrus.urlFor(umbraConfig, post.media[0]!)} alt="" className="mx-auto max-h-[32rem] w-full object-contain" />
+            </div>
+          ) : post.media.length > 1 ? (
+            // Multiple images: uniform grid tiles, cover-cropped for a clean mosaic.
+            <div className="mt-3 grid grid-cols-2 gap-2 overflow-hidden rounded-[18px]">
               {post.media.map((blob) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img key={blob} src={walrus.urlFor(umbraConfig, blob)} alt="" className="max-h-80 w-full object-cover" />
