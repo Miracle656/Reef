@@ -45,7 +45,7 @@ export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => vo
     if (!peer) return;
     const reason = window.prompt(`Report @${peer.username}? Add a reason (optional):`);
     if (reason === null) return;
-    void reportUser(peer.id, reason, chat.id).then(() => toast("Report submitted ✓"));
+    void reportUser(peer.id, reason, chat.id).then(() => toast("Report submitted"));
   };
 
   const saveMeta = async () => {
@@ -99,7 +99,7 @@ export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => vo
           <div className="my-2 space-y-1 rounded-2xl border border-[color:var(--glass-border)] p-1.5">
             <Toggle label="Mute notifications" checked={!!chat.muted} onChange={(v) => void setChatSettings(chat.id, { muted: v })} />
             <Toggle label="Archive chat" checked={!!chat.archived} onChange={(v) => void setChatSettings(chat.id, { archived: v })} />
-            <Toggle label="🔒 Keep in Vault" checked={!!chat.vaulted} onChange={(v) => void setChatVaulted(chat.id, v)} />
+            <Toggle label="Keep in Vault" checked={!!chat.vaulted} onChange={(v) => void setChatVaulted(chat.id, v)} />
             {isGroup && iAmAdmin ? (
               <>
                 <Toggle label="Allow asides (private msgs)" checked={!!chat.allowAsides} onChange={(v) => void updateGroup(chat.id, { allowAsides: v })} />

@@ -23,7 +23,7 @@ export function ForwardModal({ message, onClose }: { message: Message; onClose: 
   const forward = async (chatId: string) => {
     await forwardMessage(chatId, message);
     setSent((s) => new Set(s).add(chatId));
-    toast("Forwarded ✓");
+    toast("Forwarded");
   };
 
   return createPortal(

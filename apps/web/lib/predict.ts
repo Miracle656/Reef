@@ -2,17 +2,24 @@
 // Markets are on-chain BTC oracles: binary up/down positions settling above/
 // below a strike at expiry. Prices/strikes are 1e9-scaled; dUSDC qty is 1e6.
 
+import { INDEXER_URL } from "./config";
+
 export const PREDICT_SERVER = "https://predict-server.testnet.mystenlabs.com";
 export const PREDICT_OBJECT_ID = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a";
 
 // On-chain Predict deployment (Mysten testnet) — used by the mint tx builders.
 export const PREDICT_PKG = "0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138";
 export const DUSDC_TYPE = "0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC";
+export const PLP_TYPE = `${PREDICT_PKG}::plp::PLP`;
 export const CLOCK_ID = "0x6";
 export const PREDICT_MANAGER_TYPE = `${PREDICT_PKG}::predict_manager::PredictManager`;
 
-const PRICE_SCALE = 1e9;
-const QTY_SCALE = 1e6;
+export const PRICE_SCALE = 1e9;
+export const QTY_SCALE = 1e6;
+/** dUSDC base units per $1 max-payout contract (6 decimals). */
+export const usdToQty = (usd: number): bigint => BigInt(Math.round(usd * QTY_SCALE));
+/** 1e9-scaled strike from a USD price. */
+export const usdToStrike = (usd: number): number => Math.round(usd * PRICE_SCALE);
 
 /** raw 1e9-scaled price -> USD */
 export const toUsd = (raw: number): number => raw / PRICE_SCALE;
@@ -142,4 +149,109 @@ export function extractManagerIdFromChanges(changes: ObjChange[] | null | undefi
     if (ch.type === "created" && ch.objectType === PREDICT_MANAGER_TYPE && ch.objectId) return ch.objectId;
   }
   return null;
+}
+
+// ── Manager portfolio (server-indexed) ───────────────────────────────────────
+
+export interface ManagerSummary {
+  manager_id: string;
+  owner: string;
+  trading_balance: number; // raw 1e6
+  open_exposure: number;
+  redeemable_value: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  account_value: number; // raw 1e6
+  open_positions: number;
+  awaiting_settlement_positions: number;
+}
+
+export type PositionStatus = "open" | "won" | "lost" | "awaiting_settlement";
+
+export interface Position {
+  oracle_id: string;
+  underlying_asset: string;
+  expiry: number;
+  strike: number; // raw 1e9
+  is_up: boolean;
+  open_quantity: number; // raw 1e6
+  total_cost: number; // raw 1e6
+  realized_pnl: number;
+  unrealized_pnl: number;
+  average_entry_price: number; // raw 1e9 (0..1e9 = ¢)
+  mark_price: number; // raw 1e9
+  mark_value: number; // raw 1e6
+  status: PositionStatus;
+  last_activity_at: number;
+}
+
+/**
+ * An open range (band) position. Range positions are NOT in the server's
+ * /positions/summary (binary-only) — they live on-chain in the manager's
+ * `range_positions: Table<RangeKey, u64>`, read via getManagerRangePositions.
+ * Strikes are raw 1e9; openQuantity is raw 1e6.
+ */
+export interface RangePosition {
+  oracleId: string;
+  expiry: number;
+  lowerStrike: number; // raw 1e9
+  higherStrike: number; // raw 1e9
+  openQuantity: number; // raw 1e6
+}
+
+/** Account-level rollup for a manager. 404 before the manager is indexed. */
+export const getManagerSummary = (managerId: string) => get<ManagerSummary>(`/managers/${managerId}/summary`);
+
+/** Binary positions for a manager (range positions are on-chain only). */
+export const getManagerPositions = (managerId: string) => get<Position[]>(`/managers/${managerId}/positions/summary`);
+
+/** raw 1e6 dUSDC base units -> USD */
+export const qtyToUsd = (raw: number): number => raw / QTY_SCALE;
+
+export interface DripResult {
+  funded: boolean;
+  skipped?: string;
+  digest?: string;
+  amountUsd?: number;
+}
+
+/**
+ * Ask the indexer's dUSDC faucet to drip testnet collateral to `address`.
+ * No-ops server-side if the address already holds enough (idempotent). Throws
+ * on faucet-disabled / drip failure.
+ */
+export async function requestDusdc(address: string): Promise<DripResult> {
+  const res = await fetch(`${INDEXER_URL}/faucet/dusdc`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(e.error ?? `faucet ${res.status}`);
+  }
+  return (await res.json()) as DripResult;
+}
+
+/**
+ * Decode a `get_trade_amounts` devInspect result into per-trade (cost, payout)
+ * in raw dUSDC base units. The PTB is [ key::new, get_trade_amounts ], so the
+ * two u64 return values live at results[1]. Returns null on abort / bad shape
+ * (an abort means the strike is out of the quotable band).
+ */
+export async function decodeTradeAmounts(
+  results: { returnValues?: [number[], string][] }[] | null | undefined,
+): Promise<{ cost: bigint; payout: bigint } | null> {
+  const { bcs } = await import("@mysten/sui/bcs");
+  const ret = results?.[1]?.returnValues;
+  const costBytes = ret?.[0]?.[0];
+  const payoutBytes = ret?.[1]?.[0];
+  if (!costBytes || !payoutBytes) return null;
+  try {
+    const cost = bcs.u64().parse(new Uint8Array(costBytes));
+    const payout = bcs.u64().parse(new Uint8Array(payoutBytes));
+    return { cost: BigInt(cost), payout: BigInt(payout) };
+  } catch {
+    return null;
+  }
 }

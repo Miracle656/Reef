@@ -15,7 +15,7 @@ import { SearchPanel } from "./search-panel";
 import { SavedModal } from "./saved-modal";
 import { ChosenGame } from "./chosen-game";
 import { Composer } from "./composer";
-import { BackIcon, MoreIcon, SearchIcon } from "./icons";
+import { BackIcon, MessageIcon, MoreIcon, PinIcon, SearchIcon, TargetIcon, WaveIcon } from "./icons";
 
 const DISAPPEAR_OPTIONS: { label: string; seconds: number }[] = [
   { label: "Off", seconds: 0 },
@@ -100,9 +100,9 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
   if (!chat) {
     return (
       <div className="hidden h-full flex-1 flex-col items-center justify-center gap-3 text-center md:flex">
-        <span className="grid h-16 w-16 place-items-center rounded-full bg-surface-muted text-2xl">🐚</span>
+        <span className="grid h-16 w-16 place-items-center rounded-full bg-surface-muted text-ink-soft"><MessageIcon className="h-7 w-7" /></span>
         <p className="text-[15px] font-semibold">Your messages</p>
-        <p className="max-w-xs text-sm text-ink-soft">Pick a conversation, or start a new one. Going on-chain soon.</p>
+        <p className="max-w-xs text-sm text-ink-soft">Pick a conversation, or start a new one.</p>
       </div>
     );
   }
@@ -142,7 +142,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
           const last = pinned[pinned.length - 1]!;
           return (
             <button onClick={() => jumpTo(last.id)} className="flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-accent/5 px-4 py-2 text-left">
-              <span className="text-[13px]">📌</span>
+              <PinIcon className="h-3.5 w-3.5 text-accent-ink" />
               <span className="min-w-0 flex-1">
                 <span className="block text-[11px] font-semibold text-accent-ink">Pinned · {pinned.length}</span>
                 <span className="block truncate text-[12.5px] text-ink-soft">{last.content || "media"}</span>
@@ -155,7 +155,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
       {/* messages */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visible.length === 0 ? (
-          <div className="grid h-full place-items-center"><p className="text-sm text-ink-faint">Say hi 👋</p></div>
+          <div className="grid h-full place-items-center"><p className="flex items-center gap-1.5 text-sm text-ink-faint"><WaveIcon className="h-4 w-4" /> Say hi</p></div>
         ) : (
           renderRuns(visible, me?.id, chat.type === "group", byId, {
             onOpenActions: setActionMsg,
@@ -221,7 +221,7 @@ function HeaderMenu({ chat, onInfo, onSearch, onSaved, onChosen }: { chat: Chat;
             <button className={item} onClick={() => { onInfo(); setOpen(false); }}>{chat.type === "group" ? "Group info" : "Contact info"}</button>
             <button className={item} onClick={() => { onSaved(); setOpen(false); }}>Saved messages</button>
             {chat.type === "group" && chat.allowChosen ? (
-              <button className={item} onClick={() => { onChosen(); setOpen(false); }}>🎯 Play Chosen</button>
+              <button className={`${item} flex items-center gap-2`} onClick={() => { onChosen(); setOpen(false); }}><TargetIcon className="h-4 w-4" /> Play Chosen</button>
             ) : null}
             <button className={`${item} flex items-center justify-between`} onClick={() => setDisOpen((d) => !d)}>
               <span>Disappearing</span>
@@ -299,7 +299,7 @@ function resolveReply(m: Message, byId: Map<string, Message>, meId: string | und
   const t = byId.get(m.replyToId);
   if (!t) return { name: "", text: "Original message" };
   const name = t.senderId === meId ? "You" : t.sender?.displayName || t.sender?.username || "";
-  const text = t.isDeleted ? "Message deleted" : t.content || (t.type === "image" ? "📷 Photo" : t.type === "file" ? "📎 File" : "media");
+  const text = t.isDeleted ? "Message deleted" : t.content || (t.type === "image" ? "Photo" : t.type === "file" ? "File" : "media");
   return { name, text };
 }
 

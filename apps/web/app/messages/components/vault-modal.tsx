@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Spinner } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
-import { XIcon } from "./icons";
+import { LockIcon, XIcon } from "./icons";
 
 /**
  * The Vault: passcode-locked chats. This modal handles first-time setup, unlock,
@@ -49,7 +49,7 @@ export function VaultModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-[110] flex items-start justify-center bg-ink/40 p-4 pt-24 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-sm rounded-3xl border border-[color:var(--glass-border)] bg-surface p-6 shadow-[var(--shadow-glass-lg)]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-bold">🔒 The Vault</h2>
+          <h2 className="flex items-center gap-2 text-lg font-bold"><LockIcon className="h-5 w-5" /> The Vault</h2>
           <button onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted"><XIcon /></button>
         </div>
 

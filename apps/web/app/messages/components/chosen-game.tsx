@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
 import type { Chat } from "../lib/types";
-import { XIcon } from "./icons";
+import { TargetIcon, XIcon } from "./icons";
 
 const CATEGORIES = ["mild", "spicy"];
 const MODES: { key: "dare" | "truth" | "both"; label: string }[] = [
@@ -34,7 +34,7 @@ export function ChosenGame({ chat, onClose }: { chat: Chat; onClose: () => void 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex flex-col bg-ink text-on-ink">
       <div className="flex items-center justify-between p-4">
-        <span className="flex items-center gap-2 font-bold">🎯 Chosen {game ? `· round ${game.round}` : ""}</span>
+        <span className="flex items-center gap-2 font-bold"><TargetIcon className="h-[18px] w-[18px]" /> Chosen {game ? `· round ${game.round}` : ""}</span>
         <button onClick={() => { if (game && iAmInitiator) void chosen.end(chat.id); onClose(); }} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-on-ink/80 hover:bg-white/10"><XIcon className="h-5 w-5" /></button>
       </div>
 

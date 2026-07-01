@@ -7,6 +7,8 @@ import { Hono } from "hono";
 import {
   createEnokiClient,
   executeSponsoredTransaction,
+  messagingAllowedTargets,
+  predictAllowedTargets,
   sponsorTransaction,
   umbraAllowedTargets,
 } from "@umbra/core/server";
@@ -16,7 +18,12 @@ import type { IndexerEnv } from "./config";
 export function sponsorRoutes(env: IndexerEnv): Hono {
   const app = new Hono();
   const enoki = env.enokiApiKey ? createEnokiClient(env.enokiApiKey) : null;
-  const allowed = umbraAllowedTargets(env.umbra.packageId);
+  // ReeF's own package + DeepBook Predict + Sui Stack Messaging group targets.
+  const allowed = [
+    ...umbraAllowedTargets(env.umbra.packageId),
+    ...predictAllowedTargets(),
+    ...messagingAllowedTargets(),
+  ];
 
   app.post("/sponsor", async (c) => {
     if (!enoki) return c.json({ error: "sponsor not configured (set ENOKI_PRIVATE_API_KEY)" }, 503);

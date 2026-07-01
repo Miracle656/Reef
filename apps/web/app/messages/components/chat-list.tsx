@@ -7,7 +7,7 @@ import { chatAvatar, chatName, previewOf } from "../lib/display";
 import { timeAgo } from "../lib/format";
 import type { Chat } from "../lib/types";
 import { StoriesBar } from "./stories";
-import { PlusIcon, SearchIcon, UsersIcon } from "./icons";
+import { BellOffIcon, LockIcon, PlusIcon, SearchIcon, UsersIcon } from "./icons";
 
 export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; onNewGroup: () => void; onVault: () => void }) {
   const { state, me, activeChat, openChat } = useMessaging();
@@ -32,7 +32,7 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
           title="The Vault — passcode-locked chats"
           className="grid h-9 w-9 place-items-center rounded-full text-ink-soft transition-colors hover:bg-surface-muted"
         >
-          🔒
+          <LockIcon className="h-[18px] w-[18px]" />
         </button>
         <button
           type="button"
@@ -103,7 +103,7 @@ function ChatRow({ chat, meId, active, onClick }: { chat: Chat; meId?: string; a
     >
       <span className="relative shrink-0">
         <Avatar name={av.name} src={av.src} size={48} />
-        {chat.muted ? <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-surface text-[9px]">🔕</span> : null}
+        {chat.muted ? <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-surface text-ink-soft"><BellOffIcon className="h-2.5 w-2.5" /></span> : null}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">

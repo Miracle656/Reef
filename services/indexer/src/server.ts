@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { IndexerEnv } from "./config";
 import { deepbookRoutes } from "./deepbook";
+import { faucetRoutes } from "./faucet";
 import { imgRoutes } from "./img";
 import { sponsorRoutes } from "./sponsor";
 import { suinsRoutes } from "./suins";
@@ -26,6 +27,7 @@ export function createServer(env: IndexerEnv): Hono {
   app.route("/", deepbookRoutes(env));
   app.route("/", sponsorRoutes(env));
   app.route("/", suinsRoutes(env));
+  app.route("/", faucetRoutes(env));
 
   return app;
 }

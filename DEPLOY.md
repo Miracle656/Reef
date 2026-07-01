@@ -25,6 +25,8 @@ It's a pnpm-workspace package, so build/run from the **repo root**.
 | `UMBRA_REGISTRY_ID` | ✅ | same file |
 | `ENOKI_PRIVATE_API_KEY` | for gasless | **server-only** Enoki private key (sponsor). Omit → sponsor disabled |
 | `SUINS_PARENT_NAME` | optional | e.g. `umbra.sui`; omit → subname minting disabled |
+| `DUSDC_FAUCET_SECRET_KEY` | for Predict | **server-only** bech32 `suiprivkey…` of a key funded with **SUI (gas) + dUSDC**. Drips dUSDC to new zkLogin users so Predict mints don't abort. Omit → faucet returns 503 |
+| `DUSDC_DRIP_USD` | optional | dUSDC dripped per new address (default `25`) |
 | `INDEXER_PORT` | optional | defaults to `3001` (most hosts inject `PORT` — set `INDEXER_PORT=$PORT` if needed) |
 | `POLL_INTERVAL_MS` | optional | defaults to `3000` |
 

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Avatar, Button } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
 import type { StatusGroup } from "../lib/types";
-import { PlusIcon, XIcon } from "./icons";
+import { PlusIcon, TrashIcon, XIcon } from "./icons";
 
 const BGS = ["#0a84ff", "#18c2c2", "#ff8a5b", "#15151a", "#7c3aed", "#e2554a"];
 
@@ -97,7 +97,7 @@ function StoryViewer({ group, onClose }: { group: StatusGroup; onClose: () => vo
           <span className="text-[14px] font-semibold text-white">{isMine ? "You" : group.user.displayName || group.user.username}</span>
           <span className="flex-1" />
           {isMine ? (
-            <button onClick={() => { void deleteStatus(cur.id); onClose(); }} aria-label="Delete" className="grid h-9 w-9 place-items-center rounded-full text-white/80 hover:bg-white/10">🗑</button>
+            <button onClick={() => { void deleteStatus(cur.id); onClose(); }} aria-label="Delete" className="grid h-9 w-9 place-items-center rounded-full text-white/80 hover:bg-white/10"><TrashIcon className="h-[18px] w-[18px]" /></button>
           ) : null}
           <button onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-white/80 hover:bg-white/10"><XIcon className="h-5 w-5" /></button>
         </div>

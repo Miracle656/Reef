@@ -34,17 +34,17 @@ export function previewOf(chat: Chat, meId: string | undefined): string {
 function bodyPreview(m: Message): string {
   switch (m.type) {
     case "image":
-      return "📷 Photo";
+      return "Photo";
     case "file":
-      return `📎 ${m.fileName ?? "File"}`;
+      return m.fileName ?? "File";
     case "voice":
-      return "🎤 Voice message";
+      return "Voice message";
     case "location":
-      return "📍 Location";
+      return "Location";
     case "poll":
-      return `📊 ${m.poll?.question ?? "Poll"}`;
+      return m.poll?.question ?? "Poll";
     default:
-      if (m.isWhisper) return "👁 Whisper";
+      if (m.isWhisper) return "Whisper";
       return m.content || "";
   }
 }

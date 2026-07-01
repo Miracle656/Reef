@@ -42,7 +42,7 @@ export function SavedModal({ onClose }: { onClose: () => void }) {
                     <span className="truncate text-[13.5px] font-semibold">{m.sender?.displayName || m.sender?.username || "You"}</span>
                     <span className="shrink-0 font-mono text-[11px] text-ink-faint">{timeShort(m.createdAt)}</span>
                   </div>
-                  <p className="truncate text-[13.5px] text-ink-soft">{m.content || (m.type === "image" ? "📷 Photo" : m.type === "file" ? "📎 File" : "media")}</p>
+                  <p className="truncate text-[13.5px] text-ink-soft">{m.content || (m.type === "image" ? "Photo" : m.type === "file" ? "File" : "media")}</p>
                 </div>
                 <button onClick={() => void remove(m.id)} aria-label="Unsave" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-faint hover:bg-surface"><XIcon className="h-4 w-4" /></button>
               </div>

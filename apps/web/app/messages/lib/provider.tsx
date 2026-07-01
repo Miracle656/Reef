@@ -20,9 +20,15 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
+import { useGasless } from "@/lib/gasless";
+import { getDelegateKeypair } from "./messaging-identity";
+import { createReefMessagingClient } from "./messaging-client";
+import { messagingEnv, isMessagingConfigured } from "./sui-config";
+import { setMessagingRuntime } from "./runtime";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
 
 // ── state ──────────────────────────────────────────────────────────────────────
@@ -330,7 +336,35 @@ const Ctx = createContext<MessagingContext | null>(null);
 
 export function MessagingProvider({ children }: { children: ReactNode }) {
   const me = useMe();
+  const account = useSocialAccount();
+  const sponsorExecute = useGasless();
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  // Build the on-chain messaging runtime and inject it into the SuiMessaging
+  // adapter. Two identities work together:
+  //  - the user's zkLogin address is the on-chain group admin (its txs are
+  //    Enoki-sponsored via `sponsorExecute`), which can grant the delegate;
+  //  - a per-device Ed25519 *delegate* keypair signs all relayer/message ops
+  //    (the relayer needs a real keypair signature — zkLogin can't auth).
+  // No-op on the mock adapter.
+  useEffect(() => {
+    if (!me || !account || !isMessagingConfigured()) {
+      setMessagingRuntime(null);
+      return;
+    }
+    const delegate = getDelegateKeypair(account.address);
+    const client = createReefMessagingClient(delegate);
+    const graphqlClient = new SuiGraphQLClient({ url: messagingEnv.graphqlUrl, network: messagingEnv.network });
+    setMessagingRuntime({
+      client,
+      signer: delegate,
+      delegateAddress: delegate.toSuiAddress(),
+      graphqlClient,
+      me,
+      sponsorExecute,
+    });
+    return () => setMessagingRuntime(null);
+  }, [me, account, sponsorExecute]);
   const activeRef = useRef<string | null>(null);
   activeRef.current = state.activeChatId;
   const meRef = useRef<Me | null>(null);
@@ -346,6 +380,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     if (!me) return;
     messaging.setCurrentUser(me);
     void refreshChats();
+    // Re-discover periodically so chats someone else just started with us
+    // surface without a manual refresh (GraphQL membership indexing lags).
+    const id = setInterval(() => void refreshChats(), 15000);
+    return () => clearInterval(id);
   }, [me, refreshChats]);
 
   // live events

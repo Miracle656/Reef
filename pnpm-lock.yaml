@@ -123,9 +123,18 @@ importers:
       '@mysten/enoki':
         specifier: ^1.1.1
         version: 1.1.1(@mysten/sui@2.19.0(typescript@5.9.3))(@types/react@19.2.17)(react@19.1.0)
+      '@mysten/seal':
+        specifier: 1.2.1
+        version: 1.2.1(@mysten/sui@2.19.0(typescript@5.9.3))
       '@mysten/sui':
         specifier: ^2.19.0
         version: 2.19.0(typescript@5.9.3)
+      '@mysten/sui-groups':
+        specifier: 0.0.1
+        version: 0.0.1(@mysten/bcs@2.1.0)(@mysten/sui@2.19.0(typescript@5.9.3))
+      '@mysten/sui-stack-messaging':
+        specifier: 0.0.2
+        version: 0.0.2(@mysten/bcs@2.1.0)(@mysten/seal@1.2.1(@mysten/sui@2.19.0(typescript@5.9.3)))(@mysten/sui-groups@0.0.1(@mysten/bcs@2.1.0)(@mysten/sui@2.19.0(typescript@5.9.3)))(@mysten/sui@2.19.0(typescript@5.9.3))
       '@tanstack/react-query':
         specifier: ^5.90.5
         version: 5.101.0(react@19.1.0)
@@ -1505,10 +1514,29 @@ packages:
       react:
         optional: true
 
+  '@mysten/seal@1.2.1':
+    resolution: {integrity: sha512-qHPMcLLj4J9BHy3uDIC+7c1J4V07lRHr89IGuS9b3OKPqgJwcd9bqL8L1rCRs0cpdzh5FxHwY9D2TtCEig7SnA==}
+    peerDependencies:
+      '@mysten/sui': ^2.19.0
+
   '@mysten/slush-wallet@1.1.1':
     resolution: {integrity: sha512-CUKwSPVtgGtDOtsjQ1Sy033gGES5pkVy0kGsBkE8vPCesgHT/PgAGSivAO54vLPJ11emQh6T+wHyNjrbzkklUQ==}
     peerDependencies:
       '@mysten/sui': ^2.19.0
+
+  '@mysten/sui-groups@0.0.1':
+    resolution: {integrity: sha512-6yck5UQjAtApWUXvgPc0WaMNatTTUxINBU92XrgawYTWZry/PAxGLvU1XjFFW+DAKbQWpkOMqu8yiuwcBybXfA==}
+    peerDependencies:
+      '@mysten/bcs': ^2.0.3
+      '@mysten/sui': ^2.13.0
+
+  '@mysten/sui-stack-messaging@0.0.2':
+    resolution: {integrity: sha512-ySixVl4p0kXABDEk8EFVGQT+mQzZhamTBw1Rv8/ckwtqYFRZT1Xklf5w0m6GqyqW2LBzhp6prTiLzpt7CUqfTg==}
+    peerDependencies:
+      '@mysten/bcs': ^2.0.3
+      '@mysten/seal': ^1.1.1
+      '@mysten/sui': ^2.13.2
+      '@mysten/sui-groups': ^0.0.1
 
   '@mysten/sui@2.19.0':
     resolution: {integrity: sha512-dXhYK3pUiaybEB6T9nru+cPrFa61NMSjEknOCoAEV5WCC589iY6bP7EM+H84DBMZttB1LhD3gpYnPntQ4Vvcgg==}
@@ -6788,6 +6816,13 @@ snapshots:
       '@types/react': 19.2.17
       react: 19.2.7
 
+  '@mysten/seal@1.2.1(@mysten/sui@2.19.0(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.0
+      '@mysten/sui': 2.19.0(typescript@5.9.3)
+      '@noble/curves': 2.2.0
+      '@noble/hashes': 2.2.0
+
   '@mysten/slush-wallet@1.1.1(@mysten/sui@2.19.0(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@mysten/sui': 2.19.0(typescript@5.9.3)
@@ -6797,6 +6832,18 @@ snapshots:
       valibot: 1.4.1(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
+
+  '@mysten/sui-groups@0.0.1(@mysten/bcs@2.1.0)(@mysten/sui@2.19.0(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.0
+      '@mysten/sui': 2.19.0(typescript@5.9.3)
+
+  '@mysten/sui-stack-messaging@0.0.2(@mysten/bcs@2.1.0)(@mysten/seal@1.2.1(@mysten/sui@2.19.0(typescript@5.9.3)))(@mysten/sui-groups@0.0.1(@mysten/bcs@2.1.0)(@mysten/sui@2.19.0(typescript@5.9.3)))(@mysten/sui@2.19.0(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.0
+      '@mysten/seal': 1.2.1(@mysten/sui@2.19.0(typescript@5.9.3))
+      '@mysten/sui': 2.19.0(typescript@5.9.3)
+      '@mysten/sui-groups': 0.0.1(@mysten/bcs@2.1.0)(@mysten/sui@2.19.0(typescript@5.9.3))
 
   '@mysten/sui@2.19.0(typescript@5.9.3)':
     dependencies:

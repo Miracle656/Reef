@@ -53,8 +53,7 @@ function useNav() {
   const items: Item[] = [
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
-    { href: "/trade", label: "Trade", active: pathname === "/trade", icon: <MarketsIcon /> },
-    { href: "/trade", label: "Predict", active: pathname.startsWith("/m/"), icon: <CrosshairIcon /> },
+    { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
     { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon /> },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
     { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
@@ -131,7 +130,7 @@ export function MobileNav() {
   const { account, profileHref, items } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
   if (!account) return null;
-  const pill = [items[0], items[1], items[4], items[5]].filter(Boolean) as Item[];
+  const pill = [items[0], items[1], items[3], items[4]].filter(Boolean) as Item[];
 
   return (
     <>

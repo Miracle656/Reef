@@ -5,7 +5,7 @@ import { Avatar } from "@/components/ui";
 import { timeShort } from "../lib/format";
 import type { Message } from "../lib/types";
 import { PollView } from "./poll-view";
-import { CheckIcon, CheckCheckIcon, MoreIcon, ReplyIcon } from "./icons";
+import { CheckIcon, CheckCheckIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, MoreIcon, PaperclipIcon, ReplyIcon } from "./icons";
 
 export interface ReplyPreview {
   name: string;
@@ -62,7 +62,7 @@ export function MessageBubble({
           } ${m.failed ? "opacity-70 ring-1 ring-danger" : ""}`}
         >
           {m.audienceIds?.length && !redacted && !m.isDeleted ? (
-            <span className={`mb-0.5 flex items-center gap-1 text-[11px] italic ${mine ? "text-on-accent/70" : "text-ink-faint"}`}>🔒 Aside · {m.audienceIds.length} can see</span>
+            <span className={`mb-0.5 flex items-center gap-1 text-[11px] italic ${mine ? "text-on-accent/70" : "text-ink-faint"}`}><LockIcon className="h-3 w-3" /> Aside · {m.audienceIds.length} can see</span>
           ) : null}
 
           {m.isForwarded && !m.isDeleted ? (
@@ -84,7 +84,7 @@ export function MessageBubble({
           {m.isDeleted ? (
             <span className="italic opacity-70">Message deleted</span>
           ) : redacted ? (
-            <span className="italic opacity-70">🔒 This message is an aside you can’t read</span>
+            <span className="flex items-center gap-1 italic opacity-70"><LockIcon className="h-3.5 w-3.5" /> This message is an aside you can’t read</span>
           ) : (
             <Content message={m} mine={mine} onOpenImage={onOpenImage} onVotePoll={onVotePoll} onViewOnce={onViewOnce} />
           )}
@@ -148,17 +148,17 @@ function Content({
   if (m.isWhisper) return <Whisper message={m} mine={mine} />;
   if (m.viewOnce && (m.type === "image" || m.fileUrl)) {
     return m.viewOnceViewed ? (
-      <span className="flex items-center gap-1.5 italic opacity-70">👁 Opened</span>
+      <span className="flex items-center gap-1.5 italic opacity-70"><EyeIcon className="h-4 w-4" /> Opened</span>
     ) : (
       <button onClick={() => onViewOnce(m)} className="flex items-center gap-2 font-medium underline">
-        📷 View once · tap to open
+        <EyeIcon className="h-4 w-4" /> View once · tap to open
       </button>
     );
   }
   if (m.type === "voice" && m.fileUrl) {
     return (
       <span className="flex items-center gap-2">
-        <span>🎤</span>
+        <MicIcon className="h-4 w-4" />
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <audio controls src={m.fileUrl} className="h-9 max-w-[220px]" />
       </span>
@@ -176,10 +176,10 @@ function Content({
   }
   if (m.type === "file" && m.fileUrl) {
     return (
-      <a href={m.fileUrl} download={m.fileName} className="flex items-center gap-2 underline">📎 <span className="truncate">{m.fileName ?? "File"}</span></a>
+      <a href={m.fileUrl} download={m.fileName} className="flex items-center gap-2 underline"><PaperclipIcon className="h-4 w-4 shrink-0" /> <span className="truncate">{m.fileName ?? "File"}</span></a>
     );
   }
-  if (m.type === "location") return <span className="flex items-center gap-1.5">📍 {m.content || "Shared a location"}</span>;
+  if (m.type === "location") return <span className="flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" /> {m.content || "Shared a location"}</span>;
   return <span className="whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span>;
 }
 
@@ -189,7 +189,7 @@ function Whisper({ message: m, mine }: { message: Message; mine: boolean }) {
   return (
     <button onClick={() => setRevealed(true)} className={`flex items-center gap-2 italic ${mine ? "text-on-accent/80" : "text-ink-soft"}`}>
       <span className="select-none blur-[5px]">{m.content || "whisper whisper whisper"}</span>
-      <span className="not-italic">👁</span>
+      <EyeIcon className="h-4 w-4" />
     </button>
   );
 }
