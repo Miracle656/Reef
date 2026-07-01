@@ -227,6 +227,88 @@ export const appRouter = router({
       return { likes, reposts, bookmarks, liked, reposted, bookmarked, replyCount };
     }),
 
+  // --- notifications: who followed / replied to / liked the user, newest first ---
+  notifications: publicProcedure
+    .input(z.object({ address: SuiAddress, limit: z.number().int().min(1).max(50).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const me = input.address;
+      // My posts — replies + reactions target these.
+      const myPosts = await ctx.prisma.post.findMany({
+        where: { author: me, deleted: false },
+        select: { id: true, text: true },
+      });
+      const myPostIds = myPosts.map((p) => p.id);
+      const postText = new Map(myPosts.map((p) => [p.id, p.text]));
+
+      const [follows, replies, reactions] = await Promise.all([
+        ctx.prisma.follow.findMany({
+          where: { followee: me, follower: { not: me } },
+          orderBy: { createdAtMs: "desc" },
+          take: input.limit,
+        }),
+        myPostIds.length
+          ? ctx.prisma.post.findMany({
+              where: { replyTo: { in: myPostIds }, deleted: false, author: { not: me } },
+              orderBy: { createdAtMs: "desc" },
+              take: input.limit,
+            })
+          : Promise.resolve([]),
+        myPostIds.length
+          ? ctx.prisma.reaction.findMany({
+              where: { postId: { in: myPostIds }, value: 1, reactor: { not: me }, kind: { in: ["like", "repost"] } },
+              orderBy: { timestamp: "desc" },
+              take: input.limit,
+            })
+          : Promise.resolve([]),
+      ]);
+
+      type NotifItem = {
+        type: "follow" | "reply" | "like" | "repost";
+        actor: string;
+        postId?: string;
+        preview?: string;
+        createdAtMs: number;
+      };
+      const items: NotifItem[] = [
+        ...follows.map((f) => ({ type: "follow" as const, actor: f.follower, createdAtMs: Number(f.createdAtMs) })),
+        ...replies.map((r) => ({
+          type: "reply" as const,
+          actor: r.author,
+          postId: r.id,
+          preview: r.text.slice(0, 140),
+          createdAtMs: Number(r.createdAtMs),
+        })),
+        ...reactions.map((r) => ({
+          type: (r.kind === "repost" ? "repost" : "like") as "repost" | "like",
+          actor: r.reactor,
+          postId: r.postId,
+          preview: postText.get(r.postId)?.slice(0, 140),
+          createdAtMs: Number(r.timestamp),
+        })),
+      ]
+        .sort((a, b) => b.createdAtMs - a.createdAtMs)
+        .slice(0, input.limit);
+
+      // Resolve actor handles/avatars in one query.
+      const actorAddrs = [...new Set(items.map((i) => i.actor))];
+      const profiles = actorAddrs.length
+        ? await ctx.prisma.profile.findMany({ where: { owner: { in: actorAddrs } } })
+        : [];
+      const byOwner = new Map(profiles.map((p) => [p.owner, p]));
+      return items.map(({ actor, ...rest }) => {
+        const p = byOwner.get(actor);
+        return {
+          ...rest,
+          actor: {
+            address: actor,
+            handle: p?.handle ?? null,
+            displayName: p?.displayName ?? null,
+            avatarBlobId: p?.avatarBlobId ?? null,
+          },
+        };
+      });
+    }),
+
   // --- creator coins (tokenized content) ---
   creatorCoins: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
     const rows = await ctx.prisma.creatorCoin.findMany({ where: { owner: input.owner }, orderBy: { createdAtMs: "desc" } });

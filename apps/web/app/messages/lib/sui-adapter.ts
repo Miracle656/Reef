@@ -370,6 +370,34 @@ function chatFromStored(g: StoredGroup, me: Me): Chat {
   };
 }
 
+/** The non-me participant of a DM (its counterparty), lowercased. */
+function directPeerId(c: Chat, meId: string): string | undefined {
+  return c.participants.find((p) => p.id.toLowerCase() !== meId.toLowerCase())?.id.toLowerCase();
+}
+
+/**
+ * Collapse multiple DM groups with the SAME person into one chat. Repeated
+ * testing (and pre-v6 delegate churn) can leave several on-chain groups for one
+ * address pair; without this the sidebar shows the same person N times ("kweku /
+ * No messages yet"). We keep the "liveliest" one — a group with an actual last
+ * message beats an empty one, newer beats older. Named groups are never merged.
+ */
+function dedupeDirects(chats: Chat[], meId: string): Chat[] {
+  const rank = (c: Chat): string => `${c.lastMessage ? 1 : 0}:${c.lastMessageAt ?? ""}`;
+  const bestByPeer = new Map<string, Chat>();
+  const out: Chat[] = [];
+  for (const c of chats) {
+    const peer = c.type === "direct" ? directPeerId(c, meId) : undefined;
+    if (!peer) {
+      out.push(c); // group chat, or a DM we can't resolve a peer for
+      continue;
+    }
+    const prev = bestByPeer.get(peer);
+    if (!prev || rank(c) > rank(prev)) bestByPeer.set(peer, c);
+  }
+  return [...out, ...bestByPeer.values()];
+}
+
 // ── profile resolution (address → ReeF handle/avatar) ─────────────────────────
 
 const profileCache = new Map<string, Participant | null>();
@@ -586,7 +614,7 @@ export class SuiMessaging implements Messaging {
         return chat;
       }),
     );
-    return chats.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+    return dedupeDirects(chats, me.id).sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   }
 
   async getChat(chatId: string): Promise<Chat | null> {
@@ -785,7 +813,11 @@ export class SuiMessaging implements Messaging {
             handler(ev);
           }
         } catch (err) {
-          const notMember = err instanceof Error && /not a member/i.test(err.message);
+          // The relayer answers a non-member read with 403 Forbidden; the SDK
+          // surfaces that (and the plain "not a member" case) here. Treat both as
+          // "membership not synced" so orphaned groups actually reach the skip
+          // threshold instead of 403-spamming forever.
+          const notMember = err instanceof Error && /(not a member|forbidden|403)/i.test(err.message);
           if (notMember) {
             // Relayer hasn't synced our membership. A few seconds of lag is normal;
             // but if it never syncs (an orphaned group whose grant the relayer

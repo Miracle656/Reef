@@ -32,6 +32,9 @@ export function MessagesIcon({ className = cls }: { className?: string }) {
 export function UserIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>;
 }
+export function BellIcon({ className = cls }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" {...stroke}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>;
+}
 export function GearIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
 }
@@ -39,7 +42,21 @@ export function PlusIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>;
 }
 
-type Item = { href: string; label: string; active: boolean; icon: ReactNode };
+type Item = { href: string; label: string; active: boolean; icon: ReactNode; badge?: number };
+
+/** Unread = notifications newer than the last time the user opened /notifications
+ *  (persisted per-address in localStorage by the notifications page). */
+export function useUnreadNotifs(address?: string): number {
+  const q = useQuery({
+    queryKey: ["notifications", address],
+    queryFn: () => trpc.notifications.query({ address: address!, limit: 30 }),
+    enabled: Boolean(address),
+    refetchInterval: 30_000,
+  });
+  if (!address || !q.data) return 0;
+  const seen = Number((typeof localStorage !== "undefined" && localStorage.getItem(`reef:notif-seen:${address}`)) || 0);
+  return q.data.filter((n) => n.createdAtMs > seen).length;
+}
 
 function useNav() {
   const account = useSocialAccount();
@@ -49,11 +66,13 @@ function useNav() {
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
     enabled: Boolean(account),
   });
+  const unread = useUnreadNotifs(account?.address);
   const profileHref = profile.data ? `/u/${profile.data.handle}` : "/onboarding";
   const items: Item[] = [
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
     { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
+    { href: "/notifications", label: "Notifications", active: pathname.startsWith("/notifications"), icon: <BellIcon />, badge: unread },
     { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon /> },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
     { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
@@ -110,7 +129,7 @@ export function SideRail() {
   );
 }
 
-function RailItem({ href, label, active, icon }: Item) {
+function RailItem({ href, label, active, icon, badge }: Item) {
   return (
     <Link
       href={href}
@@ -119,7 +138,14 @@ function RailItem({ href, label, active, icon }: Item) {
         active ? "bg-ink font-bold text-on-ink" : "font-medium text-ink-soft hover:bg-[color:color-mix(in_srgb,var(--ink)_6%,transparent)]"
       }`}
     >
-      <span className="shrink-0">{icon}</span>
+      <span className="relative shrink-0">
+        {icon}
+        {badge ? (
+          <span className="absolute -right-1.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-on-accent ring-2 ring-[color:var(--surface)]">
+            {badge > 9 ? "9+" : badge}
+          </span>
+        ) : null}
+      </span>
       <span className="reef-lbl text-[16px]">{label}</span>
     </Link>
   );
@@ -130,7 +156,10 @@ export function MobileNav() {
   const { account, profileHref, items } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
   if (!account) return null;
-  const pill = [items[0], items[1], items[3], items[4]].filter(Boolean) as Item[];
+  // Twitter-style bottom bar: Home · Search · Notifications · Messages.
+  const pill = ["Home", "Search", "Notifications", "Messages"]
+    .map((l) => items.find((i) => i.label === l))
+    .filter(Boolean) as Item[];
 
   return (
     <>
@@ -156,7 +185,7 @@ export function MobileNav() {
   );
 }
 
-function MobilePill({ href, label, active, icon }: Item) {
+function MobilePill({ href, label, active, icon, badge }: Item) {
   return (
     <Link
       href={href}
@@ -164,7 +193,10 @@ function MobilePill({ href, label, active, icon }: Item) {
         active ? "bg-ink text-on-ink" : "text-ink-soft hover:text-ink"
       }`}
     >
-      <span className="[&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+      <span className="relative [&>svg]:h-5 [&>svg]:w-5">
+        {icon}
+        {badge ? <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold leading-none text-on-accent">{badge > 9 ? "9+" : badge}</span> : null}
+      </span>
       <span>{label}</span>
     </Link>
   );
