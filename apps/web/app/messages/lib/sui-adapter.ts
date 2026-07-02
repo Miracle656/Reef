@@ -140,6 +140,8 @@ interface StoredGroup {
   /** Resolved ReeF profiles for the human participants (handle/avatar). */
   resolved?: Participant[];
   createdAt: number;
+  /** Cached preview of the latest message — lets the chat list render instantly. */
+  lastMsg?: { text: string; senderId: string; type: MessageType; at: string };
 }
 
 function storeKey(me: string): string {
@@ -170,6 +172,49 @@ function upsertGroup(me: string, g: StoredGroup): void {
   if (i >= 0) all[i] = { ...all[i], ...g };
   else all.push(g);
   writeStore(me, all);
+}
+
+function rememberLastMsg(me: string, uuid: string, m: Message): void {
+  const g = readStore(me).find((x) => x.uuid === uuid);
+  if (!g) return;
+  if (g.lastMsg && g.lastMsg.at >= m.createdAt) return;
+  upsertGroup(me, { ...g, lastMsg: { text: m.content, senderId: m.senderId, type: m.type, at: m.createdAt } });
+}
+
+// ── per-chat message cache (instant thread open; the network fills the delta) ──
+
+const MSG_CACHE_MAX = 50;
+
+function msgCacheKey(me: string, uuid: string): string {
+  return `reef:msg-cache:v1:${me.toLowerCase()}:${uuid}`;
+}
+
+function readMsgCache(me: string, uuid: string): Message[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(msgCacheKey(me, uuid)) ?? "[]") as Message[];
+  } catch {
+    return [];
+  }
+}
+
+function writeMsgCache(me: string, uuid: string, msgs: Message[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(msgCacheKey(me, uuid), JSON.stringify(msgs.slice(-MSG_CACHE_MAX)));
+  } catch {
+    /* quota — instant-open is best-effort */
+  }
+}
+
+function appendMsgCache(me: string, uuid: string, incoming: Message[]): void {
+  if (!incoming.length) return;
+  const cur = readMsgCache(me, uuid);
+  const seen = new Set(cur.map((m) => m.id));
+  const merged = [...cur, ...incoming.filter((m) => !seen.has(m.id))].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
+  writeMsgCache(me, uuid, merged);
 }
 
 // ── delegate membership (the relayer authorizes the delegate, not zkLogin) ────
@@ -360,13 +405,26 @@ function chatFromStored(g: StoredGroup, me: Me): Chat {
   const participants: Participant[] = g.resolved?.length
     ? g.resolved.map((p) => (p.id.toLowerCase() === me.id.toLowerCase() ? meUser(me) : p))
     : g.participantIds.map((p) => (p.toLowerCase() === me.id.toLowerCase() ? meUser(me) : participantFromAddress(p)));
+  const last = g.lastMsg;
   return {
     id: g.uuid,
     type: g.type,
     name: g.type === "group" ? g.name || undefined : undefined,
     participants,
     createdBy: g.participantIds[0],
-    lastMessageAt: new Date(g.createdAt).toISOString(),
+    lastMessageAt: last?.at ?? new Date(g.createdAt).toISOString(),
+    lastMessage: last
+      ? {
+          id: `preview-${g.uuid}`,
+          chatId: g.uuid,
+          senderId: last.senderId,
+          type: last.type,
+          content: last.text,
+          status: "delivered",
+          createdAt: last.at,
+          sender: senderUserFor(g, me, last.senderId),
+        }
+      : undefined,
   };
 }
 
@@ -519,6 +577,8 @@ export class SuiMessaging implements Messaging {
   #typingPoll: ReturnType<typeof setInterval> | null = null;
   #typingKnown = new Map<string, Map<string, string>>(); // chatId → address → shown name
   #typingLastPing = new Map<string, number>();
+  #handler: MessagingEventHandler | null = null;
+  #refreshing = false;
 
   setCurrentUser(me: Me): void {
     this.#me = me;
@@ -529,95 +589,121 @@ export class SuiMessaging implements Messaging {
   }
 
   // ── chats ──────────────────────────────────────────────────────────────────
+  // Web2-feel split: listChats() serves the last known inbox from localStorage
+  // instantly (names, avatars, last-message previews are all cached); the heavy
+  // on-chain work (discovery, joining, profile resolution, preview backfill)
+  // runs in the background and emits `chat_updated` only when something changed.
   async listChats(): Promise<Chat[]> {
     const me = this.me();
-    const rt = getMessagingRuntime();
-    let discovered: string[] = [];
-    try {
-      discovered = await discoverGroupIds();
-    } catch (e) {
-      console.warn("[messaging] discovery failed:", e);
-    }
+    void this.#refreshChats();
+    return this.#chatsFromStore(me);
+  }
 
-    const storedByGroup = new Map(readStore(me.id).map((g) => [g.groupId, g]));
-    // Every group I might belong to (discovered on-chain ∪ already stored), minus
-    // ones we've already determined we can't join.
-    const candidates = [...new Set([...discovered, ...storedByGroup.keys()])].filter(
-      (id) => !readSkip(me.id).has(id),
-    );
-
-    if (rt && candidates.length) {
-      // Metadata (uuid/name) for candidates we don't have stored yet.
-      const needMeta = candidates.filter((id) => !storedByGroup.has(id));
-      let meta: Record<string, { uuid: string; name?: string }> = {};
-      if (needMeta.length) {
-        try {
-          meta = await rt.client.messaging.view.groupsMetadata({ groupIds: needMeta, refresh: true });
-        } catch (e) {
-          console.warn("[messaging] groupsMetadata failed:", e);
-        }
-      }
-      for (const id of candidates) {
-        // Ensure my delegate is a member (idempotent). If the group won't let us
-        // join (orphaned / no PermissionsAdmin), skip it — never delete data.
-        if (!readGrants(me.id).has(id)) {
-          try {
-            await ensureDelegateMembership(rt, id);
-            console.log("[reef-msg] joined group", id);
-          } catch (err) {
-            console.warn("[reef-msg] can't join group", id, "→ skipping:", err instanceof Error ? err.message : err);
-            markSkip(me.id, id);
-            continue;
-          }
-        }
-        if (!storedByGroup.has(id)) {
-          const m = meta[id];
-          if (m?.uuid) {
-            upsertGroup(me.id, { uuid: m.uuid, groupId: id, name: m.name ?? "", type: "group", participantIds: [me.id], createdAt: Date.now() });
-          }
-        }
-      }
-    }
-
+  #chatsFromStore(me: Me): Chat[] {
     const skip = readSkip(me.id);
-    const visible = readStore(me.id).filter((g) => !skip.has(g.groupId));
-    // Populate each chat's last message for the list preview (best-effort; a
-    // just-joined group may 403 until the relayer syncs — the poll fills it in).
-    const chats = await Promise.all(
-      visible.map(async (g) => {
-        // Resolve real names/avatars + detect DM-vs-group; persist for next time.
-        if (rt) {
-          try {
-            const enriched = await enrichGroup(rt, g, me);
-            if (enriched) {
-              g = { ...g, resolved: enriched.participants, participantIds: enriched.participants.map((p) => p.id), type: enriched.type };
-              upsertGroup(me.id, g);
-            }
-          } catch {
-            /* keep existing store values */
-          }
-        }
-        const chat = chatFromStored(g, me);
-        if (rt) {
-          try {
-            const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, limit: 30 });
-            const raw = res.messages as DecodedSdkMessage[];
-            if (raw.length) {
-              const latest = raw.reduce((a, b) => (a.order >= b.order ? a : b));
-              const m = toMessage(g.uuid, latest);
-              m.senderId = resolveSenderId(rt, g, m.senderId);
-              m.sender = senderUserFor(g, me, m.senderId);
-              chat.lastMessage = m;
-              chat.lastMessageAt = m.createdAt;
-            }
-          } catch {
-            /* not synced yet */
-          }
-        }
-        return chat;
-      }),
-    );
+    const chats = readStore(me.id)
+      .filter((g) => !skip.has(g.groupId))
+      .map((g) => chatFromStored(g, me));
     return dedupeDirects(chats, me.id).sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+  }
+
+  async #refreshChats(): Promise<void> {
+    if (this.#refreshing) return;
+    this.#refreshing = true;
+    try {
+      const me = this.me();
+      const rt = getMessagingRuntime();
+      const snapshot = () => JSON.stringify(readStore(me.id)) + [...readSkip(me.id)].join(",");
+      const before = snapshot();
+
+      let discovered: string[] = [];
+      try {
+        discovered = await discoverGroupIds();
+      } catch (e) {
+        console.warn("[messaging] discovery failed:", e);
+      }
+
+      const storedByGroup = new Map(readStore(me.id).map((g) => [g.groupId, g]));
+      // Every group I might belong to (discovered on-chain ∪ already stored), minus
+      // ones we've already determined we can't join.
+      const candidates = [...new Set([...discovered, ...storedByGroup.keys()])].filter(
+        (id) => !readSkip(me.id).has(id),
+      );
+
+      if (rt && candidates.length) {
+        // Metadata (uuid/name) for candidates we don't have stored yet.
+        const needMeta = candidates.filter((id) => !storedByGroup.has(id));
+        let meta: Record<string, { uuid: string; name?: string }> = {};
+        if (needMeta.length) {
+          try {
+            meta = await rt.client.messaging.view.groupsMetadata({ groupIds: needMeta, refresh: true });
+          } catch (e) {
+            console.warn("[messaging] groupsMetadata failed:", e);
+          }
+        }
+        for (const id of candidates) {
+          // Ensure my delegate is a member (idempotent). If the group won't let us
+          // join (orphaned / no PermissionsAdmin), skip it — never delete data.
+          if (!readGrants(me.id).has(id)) {
+            try {
+              await ensureDelegateMembership(rt, id);
+              console.log("[reef-msg] joined group", id);
+            } catch (err) {
+              console.warn("[reef-msg] can't join group", id, "→ skipping:", err instanceof Error ? err.message : err);
+              markSkip(me.id, id);
+              continue;
+            }
+          }
+          if (!storedByGroup.has(id)) {
+            const m = meta[id];
+            if (m?.uuid) {
+              upsertGroup(me.id, { uuid: m.uuid, groupId: id, name: m.name ?? "", type: "group", participantIds: [me.id], createdAt: Date.now() });
+            }
+          }
+        }
+      }
+
+      if (rt) {
+        const skip = readSkip(me.id);
+        const visible = readStore(me.id).filter((g) => !skip.has(g.groupId));
+        await Promise.all(
+          visible.map(async (g) => {
+            // Resolve real names/avatars + detect DM-vs-group; persist for next time.
+            try {
+              const enriched = await enrichGroup(rt, g, me);
+              if (enriched) {
+                g = { ...g, resolved: enriched.participants, participantIds: enriched.participants.map((p) => p.id), type: enriched.type };
+                upsertGroup(me.id, g);
+              }
+            } catch {
+              /* keep existing store values */
+            }
+            // Backfill a missing last-message preview (once — after that the
+            // realtime poll keeps it fresh, so we don't hammer the relayer).
+            if (!g.lastMsg) {
+              try {
+                const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, limit: 1 });
+                const raw = res.messages as DecodedSdkMessage[];
+                if (raw.length) {
+                  const latest = raw.reduce((a, b) => (a.order >= b.order ? a : b));
+                  const m = toMessage(g.uuid, latest);
+                  m.senderId = resolveSenderId(rt, g, m.senderId);
+                  rememberLastMsg(me.id, g.uuid, m);
+                }
+              } catch {
+                /* not synced yet — the poll fills it in */
+              }
+            }
+          }),
+        );
+      }
+
+      if (snapshot() !== before) this.#handler?.({ type: "chat_updated", chatId: "" });
+    } catch (e) {
+      console.warn("[reef-msg] background chats refresh failed:", e);
+    } finally {
+      this.#refreshing = false;
+    }
   }
 
   async getChat(chatId: string): Promise<Chat | null> {
@@ -730,8 +816,18 @@ export class SuiMessaging implements Messaging {
       const maxOrder = Math.max(...raw.map((m) => m.order));
       this.#lastOrder.set(chatId, Math.max(this.#lastOrder.get(chatId) ?? -1, maxOrder));
     }
+    // First (latest) page → refresh the instant-open cache + list preview.
+    if (!cursor && msgs.length) {
+      writeMsgCache(this.me().id, chatId, msgs);
+      rememberLastMsg(this.me().id, chatId, msgs[msgs.length - 1]!);
+    }
     const minOrder = raw.length ? Math.min(...raw.map((m) => m.order)) : 0;
     return { messages: msgs, nextCursor: res.hasNext ? String(minOrder) : null };
+  }
+
+  /** Cached messages for instant thread open (sync; the network call follows). */
+  peekMessages(chatId: string): Message[] {
+    return readMsgCache(this.me().id, chatId);
   }
 
   async sendMessage(input: SendMessageInput): Promise<Message> {
@@ -750,7 +846,7 @@ export class SuiMessaging implements Messaging {
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
-    return {
+    const sent: Message = {
       id: messageId,
       chatId: input.chatId,
       senderId: this.me().id,
@@ -769,6 +865,9 @@ export class SuiMessaging implements Messaging {
       clientId: input.clientId,
       createdAt: new Date().toISOString(),
     };
+    appendMsgCache(this.me().id, input.chatId, [sent]);
+    rememberLastMsg(this.me().id, input.chatId, sent);
+    return sent;
   }
 
   async editMessage(messageId: string, content: string): Promise<void> {
@@ -791,6 +890,7 @@ export class SuiMessaging implements Messaging {
 
   // ── real-time (polling for v1) ───────────────────────────────────────────────
   subscribe(handler: MessagingEventHandler): () => void {
+    this.#handler = handler;
     const tick = async () => {
       const rt = getMessagingRuntime();
       if (!rt) return;
@@ -804,16 +904,22 @@ export class SuiMessaging implements Messaging {
           const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, afterOrder: after < 0 ? undefined : after, limit: 50 });
           this.#pollFails.delete(g.uuid);
           if (res.messages.length) console.log("[reef-msg] poll got", res.messages.length, "msg(s) for", g.uuid);
+          const fresh: Message[] = [];
           for (const raw of res.messages as DecodedSdkMessage[]) {
             if (raw.order <= (this.#lastOrder.get(g.uuid) ?? -1)) continue;
             this.#lastOrder.set(g.uuid, raw.order);
             const msg = toMessage(g.uuid, raw);
             msg.senderId = resolveSenderId(rt, g, msg.senderId);
             msg.sender = senderUserFor(g, me, msg.senderId);
+            fresh.push(msg);
             const isOwn = msg.senderId.toLowerCase() === me.id.toLowerCase();
             const mentionsMe = (msg.mentionIds ?? []).some((id) => id.toLowerCase() === me.id.toLowerCase());
             const ev: MessagingEvent = { type: "message", message: msg, isOwn, mentionsMe };
             handler(ev);
+          }
+          if (fresh.length) {
+            appendMsgCache(me.id, g.uuid, fresh);
+            rememberLastMsg(me.id, g.uuid, fresh[fresh.length - 1]!);
           }
         } catch (err) {
           // The relayer answers a non-member read with 403 Forbidden; the SDK
@@ -877,6 +983,7 @@ export class SuiMessaging implements Messaging {
       this.#poll = null;
       if (this.#typingPoll) clearInterval(this.#typingPoll);
       this.#typingPoll = null;
+      this.#handler = null;
     };
   }
 

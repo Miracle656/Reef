@@ -29,6 +29,7 @@ import { getDelegateKeypair } from "./messaging-identity";
 import { createReefMessagingClient } from "./messaging-client";
 import { messagingEnv, isMessagingConfigured } from "./sui-config";
 import { setMessagingRuntime } from "./runtime";
+import { markAccepted, requestPeerOf } from "./requests";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
 
 // ── state ──────────────────────────────────────────────────────────────────────
@@ -369,6 +370,8 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   activeRef.current = state.activeChatId;
   const meRef = useRef<Me | null>(null);
   meRef.current = me;
+  const chatsRef = useRef<Chat[]>([]);
+  chatsRef.current = state.chats;
 
   const refreshChats = useCallback(async () => {
     const chats = await messaging.listChats();
@@ -450,7 +453,15 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       if (!chatId) return;
       dispatch({ t: "CLEAR_UNREAD", chatId });
       void messaging.markRead(chatId);
-      messaging.listMessages(chatId).then(({ messages }) => dispatch({ t: "SET_MESSAGES", chatId, messages }));
+      // Instant open: render the locally-cached thread now; the network fetch
+      // that follows replaces it with fresh data.
+      const cached = messaging.peekMessages?.(chatId) ?? [];
+      if (cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: cached });
+      messaging.listMessages(chatId).then(({ messages }) => {
+        // Don't wipe a cache-rendered thread on a transient empty response
+        // (deletion isn't modeled on-chain yet, so empty-after-cached ≈ glitch).
+        if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages });
+      });
     },
     [],
   );
@@ -481,6 +492,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       sender: { id: meNow.id, username: meNow.username, displayName: meNow.displayName, avatarUrl: meNow.avatarUrl },
     };
     dispatch({ t: "ADD_MESSAGE", message: optimistic, isOwn: true, mentionsMe: false, activeChatId: activeRef.current });
+    // Replying to a DM accepts it — it leaves the Requests pile for good.
+    const chat = chatsRef.current.find((c) => c.id === input.chatId);
+    const peer = chat ? requestPeerOf(chat, meNow.id) : undefined;
+    if (peer) markAccepted(meNow.id, peer);
     try {
       const saved = await messaging.sendMessage({ ...input, clientId });
       dispatch({ t: "RECONCILE", chatId: input.chatId, clientId, message: { ...saved, sender: optimistic.sender } });
@@ -491,6 +506,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
   const startDirect = useCallback(
     async (userId: string) => {
+      if (meRef.current) markAccepted(meRef.current.id, userId); // I initiated it
       const chat = await messaging.createDirect(userId);
       dispatch({ t: "ADD_CHAT", chat });
       openChat(chat.id);

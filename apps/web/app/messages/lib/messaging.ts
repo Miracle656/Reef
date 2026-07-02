@@ -135,6 +135,11 @@ export interface Messaging {
 
   // messages -------------------------------------------------------------
   listMessages(chatId: string, cursor?: string | null): Promise<{ messages: Message[]; nextCursor: string | null }>;
+  /**
+   * OPTIONAL synchronous peek at locally-cached messages for a chat, so the UI
+   * can render a thread instantly while `listMessages` fetches fresh data.
+   */
+  peekMessages?(chatId: string): Message[];
   sendMessage(input: SendMessageInput): Promise<Message>;
   editMessage(messageId: string, content: string): Promise<void>;
   deleteMessage(messageId: string): Promise<void>;

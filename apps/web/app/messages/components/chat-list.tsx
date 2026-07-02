@@ -1,24 +1,67 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useReducer, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, Spinner } from "@/components/ui";
+import { trpc } from "@/lib/trpc";
 import { useMessaging } from "../lib/provider";
 import { chatAvatar, chatName, previewOf } from "../lib/display";
 import { timeAgo } from "../lib/format";
+import { isRequestChat, markAccepted, readAccepted, requestPeerOf } from "../lib/requests";
 import type { Chat } from "../lib/types";
 import { StoriesBar } from "./stories";
-import { BellOffIcon, LockIcon, PlusIcon, SearchIcon, UsersIcon } from "./icons";
+import { BackIcon, BellOffIcon, LockIcon, PlusIcon, SearchIcon, UsersIcon } from "./icons";
 
 export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; onNewGroup: () => void; onVault: () => void }) {
   const { state, me, activeChat, openChat } = useMessaging();
   const [q, setQ] = useState("");
+  const [showRequests, setShowRequests] = useState(false);
+  const [, bump] = useReducer((x: number) => x + 1, 0); // re-render after Accept
+
+  // Who I follow (indexer graph) — DMs from anyone else are "requests".
+  const followingQ = useQuery({
+    queryKey: ["following", me?.id],
+    queryFn: async () => (await trpc.following.query({ address: me!.id })).map((r) => r.followee.toLowerCase()),
+    enabled: Boolean(me?.id?.startsWith("0x")),
+    staleTime: 60_000,
+  });
+  const following = useMemo(() => new Set(followingQ.data ?? []), [followingQ.data]);
+  // Read fresh each render — replying elsewhere (provider) also accepts a chat.
+  const accepted = me ? readAccepted(me.id) : new Set<string>();
+
+  const all = useMemo(() => state.chats.filter((c) => !c.archived), [state.chats]);
+  const requests = useMemo(
+    () => (me ? all.filter((c) => isRequestChat(c, me.id, following, accepted)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [all, me, following, accepted.size],
+  );
+  const requestIds = useMemo(() => new Set(requests.map((c) => c.id)), [requests]);
 
   const chats = useMemo(() => {
-    const list = state.chats.filter((c) => !c.archived);
+    const list = all.filter((c) => !requestIds.has(c.id));
     const needle = q.trim().toLowerCase();
     if (!needle) return list;
     return list.filter((c) => chatName(c, me?.id).toLowerCase().includes(needle));
-  }, [state.chats, q, me?.id]);
+  }, [all, requestIds, q, me?.id]);
+
+  const requestUnread = requests.reduce((n, c) => n + (c.unreadCount ?? 0), 0);
+
+  if (showRequests) {
+    return (
+      <RequestsPane
+        requests={requests}
+        meId={me?.id}
+        activeId={activeChat?.id}
+        onBack={() => setShowRequests(false)}
+        onOpen={openChat}
+        onAccept={(c) => {
+          const peer = me ? requestPeerOf(c, me.id) : undefined;
+          if (me && peer) markAccepted(me.id, peer);
+          bump();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -67,6 +110,26 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
 
       <StoriesBar />
 
+      {/* message requests entry — DMs from people you don't follow wait here */}
+      {requests.length ? (
+        <button
+          type="button"
+          onClick={() => setShowRequests(true)}
+          className="mx-4 mb-1 flex items-center gap-2.5 rounded-2xl border border-[color:var(--glass-border)] bg-surface-glass px-3.5 py-2.5 text-left transition-colors hover:bg-surface-muted"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent/10 text-accent-ink">
+            <UsersIcon className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-bold">Message requests</span>
+            <span className="block truncate text-[12px] text-ink-faint">
+              {requests.length} from people you don’t follow
+            </span>
+          </span>
+          {requestUnread > 0 ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent" /> : null}
+        </button>
+      ) : null}
+
       {/* list */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {state.loadingChats ? (
@@ -83,6 +146,62 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
         ) : (
           chats.map((c) => (
             <ChatRow key={c.id} chat={c} meId={me?.id} active={activeChat?.id === c.id} onClick={() => openChat(c.id)} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RequestsPane({
+  requests,
+  meId,
+  activeId,
+  onBack,
+  onOpen,
+  onAccept,
+}: {
+  requests: Chat[];
+  meId?: string;
+  activeId?: string;
+  onBack: () => void;
+  onOpen: (chatId: string) => void;
+  onAccept: (chat: Chat) => void;
+}) {
+  return (
+    <div className="flex h-full min-w-0 flex-col">
+      <div className="flex items-center gap-2 px-4 pb-3 pt-4">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft transition-colors hover:bg-surface-muted"
+        >
+          <BackIcon className="h-5 w-5" />
+        </button>
+        <h1 className="flex-1 text-[22px] font-black tracking-tight">Requests</h1>
+      </div>
+      <p className="px-5 pb-3 text-[12.5px] leading-relaxed text-ink-soft">
+        Chats from people you don’t follow. They can’t tell you’ve seen a request — replying or
+        accepting moves it to your inbox.
+      </p>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        {requests.length === 0 ? (
+          <p className="px-4 py-16 text-center text-sm text-ink-soft">No requests.</p>
+        ) : (
+          requests.map((c) => (
+            <div key={c.id} className="flex items-center gap-1 pr-2">
+              <div className="min-w-0 flex-1">
+                <ChatRow chat={c} meId={meId} active={activeId === c.id} onClick={() => onOpen(c.id)} />
+              </div>
+              <button
+                type="button"
+                onClick={() => onAccept(c)}
+                className="lift shrink-0 rounded-full bg-accent px-3 py-1.5 text-[12px] font-bold text-on-accent"
+              >
+                Accept
+              </button>
+            </div>
           ))
         )}
       </div>
