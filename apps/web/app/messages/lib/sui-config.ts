@@ -39,6 +39,14 @@ const TESTNET_SEAL_SERVERS: SealServerConfig[] = [
   { objectId: "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8", weight: 1 },
 ];
 
+/**
+ * Default relayer for testnet — our deployed instance. Like the Seal defaults
+ * above, this makes messaging work out of the box on testnet with zero env
+ * config; NEXT_PUBLIC_MESSAGING_RELAYER_URL still overrides (e.g. a local
+ * relayer during development).
+ */
+const TESTNET_RELAYER_URL = "https://sui-stack-messaging.onrender.com";
+
 function parseSealServers(raw: string | undefined): SealServerConfig[] {
   if (!raw) return NETWORK === "testnet" ? TESTNET_SEAL_SERVERS : [];
   return raw
@@ -50,7 +58,10 @@ function parseSealServers(raw: string | undefined): SealServerConfig[] {
 
 export const messagingEnv = {
   /** E2EE relayer transport base URL (no trailing slash). */
-  relayerUrl: (process.env.NEXT_PUBLIC_MESSAGING_RELAYER_URL ?? "").replace(/\/$/, ""),
+  relayerUrl: (
+    process.env.NEXT_PUBLIC_MESSAGING_RELAYER_URL ??
+    (NETWORK === "testnet" ? TESTNET_RELAYER_URL : "")
+  ).replace(/\/$/, ""),
   /** Threshold Seal key servers holding DEK shares. */
   sealServers: parseSealServers(process.env.NEXT_PUBLIC_SEAL_SERVER_IDS),
   /** Seal threshold (how many shares required to reconstruct a DEK). */
