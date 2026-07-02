@@ -58,8 +58,10 @@ function parseSealServers(raw: string | undefined): SealServerConfig[] {
 
 export const messagingEnv = {
   /** E2EE relayer transport base URL (no trailing slash). */
+  // `||` (not `??`) on purpose: an env var saved with an EMPTY value must
+  // still fall back to the default, otherwise messaging silently stays mock.
   relayerUrl: (
-    process.env.NEXT_PUBLIC_MESSAGING_RELAYER_URL ??
+    process.env.NEXT_PUBLIC_MESSAGING_RELAYER_URL ||
     (NETWORK === "testnet" ? TESTNET_RELAYER_URL : "")
   ).replace(/\/$/, ""),
   /** Threshold Seal key servers holding DEK shares. */
