@@ -516,6 +516,9 @@ export class SuiMessaging implements Messaging {
   #poll: ReturnType<typeof setInterval> | null = null;
   #lastOrder = new Map<string, number>();
   #pollFails = new Map<string, number>();
+  #typingPoll: ReturnType<typeof setInterval> | null = null;
+  #typingKnown = new Map<string, Map<string, string>>(); // chatId → address → shown name
+  #typingLastPing = new Map<string, number>();
 
   setCurrentUser(me: Me): void {
     this.#me = me;
@@ -836,11 +839,44 @@ export class SuiMessaging implements Messaging {
         }
       }
     };
+    // Typing presence: a separate, faster loop (one batched request) so the
+    // "typing…" dots feel live without hammering the relayer's message reads.
+    const typingTick = async () => {
+      const me = this.me();
+      const granted = readGrants(me.id);
+      const uuids = readStore(me.id)
+        .filter((g) => granted.has(g.groupId))
+        .map((g) => g.uuid)
+        .slice(0, 50);
+      if (!uuids.length) return;
+      let who: Record<string, { address: string; name: string }[]> = {};
+      try {
+        who = await trpc.typingWho.query({ chatIds: uuids, exclude: me.id });
+      } catch {
+        return; // presence is best-effort; never surface errors
+      }
+      for (const chatId of uuids) {
+        const now = new Map((who[chatId] ?? []).map((u) => [u.address, u.name || u.address]));
+        const before = this.#typingKnown.get(chatId) ?? new Map<string, string>();
+        for (const [addr, name] of now) {
+          if (!before.has(addr)) handler({ type: "typing", chatId, userId: addr, username: name, isTyping: true });
+        }
+        for (const [addr, name] of before) {
+          if (!now.has(addr)) handler({ type: "typing", chatId, userId: addr, username: name, isTyping: false });
+        }
+        if (now.size) this.#typingKnown.set(chatId, now);
+        else this.#typingKnown.delete(chatId);
+      }
+    };
+    this.#typingPoll = setInterval(() => void typingTick(), 2000);
+
     this.#poll = setInterval(() => void tick(), 3500);
     void tick();
     return () => {
       if (this.#poll) clearInterval(this.#poll);
       this.#poll = null;
+      if (this.#typingPoll) clearInterval(this.#typingPoll);
+      this.#typingPoll = null;
     };
   }
 
@@ -887,7 +923,21 @@ export class SuiMessaging implements Messaging {
   async listSaved(): Promise<Message[]> { return []; }
   async votePoll(_messageId: string, _optionIndex: number): Promise<void> {}
   async markViewOnce(_messageId: string): Promise<void> {}
-  setTyping(_chatId: string, _isTyping: boolean): void {}
+  setTyping(chatId: string, isTyping: boolean): void {
+    const me = this.me();
+    // The composer calls this on every keystroke; only re-ping the server every
+    // ~1.5s (the server holds a ping alive for 6s, so this keeps it fresh).
+    if (isTyping) {
+      const last = this.#typingLastPing.get(chatId) ?? 0;
+      if (Date.now() - last < 1500) return;
+      this.#typingLastPing.set(chatId, Date.now());
+    } else {
+      this.#typingLastPing.delete(chatId);
+    }
+    void trpc.typingPing
+      .mutate({ chatId, address: me.id, name: me.displayName || me.username || "", typing: isTyping })
+      .catch(() => {}); // best-effort
+  }
   async setChatSettings(_chatId: string, _settings: { muted?: boolean; archived?: boolean }): Promise<void> {}
   async blockUser(_userId: string): Promise<void> {}
   async unblockUser(_userId: string): Promise<void> {}

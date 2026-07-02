@@ -338,6 +338,65 @@ export const appRouter = router({
       await ctx.prisma.linkedAddress.deleteMany({ where: { owner: input.owner, linked: input.linked } });
       return { ok: true };
     }),
+
+  // --- messaging typing presence (ephemeral, in-memory) ---
+  // "X is typing…" is a few-seconds-lived signal, so it never touches the DB or
+  // the chain: clients ping while composing, peers poll. Entries expire after
+  // TYPING_TTL_MS even if the "stopped" ping is lost (tab closed mid-keystroke).
+  typingPing: publicProcedure
+    .input(
+      z.object({
+        chatId: z.string().min(1).max(128),
+        address: SuiAddress,
+        name: z.string().max(64).default(""),
+        typing: z.boolean(),
+      }),
+    )
+    .mutation(({ input }) => {
+      pruneTyping();
+      if (!input.typing) {
+        typingByChat.get(input.chatId)?.delete(input.address);
+        return { ok: true };
+      }
+      let chat = typingByChat.get(input.chatId);
+      if (!chat) {
+        if (typingByChat.size >= TYPING_MAX_CHATS) return { ok: false };
+        chat = new Map();
+        typingByChat.set(input.chatId, chat);
+      }
+      if (!chat.has(input.address) && chat.size >= TYPING_MAX_PER_CHAT) return { ok: false };
+      chat.set(input.address, { name: input.name, ts: Date.now() });
+      return { ok: true };
+    }),
+
+  typingWho: publicProcedure
+    .input(z.object({ chatIds: z.array(z.string().min(1).max(128)).max(50), exclude: SuiAddress.optional() }))
+    .query(({ input }) => {
+      pruneTyping();
+      const out: Record<string, { address: string; name: string }[]> = {};
+      for (const chatId of input.chatIds) {
+        const chat = typingByChat.get(chatId);
+        if (!chat?.size) continue;
+        const users = [...chat.entries()]
+          .filter(([addr]) => addr.toLowerCase() !== input.exclude?.toLowerCase())
+          .map(([address, v]) => ({ address, name: v.name }));
+        if (users.length) out[chatId] = users;
+      }
+      return out;
+    }),
 });
+
+const TYPING_TTL_MS = 6_000;
+const TYPING_MAX_CHATS = 5_000;
+const TYPING_MAX_PER_CHAT = 50;
+const typingByChat = new Map<string, Map<string, { name: string; ts: number }>>();
+
+function pruneTyping() {
+  const cutoff = Date.now() - TYPING_TTL_MS;
+  for (const [chatId, chat] of typingByChat) {
+    for (const [addr, v] of chat) if (v.ts < cutoff) chat.delete(addr);
+    if (!chat.size) typingByChat.delete(chatId);
+  }
+}
 
 export type AppRouter = typeof appRouter;
