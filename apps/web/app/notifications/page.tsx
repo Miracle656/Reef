@@ -60,11 +60,23 @@ export default function NotificationsPage() {
   );
 }
 
+/**
+ * Post previews hide raw Predict market links (`/m/<oracleId>[?strike=…]`)
+ * the same way the feed does — the feed swaps them for an embed card; here we
+ * just drop them. A post that was ONLY a market link previews as a label.
+ */
+function cleanPreview(text: string | undefined): string {
+  if (!text) return "";
+  const stripped = text.replace(/\/m\/[A-Za-z0-9_-]+(\?strike=[0-9.]+)?/g, "").replace(/\s+/g, " ").trim();
+  return stripped || "Prediction market";
+}
+
 function NotifRow({ n }: { n: Notif }) {
   const name = n.actor.displayName || n.actor.handle || shortAddr(n.actor.address);
   const profileHref = n.actor.handle ? `/u/${n.actor.handle}` : "#";
   const href = n.postId ? `/p/${n.postId}` : profileHref;
   const avatarUrl = n.actor.avatarBlobId ? walrus.urlFor(umbraConfig, n.actor.avatarBlobId) : null;
+  const preview = cleanPreview(n.preview);
 
   return (
     <li className="border-b border-[color:var(--glass-border)]">
@@ -79,7 +91,7 @@ function NotifRow({ n }: { n: Notif }) {
             <span className="text-ink-soft">{VERB[n.type]}</span>{" "}
             <span className="whitespace-nowrap font-mono text-[12.5px] text-ink-faint">· {timeAgo(n.createdAtMs)}</span>
           </p>
-          {n.preview ? <p className="mt-0.5 truncate text-[14px] text-ink-soft">{n.preview}</p> : null}
+          {preview ? <p className="mt-0.5 truncate text-[14px] text-ink-soft">{preview}</p> : null}
         </div>
       </Link>
     </li>
