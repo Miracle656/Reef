@@ -101,6 +101,34 @@ export const MOCK_POSTS: MockPost[] = [
     likes: 29,
     createdAt: Date.now() - 172_800_000,
   },
+  // replies (threaded under posts via replyTo)
+  {
+    id: 'r1',
+    author: MOCK_AUTHORS['amakacodes']!,
+    text: 'This is huge 🙌 zkLogin really is the onboarding unlock we needed.',
+    media: [],
+    likes: 8,
+    createdAt: Date.now() - 3_300_000,
+    replyTo: '1',
+  },
+  {
+    id: 'r2',
+    author: MOCK_AUTHORS['web3ng']!,
+    text: 'Tried it on mobile — felt like a web2 app. No wallet popups at all.',
+    media: [],
+    likes: 5,
+    createdAt: Date.now() - 3_000_000,
+    replyTo: '1',
+  },
+  {
+    id: 'r3',
+    author: MOCK_AUTHORS['lagosbuild']!,
+    text: 'Exactly. Parallel posts = no global bottleneck. Sui was built for this.',
+    media: [],
+    likes: 12,
+    createdAt: Date.now() - 14_000_000,
+    replyTo: '3',
+  },
 ];
 
 // Fake order-book levels keyed by pair

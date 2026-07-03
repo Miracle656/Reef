@@ -30,6 +30,14 @@ interface ButtonProps extends PressableProps {
   children: React.ReactNode;
 }
 
+/** True when children are pure text (string/number, or an array of them) so
+ *  they must be wrapped in <Text> rather than dropped into a <View>. */
+function isText(children: React.ReactNode): boolean {
+  if (typeof children === 'string' || typeof children === 'number') return true;
+  if (Array.isArray(children)) return children.every((c) => typeof c === 'string' || typeof c === 'number');
+  return false;
+}
+
 export function Button({ variant = 'primary', size = 'md', children, disabled, style, ...props }: ButtonProps) {
   const t = useTheme();
 
@@ -76,7 +84,7 @@ export function Button({ variant = 'primary', size = 'md', children, disabled, s
       disabled={disabled}
       {...props}
     >
-      {typeof children === 'string' ? (
+      {isText(children) ? (
         <Text style={{ color: textColor, fontSize, fontWeight: '600' }}>{children}</Text>
       ) : (
         <View style={styles.btnInner}>{children}</View>

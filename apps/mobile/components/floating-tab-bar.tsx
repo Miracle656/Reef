@@ -64,7 +64,9 @@ export function FloatingTabBar() {
   const isDark   = scheme === 'dark';
   const compAnim = useRef(new Animated.Value(1)).current;
 
-  const visible = pathname === '/' || VISIBLE_PREFIXES.some((p) => pathname.startsWith(p));
+  // Hide on full-screen detail routes that own their own bottom bar (chat thread).
+  const onChatThread = pathname.startsWith('/messages/');
+  const visible = !onChatThread && (pathname === '/' || VISIBLE_PREFIXES.some((p) => pathname.startsWith(p)));
   if (!visible) return null;
 
   const onCompose = () => {
