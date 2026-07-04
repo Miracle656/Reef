@@ -457,11 +457,16 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       // that follows replaces it with fresh data.
       const cached = messaging.peekMessages?.(chatId) ?? [];
       if (cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: cached });
-      messaging.listMessages(chatId).then(({ messages }) => {
-        // Don't wipe a cache-rendered thread on a transient empty response
-        // (deletion isn't modeled on-chain yet, so empty-after-cached ≈ glitch).
-        if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages });
-      });
+      messaging
+        .listMessages(chatId)
+        .then(({ messages }) => {
+          // Don't wipe a cache-rendered thread on a transient empty response
+          // (deletion isn't modeled on-chain yet, so empty-after-cached ≈ glitch).
+          if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages });
+        })
+        .catch(() => {
+          /* keep the cached render — the poll retries */
+        });
     },
     [],
   );

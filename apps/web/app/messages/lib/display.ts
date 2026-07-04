@@ -1,9 +1,14 @@
 import type { Chat, ChatUser, Message } from "./types";
 
+/** Address equality — Sui addresses are hex, so compare case-insensitively. */
+export function sameId(a: string | undefined, b: string | undefined): boolean {
+  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+}
+
 /** The other participant in a direct chat (relative to me). */
 export function peerOf(chat: Chat, meId: string | undefined): ChatUser | undefined {
   if (chat.type !== "direct") return undefined;
-  return chat.participants.find((p) => p.id !== meId) ?? chat.participants[0];
+  return chat.participants.find((p) => !sameId(p.id, meId)) ?? chat.participants[0];
 }
 
 /** Display name for a chat row / header. */
@@ -25,7 +30,7 @@ export function previewOf(chat: Chat, meId: string | undefined): string {
   const m = chat.lastMessage;
   if (!m) return "No messages yet";
   if (m.isDeleted) return "Message deleted";
-  const mine = m.senderId === meId;
+  const mine = sameId(m.senderId, meId);
   const who = mine ? "You: " : chat.type === "group" ? `${m.sender?.username ?? ""}: ` : "";
   const body = bodyPreview(m);
   return `${who}${body}`;

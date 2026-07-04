@@ -48,6 +48,10 @@ interface Envelope {
   v: 1;
   type: MessageType;
   content: string;
+  /** Sender's social (zkLogin) address. The relayer only sees the per-device
+   *  delegate key, and delegates rotate (new browser, cleared storage) — so
+   *  authorship must ride inside the encrypted payload to survive that. */
+  from?: string;
   replyToId?: string;
   mentionIds?: string[];
   fileUrl?: string;
@@ -60,9 +64,10 @@ interface Envelope {
   clientId?: string;
 }
 
-function encodeEnvelope(input: SendMessageInput): string {
+function encodeEnvelope(input: SendMessageInput, from: string): string {
   const env: Envelope = {
     v: 1,
+    from,
     type: input.type ?? "text",
     content: input.content,
     replyToId: input.replyToId,
@@ -106,7 +111,8 @@ function toMessage(chatId: string, dm: DecodedSdkMessage): Message {
   return {
     id: dm.messageId,
     chatId,
-    senderId: dm.senderAddress,
+    // Envelope authorship beats the delegate address the relayer reports.
+    senderId: env.from ?? dm.senderAddress,
     type: env.type ?? "text",
     content: dm.isDeleted ? "" : env.content ?? dm.text,
     replyToId: env.replyToId,
@@ -186,7 +192,8 @@ function rememberLastMsg(me: string, uuid: string, m: Message): void {
 const MSG_CACHE_MAX = 50;
 
 function msgCacheKey(me: string, uuid: string): string {
-  return `reef:msg-cache:v1:${me.toLowerCase()}:${uuid}`;
+  // v2: v1 could pin delegate-misattributed senderIds; drop it and re-fill.
+  return `reef:msg-cache:v2:${me.toLowerCase()}:${uuid}`;
 }
 
 function readMsgCache(me: string, uuid: string): Message[] {
@@ -351,7 +358,11 @@ async function ensureDelegateMembership(rt: MessagingRuntime, groupId: string): 
  *  - otherwise (group) → the raw address (best-effort until we map more)
  */
 function resolveSenderId(rt: MessagingRuntime, group: StoredGroup | undefined, sender: string): string {
-  if (sender.toLowerCase() === rt.delegateAddress.toLowerCase()) return rt.me.id;
+  const s = sender.toLowerCase();
+  // Already a social address (envelope `from`, or a prior resolution) — keep it.
+  if (s === rt.me.id.toLowerCase()) return rt.me.id;
+  if (group?.participantIds.some((p) => p.toLowerCase() === s)) return sender;
+  if (s === rt.delegateAddress.toLowerCase()) return rt.me.id;
   if (group && group.type === "direct") {
     const other = group.participantIds.find((p) => p.toLowerCase() !== rt.me.id.toLowerCase());
     if (other) return other;
@@ -832,7 +843,7 @@ export class SuiMessaging implements Messaging {
 
   async sendMessage(input: SendMessageInput): Promise<Message> {
     const rt = requireRuntime();
-    const text = encodeEnvelope(input);
+    const text = encodeEnvelope(input, this.me().id);
     // The relayer syncs on-chain membership with a lag; retry through the brief
     // "not a member" window right after joining a group.
     let messageId = "";

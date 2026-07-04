@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
-import { chatAvatar, chatName, peerOf } from "../lib/display";
+import { chatAvatar, chatName, peerOf, sameId } from "../lib/display";
 import { dayLabel } from "../lib/format";
 import type { Chat, Message } from "../lib/types";
 import { MessageBubble, type ReplyPreview } from "./message-bubble";
@@ -115,7 +115,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
     ? chat.type === "group" ? `${typing.join(", ")} typing…` : "typing…"
     : chat.type === "group" ? `${chat.participants.length} members` : peer?.username ? `@${peer.username}` : "";
 
-  const replyName = replyTo ? (replyTo.senderId === me?.id ? "yourself" : replyTo.sender?.displayName || replyTo.sender?.username || "") : undefined;
+  const replyName = replyTo ? (sameId(replyTo.senderId, me?.id) ? "yourself" : replyTo.sender?.displayName || replyTo.sender?.username || "") : undefined;
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
@@ -189,7 +189,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
       {actionMsg ? (
         <MessageActions
           message={actionMsg}
-          mine={actionMsg.senderId === me?.id}
+          mine={sameId(actionMsg.senderId, me?.id)}
           onReply={(m) => { setReplyTo(m); setEditing(null); }}
           onForward={(m) => setForwardMsg(m)}
           onEdit={(m) => { setEditing(m); setReplyTo(null); }}
@@ -274,7 +274,7 @@ function renderRuns(
       );
       lastDay = day;
     }
-    const mine = m.senderId === meId;
+    const mine = sameId(m.senderId, meId);
     const prev = messages[i - 1];
     const next = messages[i + 1];
     const sameAsPrev = prev && prev.senderId === m.senderId && prev.createdAt.slice(0, 10) === day;
@@ -301,7 +301,7 @@ function resolveReply(m: Message, byId: Map<string, Message>, meId: string | und
   if (!m.replyToId) return undefined;
   const t = byId.get(m.replyToId);
   if (!t) return { name: "", text: "Original message" };
-  const name = t.senderId === meId ? "You" : t.sender?.displayName || t.sender?.username || "";
+  const name = sameId(t.senderId, meId) ? "You" : t.sender?.displayName || t.sender?.username || "";
   const text = t.isDeleted ? "Message deleted" : t.content || (t.type === "image" ? "Photo" : t.type === "file" ? "File" : "media");
   return { name, text };
 }
