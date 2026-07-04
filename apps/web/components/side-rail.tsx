@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
+import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
 import { ComposeModal } from "./compose-modal";
 import { Avatar } from "./ui";
@@ -58,6 +59,28 @@ export function useUnreadNotifs(address?: string): number {
   return q.data.filter((n) => n.createdAtMs > seen).length;
 }
 
+/** Unread chats = indexer message-pings newer than the last time the user was
+ *  on /messages (`reef:msgs-seen`, stamped by the messages page). Content-free:
+ *  the ping only says "this chat has something new". */
+export function useUnreadMessages(address?: string): number {
+  const q = useQuery({
+    queryKey: ["msg-pings", address],
+    queryFn: () => trpc.messagesSince.query({ address: address! }),
+    enabled: Boolean(address),
+    refetchInterval: 30_000,
+  });
+  // Re-render when the messages page stamps the watermark in this tab.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener(MSGS_SEEN_EVENT, bump);
+    return () => window.removeEventListener(MSGS_SEEN_EVENT, bump);
+  }, []);
+  if (!address || !q.data) return 0;
+  const seen = readMsgsSeen(address);
+  return q.data.filter((p) => p.at > seen).length;
+}
+
 function useNav() {
   const account = useSocialAccount();
   const pathname = usePathname();
@@ -67,13 +90,14 @@ function useNav() {
     enabled: Boolean(account),
   });
   const unread = useUnreadNotifs(account?.address);
+  const msgUnread = useUnreadMessages(account?.address);
   const profileHref = profile.data ? `/u/${profile.data.handle}` : "/onboarding";
   const items: Item[] = [
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
     { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
     { href: "/notifications", label: "Notifications", active: pathname.startsWith("/notifications"), icon: <BellIcon />, badge: unread },
-    { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon /> },
+    { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon />, badge: msgUnread },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
     { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
   ];

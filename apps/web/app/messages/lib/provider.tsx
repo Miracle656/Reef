@@ -25,6 +25,7 @@ import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 import { useGasless } from "@/lib/gasless";
+import { markMsgsSeen } from "@/lib/msg-seen";
 import { getDelegateKeypair } from "./messaging-identity";
 import { createReefMessagingClient } from "./messaging-client";
 import { messagingEnv, isMessagingConfigured } from "./sui-config";
@@ -382,6 +383,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!me) return;
     messaging.setCurrentUser(me);
+    markMsgsSeen(me.id); // on /messages now — quiet the navbar badge
     void refreshChats();
     // Re-discover periodically so chats someone else just started with us
     // surface without a manual refresh (GraphQL membership indexing lags).
@@ -396,6 +398,9 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
         case "message":
           dispatch({ t: "ADD_MESSAGE", message: e.message, isOwn: e.isOwn, mentionsMe: e.mentionsMe, activeChatId: activeRef.current });
           if (!e.isOwn && activeRef.current === e.message.chatId) void messaging.markRead(e.message.chatId);
+          // This provider only lives on /messages — the user is watching, so
+          // arrivals shouldn't light the navbar badge.
+          if (meRef.current) markMsgsSeen(meRef.current.id);
           break;
         case "chat_created":
           dispatch({ t: "ADD_CHAT", chat: e.chat });
@@ -452,6 +457,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       dispatch({ t: "SET_ACTIVE", chatId });
       if (!chatId) return;
       dispatch({ t: "CLEAR_UNREAD", chatId });
+      if (meRef.current) markMsgsSeen(meRef.current.id);
       void messaging.markRead(chatId);
       // Instant open: render the locally-cached thread now; the network fetch
       // that follows replaces it with fresh data.
@@ -504,6 +510,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     try {
       const saved = await messaging.sendMessage({ ...input, clientId });
       dispatch({ t: "RECONCILE", chatId: input.chatId, clientId, message: { ...saved, sender: optimistic.sender } });
+      // Content-free "something new" ping so recipients' navbar badges light
+      // up even when they're not on /messages. Best-effort.
+      const to = (chat?.participants ?? [])
+        .map((p) => p.id)
+        .filter((id) => id.startsWith("0x") && id.toLowerCase() !== meNow.id.toLowerCase())
+        .slice(0, 50);
+      if (to.length) void trpc.messagePing.mutate({ chatId: input.chatId, to }).catch(() => {});
     } catch {
       dispatch({ t: "MARK_FAILED", chatId: input.chatId, clientId });
     }

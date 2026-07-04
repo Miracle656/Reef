@@ -384,6 +384,46 @@ export const appRouter = router({
       }
       return out;
     }),
+
+  // --- new-message pings (ephemeral, in-memory) ---
+  // Powers the navbar's unread-messages badge OUTSIDE /messages, where the
+  // (E2E-encrypted) relayer poll isn't running. Senders drop a content-free
+  // ping per recipient — just "chat X has something new at time T". Same
+  // privacy posture as typing presence: never the DB, never the chain.
+  messagePing: publicProcedure
+    .input(
+      z.object({
+        chatId: z.string().min(1).max(128),
+        to: z.array(SuiAddress).min(1).max(50),
+      }),
+    )
+    .mutation(({ input }) => {
+      pruneMsgPings();
+      const now = Date.now();
+      for (const addr of input.to) {
+        const key = addr.toLowerCase();
+        let pings = msgPingsByUser.get(key);
+        if (!pings) {
+          if (msgPingsByUser.size >= MSG_PING_MAX_USERS) return { ok: false };
+          pings = new Map();
+          msgPingsByUser.set(key, pings);
+        }
+        if (!pings.has(input.chatId) && pings.size >= MSG_PING_MAX_PER_USER) continue;
+        pings.set(input.chatId, now);
+      }
+      return { ok: true };
+    }),
+
+  /** Chats with something new for `address` — the client filters against its
+   *  own "last time I looked at messages" watermark. */
+  messagesSince: publicProcedure
+    .input(z.object({ address: SuiAddress }))
+    .query(({ input }) => {
+      pruneMsgPings();
+      const pings = msgPingsByUser.get(input.address.toLowerCase());
+      if (!pings?.size) return [] as { chatId: string; at: number }[];
+      return [...pings.entries()].map(([chatId, at]) => ({ chatId, at }));
+    }),
 });
 
 const TYPING_TTL_MS = 6_000;
@@ -396,6 +436,21 @@ function pruneTyping() {
   for (const [chatId, chat] of typingByChat) {
     for (const [addr, v] of chat) if (v.ts < cutoff) chat.delete(addr);
     if (!chat.size) typingByChat.delete(chatId);
+  }
+}
+
+const MSG_PING_TTL_MS = 24 * 3_600_000;
+const MSG_PING_MAX_USERS = 20_000;
+const MSG_PING_MAX_PER_USER = 200;
+/** recipient (lowercased) → chatId → last ping ms. In-memory: a restart just
+ *  means a quiet badge until the next message — never lost messages. */
+const msgPingsByUser = new Map<string, Map<string, number>>();
+
+function pruneMsgPings() {
+  const cutoff = Date.now() - MSG_PING_TTL_MS;
+  for (const [addr, pings] of msgPingsByUser) {
+    for (const [chatId, at] of pings) if (at < cutoff) pings.delete(chatId);
+    if (!pings.size) msgPingsByUser.delete(addr);
   }
 }
 
