@@ -20,7 +20,15 @@ function RegisterEnokiWallets() {
     if (!enokiConfig.enokiApiKey || !enokiConfig.googleClientId) return;
     const { unregister } = registerEnokiWallets({
       apiKey: enokiConfig.enokiApiKey,
-      providers: { google: { clientId: enokiConfig.googleClientId } },
+      providers: {
+        google: {
+          clientId: enokiConfig.googleClientId,
+          // Pin the OAuth redirect to the site root. Enoki otherwise uses the
+          // page you signed in FROM, and Google rejects any URL not registered
+          // in the Cloud Console (works on "/", 400s on "/messages", …).
+          redirectUrl: `${window.location.origin}/`,
+        },
+      },
       client,
       network,
     });
