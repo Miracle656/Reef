@@ -44,6 +44,14 @@ export interface SendMessageInput {
   viewOnce?: boolean;
   mentionIds?: string[];
   audienceIds?: string[];
+  /** control-message payload (type reaction / pin / poll-vote) */
+  targetId?: string;
+  remove?: boolean;
+  pinned?: boolean;
+  optionIndex?: number;
+  /** poll creation (type "poll"): option texts + choice mode */
+  pollOptions?: string[];
+  allowMultiple?: boolean;
   /** client-generated id for optimistic reconciliation */
   clientId?: string;
 }

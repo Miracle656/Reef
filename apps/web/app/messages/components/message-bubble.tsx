@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Avatar } from "@/components/ui";
 import { AnimatedEmoji, renderEmoji, isOnlyEmoji } from "@/lib/emoji";
 import { timeShort } from "../lib/format";
+import { downloadMedia, useMediaUrl } from "../lib/media-crypto";
 import type { Message } from "../lib/types";
 import { PollView } from "./poll-view";
 import { CheckIcon, CheckCheckIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, MoreIcon, PaperclipIcon, ReplyIcon } from "./icons";
@@ -156,34 +157,70 @@ function Content({
       </button>
     );
   }
-  if (m.type === "voice" && m.fileUrl) {
-    return (
-      <span className="flex items-center gap-2">
-        <MicIcon className="h-4 w-4" />
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio controls src={m.fileUrl} className="h-9 max-w-[220px]" />
-      </span>
-    );
-  }
+  if (m.type === "voice" && m.fileUrl) return <VoiceClip message={m} />;
   if (m.type === "poll" && m.poll) return <PollView message={m} mine={mine} onVote={(i) => onVotePoll(m.id, i)} />;
-  if (m.type === "image" && m.fileUrl) {
-    return (
-      <span className="block">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={m.fileUrl} alt={m.fileName ?? "image"} onClick={() => onOpenImage(m.fileUrl!)} className="max-h-72 w-full cursor-zoom-in rounded-[12px] object-cover" />
-        {m.content ? <span className="mt-1 block whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span> : null}
-      </span>
-    );
-  }
+  if (m.type === "image" && m.fileUrl) return <ChatImage message={m} onOpenImage={onOpenImage} />;
   if (m.type === "file" && m.fileUrl) {
     return (
-      <a href={m.fileUrl} download={m.fileName} className="flex items-center gap-2 underline"><PaperclipIcon className="h-4 w-4 shrink-0" /> <span className="truncate">{m.fileName ?? "File"}</span></a>
+      <button
+        onClick={() => void downloadMedia(m.fileUrl!, m.fileName, m.mimeType)}
+        className="flex items-center gap-2 underline"
+      >
+        <PaperclipIcon className="h-4 w-4 shrink-0" /> <span className="truncate">{m.fileName ?? "File"}</span>
+      </button>
     );
   }
-  if (m.type === "location") return <span className="flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" /> {m.content || "Shared a location"}</span>;
+  if (m.type === "location") {
+    const isCoords = /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(m.content);
+    return isCoords ? (
+      <a
+        href={`https://www.google.com/maps?q=${encodeURIComponent(m.content)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 underline"
+      >
+        <MapPinIcon className="h-4 w-4" /> Shared location · open in Maps
+      </a>
+    ) : (
+      <span className="flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" /> {m.content || "Shared a location"}</span>
+    );
+  }
   // Emoji-only messages render big (jumbo), like Telegram.
   if (isOnlyEmoji(m.content)) return <span className="flex flex-wrap gap-0.5 leading-none">{renderEmoji(m.content, 44)}</span>;
   return <span className="whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span>;
+}
+
+/** Chat image — decrypts reef-enc:// media to an object URL before rendering. */
+function ChatImage({ message: m, onOpenImage }: { message: Message; onOpenImage: (url: string) => void }) {
+  const url = useMediaUrl(m.fileUrl, m.mimeType);
+  return (
+    <span className="block">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={m.fileName ?? "image"} onClick={() => onOpenImage(url)} className="max-h-72 w-full cursor-zoom-in rounded-[12px] object-cover" />
+      ) : (
+        <span className="flex h-40 w-56 items-center justify-center rounded-[12px] bg-ink/10 text-xs opacity-70">
+          <ImageIcon className="mr-1.5 h-4 w-4" /> decrypting…
+        </span>
+      )}
+      {m.content ? <span className="mt-1 block whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span> : null}
+    </span>
+  );
+}
+
+function VoiceClip({ message: m }: { message: Message }) {
+  const url = useMediaUrl(m.fileUrl, m.mimeType);
+  return (
+    <span className="flex items-center gap-2">
+      <MicIcon className="h-4 w-4" />
+      {url ? (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio controls src={url} className="h-9 max-w-[220px]" />
+      ) : (
+        <span className="text-xs opacity-70">decrypting…</span>
+      )}
+    </span>
+  );
 }
 
 function Whisper({ message: m, mine }: { message: Message; mine: boolean }) {

@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
+import { resolveMediaUrl } from "../lib/media-crypto";
 import { chatAvatar, chatName, peerOf, sameId } from "../lib/display";
 import { dayLabel } from "../lib/format";
 import type { Chat, Message } from "../lib/types";
@@ -166,7 +167,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
             onToggleReaction: (m, e) => void toggleReaction(m, e),
             onJumpToReply: jumpTo,
             onVotePoll: (id, i) => void votePoll(id, i),
-            onViewOnce: (m) => { if (m.fileUrl) setViewerUrl(m.fileUrl); void markViewOnce(m); },
+            onViewOnce: (m) => { if (m.fileUrl) void resolveMediaUrl(m.fileUrl, m.mimeType).then(setViewerUrl).catch(() => {}); void markViewOnce(m); },
           })
         )}
         {typing.length ? <TypingDots /> : null}

@@ -19,6 +19,7 @@
 import { TESTNET_SUI_STACK_MESSAGING_PACKAGE_CONFIG, messagingPermissionTypes } from "@mysten/sui-stack-messaging";
 import { TESTNET_SUI_GROUPS_PACKAGE_CONFIG, permissionTypes } from "@mysten/sui-groups";
 import { requireRuntime, getMessagingRuntime, type MessagingRuntime } from "./runtime";
+import { CONTROL_TYPES } from "./types";
 import type {
   Chat,
   Me,
@@ -27,6 +28,7 @@ import type {
   Participant,
   StatusGroup,
 } from "./types";
+import { encryptAndUpload } from "./media-crypto";
 import type {
   ChosenConfig,
   CreateGroupInput,
@@ -61,6 +63,14 @@ interface Envelope {
   isForwarded?: boolean;
   isWhisper?: boolean;
   viewOnce?: boolean;
+  /** control payload (type reaction / pin / poll-vote) */
+  targetId?: string;
+  remove?: boolean;
+  pinned?: boolean;
+  optionIndex?: number;
+  /** poll creation (type "poll") */
+  pollOptions?: string[];
+  allowMultiple?: boolean;
   clientId?: string;
 }
 
@@ -79,9 +89,27 @@ function encodeEnvelope(input: SendMessageInput, from: string): string {
     isForwarded: input.isForwarded,
     isWhisper: input.isWhisper,
     viewOnce: input.viewOnce,
+    targetId: input.targetId,
+    remove: input.remove,
+    pinned: input.pinned,
+    optionIndex: input.optionIndex,
+    pollOptions: input.pollOptions,
+    allowMultiple: input.allowMultiple,
     clientId: input.clientId,
   };
   return JSON.stringify(env);
+}
+
+/** Fresh PollState for a just-materialized poll message (votes fold in later). */
+function pollFrom(id: string, question: string, options: string[] | undefined, allowMultiple: boolean | undefined): Message["poll"] {
+  return {
+    id,
+    question,
+    allowMultiple: Boolean(allowMultiple),
+    options: (options ?? []).map((text) => ({ text, votes: 0 })),
+    totalVoters: 0,
+    myVotes: [],
+  };
 }
 
 function decodeEnvelope(text: string): Partial<Envelope> {
@@ -124,6 +152,11 @@ function toMessage(chatId: string, dm: DecodedSdkMessage): Message {
     isForwarded: env.isForwarded,
     isWhisper: env.isWhisper,
     viewOnce: env.viewOnce,
+    targetId: env.targetId,
+    remove: env.remove,
+    pinned: env.pinned,
+    optionIndex: env.optionIndex,
+    poll: env.type === "poll" ? pollFrom(dm.messageId, env.content ?? "", env.pollOptions, env.allowMultiple) : undefined,
     isDeleted: dm.isDeleted,
     isEdited: dm.isEdited,
     status: "delivered",
@@ -181,6 +214,7 @@ function upsertGroup(me: string, g: StoredGroup): void {
 }
 
 function rememberLastMsg(me: string, uuid: string, m: Message): void {
+  if (CONTROL_TYPES.has(m.type)) return; // reactions/pins/votes aren't previews
   const g = readStore(me).find((x) => x.uuid === uuid);
   if (!g) return;
   if (g.lastMsg && g.lastMsg.at >= m.createdAt) return;
@@ -830,7 +864,8 @@ export class SuiMessaging implements Messaging {
     // First (latest) page → refresh the instant-open cache + list preview.
     if (!cursor && msgs.length) {
       writeMsgCache(this.me().id, chatId, msgs);
-      rememberLastMsg(this.me().id, chatId, msgs[msgs.length - 1]!);
+      const lastVisible = [...msgs].reverse().find((m) => !CONTROL_TYPES.has(m.type));
+      if (lastVisible) rememberLastMsg(this.me().id, chatId, lastVisible);
     }
     const minOrder = raw.length ? Math.min(...raw.map((m) => m.order)) : 0;
     return { messages: msgs, nextCursor: res.hasNext ? String(minOrder) : null };
@@ -872,6 +907,11 @@ export class SuiMessaging implements Messaging {
       isForwarded: input.isForwarded,
       isWhisper: input.isWhisper,
       viewOnce: input.viewOnce,
+      targetId: input.targetId,
+      remove: input.remove,
+      pinned: input.pinned,
+      optionIndex: input.optionIndex,
+      poll: input.type === "poll" ? pollFrom(messageId, input.content, input.pollOptions, input.allowMultiple) : undefined,
       status: "sent",
       clientId: input.clientId,
       createdAt: new Date().toISOString(),
@@ -930,7 +970,8 @@ export class SuiMessaging implements Messaging {
           }
           if (fresh.length) {
             appendMsgCache(me.id, g.uuid, fresh);
-            rememberLastMsg(me.id, g.uuid, fresh[fresh.length - 1]!);
+            const lastVisible = [...fresh].reverse().find((m) => !CONTROL_TYPES.has(m.type));
+            if (lastVisible) rememberLastMsg(me.id, g.uuid, lastVisible);
           }
         } catch (err) {
           // The relayer answers a non-member read with 403 Forbidden; the SDK
@@ -1026,8 +1067,9 @@ export class SuiMessaging implements Messaging {
   }
 
   // ── media (Walrus handled inside the SDK when attachments configured) ─────────
-  async uploadMedia(_file: File): Promise<UploadResult> {
-    return TODO("uploadMedia");
+  async uploadMedia(file: File): Promise<UploadResult> {
+    // E2E: encrypted on-device, ciphertext to Walrus, key rides in the envelope.
+    return encryptAndUpload(file);
   }
 
   // ── SECONDARY: safe no-ops so the UI doesn't crash (not yet persisted) ────────
@@ -1069,7 +1111,9 @@ export class SuiMessaging implements Messaging {
   lockVault(): void {}
 
   // ── UNSUPPORTED yet: throw (feature needs a design pass) ──────────────────────
-  async createPoll(_c: string, _q: string, _o: string[], _m: boolean): Promise<Message> { return TODO("createPoll"); }
+  async createPoll(chatId: string, question: string, options: string[], allowMultiple: boolean): Promise<Message> {
+    return this.sendMessage({ chatId, type: "poll", content: question, pollOptions: options, allowMultiple });
+  }
   async vaultSetup(_p: string, _c?: string): Promise<void> { TODO("vaultSetup"); }
   async vaultUnlock(_p: string): Promise<boolean> { return TODO("vaultUnlock"); }
   async setChatVaulted(_c: string, _v: boolean): Promise<void> { TODO("setChatVaulted"); }

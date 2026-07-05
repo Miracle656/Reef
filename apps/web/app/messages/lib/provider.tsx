@@ -31,6 +31,8 @@ import { createReefMessagingClient } from "./messaging-client";
 import { messagingEnv, isMessagingConfigured } from "./sui-config";
 import { setMessagingRuntime } from "./runtime";
 import { markAccepted, requestPeerOf } from "./requests";
+import { applyControl, applyVote, markViewedOnce } from "./control";
+import { CONTROL_TYPES } from "./types";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
 
 // ── state ──────────────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ type Action =
   | { t: "ONLINE"; ids: string[] }
   | { t: "PIN"; chatId: string; messageId: string; isPinned: boolean }
   | { t: "POLL"; chatId: string; messageId: string; poll: NonNullable<Message["poll"]> }
+  | { t: "POLL_VOTE"; chatId: string; pollId: string; userId: string; optionIndex: number; meId: string }
   | { t: "VIEWONCE"; chatId: string; messageId: string }
   | { t: "ADD_CHATS"; chats: Chat[] }
   | { t: "CHOSEN_SET"; game: ChosenState }
@@ -220,6 +223,18 @@ function reducer(state: State, a: Action): State {
         messages: {
           ...state.messages,
           [a.chatId]: (state.messages[a.chatId] ?? []).map((m) => (m.id === a.messageId ? { ...m, poll: a.poll } : m)),
+        },
+      };
+    case "POLL_VOTE":
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [a.chatId]: (state.messages[a.chatId] ?? []).map((m) => {
+            if (m.id !== a.pollId || !m.poll) return m;
+            const poll = applyVote(m.poll, a.userId, a.optionIndex);
+            return { ...m, poll: { ...poll, myVotes: poll.voters?.[a.meId] ?? [] } };
+          }),
         },
       };
     case "VIEWONCE":
@@ -373,6 +388,15 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   meRef.current = me;
   const chatsRef = useRef<Chat[]>([]);
   chatsRef.current = state.chats;
+  const messagesRef = useRef<State["messages"]>({});
+  messagesRef.current = state.messages;
+  /** Which loaded chat holds this message (pin/save/vote act on the open chat). */
+  const findChatOf = useCallback((messageId: string): string | null => {
+    for (const [chatId, list] of Object.entries(messagesRef.current)) {
+      if (list.some((m) => m.id === messageId)) return chatId;
+    }
+    return null;
+  }, []);
 
   const refreshChats = useCallback(async () => {
     const chats = await messaging.listChats();
@@ -395,13 +419,26 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsub = messaging.subscribe((e) => {
       switch (e.type) {
-        case "message":
-          dispatch({ t: "ADD_MESSAGE", message: e.message, isOwn: e.isOwn, mentionsMe: e.mentionsMe, activeChatId: activeRef.current });
-          if (!e.isOwn && activeRef.current === e.message.chatId) void messaging.markRead(e.message.chatId);
+        case "message": {
+          const m = e.message;
+          // Control messages mutate their target instead of rendering.
+          if (CONTROL_TYPES.has(m.type)) {
+            if (m.type === "reaction" && m.targetId) {
+              dispatch({ t: "REACTION", chatId: m.chatId, messageId: m.targetId, userId: m.senderId, emoji: m.content, add: !m.remove });
+            } else if (m.type === "pin" && m.targetId) {
+              dispatch({ t: "PIN", chatId: m.chatId, messageId: m.targetId, isPinned: Boolean(m.pinned) });
+            } else if (m.type === "poll-vote" && m.targetId && m.optionIndex != null) {
+              dispatch({ t: "POLL_VOTE", chatId: m.chatId, pollId: m.targetId, userId: m.senderId, optionIndex: m.optionIndex, meId: meRef.current?.id ?? "" });
+            }
+            break;
+          }
+          dispatch({ t: "ADD_MESSAGE", message: m, isOwn: e.isOwn, mentionsMe: e.mentionsMe, activeChatId: activeRef.current });
+          if (!e.isOwn && activeRef.current === m.chatId) void messaging.markRead(m.chatId);
           // This provider only lives on /messages — the user is watching, so
           // arrivals shouldn't light the navbar badge.
           if (meRef.current) markMsgsSeen(meRef.current.id);
           break;
+        }
         case "chat_created":
           dispatch({ t: "ADD_CHAT", chat: e.chat });
           break;
@@ -461,14 +498,15 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       void messaging.markRead(chatId);
       // Instant open: render the locally-cached thread now; the network fetch
       // that follows replaces it with fresh data.
+      const meId = meRef.current?.id ?? "";
       const cached = messaging.peekMessages?.(chatId) ?? [];
-      if (cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: cached });
+      if (cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: applyControl(cached, meId) });
       messaging
         .listMessages(chatId)
         .then(({ messages }) => {
           // Don't wipe a cache-rendered thread on a transient empty response
           // (deletion isn't modeled on-chain yet, so empty-after-cached ≈ glitch).
-          if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages });
+          if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: applyControl(messages, meId) });
         })
         .catch(() => {
           /* keep the cached render — the poll retries */
@@ -559,9 +597,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   const deleteMessage = useCallback((messageId: string) => messaging.deleteMessage(messageId), []);
   const toggleReaction = useCallback(async (message: Message, emoji: string) => {
     const meId = meRef.current?.id;
+    if (!meId) return;
     const mine = (message.reactions ?? []).some((r) => r.userId === meId && r.emoji === emoji);
-    if (mine) await messaging.removeReaction(message.id, emoji);
-    else await messaging.addReaction(message.id, emoji);
+    // Optimistic; the reaction travels as a hidden control message.
+    dispatch({ t: "REACTION", chatId: message.chatId, messageId: message.id, userId: meId, emoji, add: !mine });
+    await messaging
+      .sendMessage({ chatId: message.chatId, type: "reaction", content: emoji, targetId: message.id, remove: mine })
+      .catch(() => dispatch({ t: "REACTION", chatId: message.chatId, messageId: message.id, userId: meId, emoji, add: mine }));
   }, []);
   const forwardMessage = useCallback(async (targetChatId: string, message: Message) => {
     await messaging.sendMessage({
@@ -607,18 +649,70 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     await messaging.setDisappearing(chatId, seconds);
     dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, disappearingSeconds: seconds } });
   }, []);
-  const pinMessage = useCallback((messageId: string, pinned: boolean) => messaging.pinMessage(messageId, pinned), []);
-  const listPinned = useCallback((chatId: string) => messaging.listPinned(chatId), []);
-  const saveMessage = useCallback((messageId: string) => messaging.saveMessage(messageId), []);
-  const unsaveMessage = useCallback((messageId: string) => messaging.unsaveMessage(messageId), []);
-  const listSaved = useCallback(() => messaging.listSaved(), []);
+  const pinMessage = useCallback(
+    async (messageId: string, pinned: boolean) => {
+      const chatId = findChatOf(messageId);
+      if (!chatId) return;
+      dispatch({ t: "PIN", chatId, messageId, isPinned: pinned });
+      await messaging.sendMessage({ chatId, type: "pin", content: "", targetId: messageId, pinned }).catch(() => {});
+    },
+    [findChatOf],
+  );
+  const listPinned = useCallback(
+    (chatId: string) => Promise.resolve((messagesRef.current[chatId] ?? []).filter((m) => m.isPinned && !m.isDeleted)),
+    [],
+  );
+  // Saved messages are personal bookmarks — they live on this device only
+  // (the chat is E2E encrypted; there's no server-side home for them).
+  const savedKey = useCallback(() => `reef:msg-saved:v1:${(meRef.current?.id ?? "").toLowerCase()}`, []);
+  const readSaved = useCallback((): Message[] => {
+    try {
+      return JSON.parse(window.localStorage.getItem(savedKey()) ?? "[]") as Message[];
+    } catch {
+      return [];
+    }
+  }, [savedKey]);
+  const saveMessage = useCallback(
+    async (messageId: string) => {
+      const chatId = findChatOf(messageId);
+      const msg = chatId ? messagesRef.current[chatId]?.find((m) => m.id === messageId) : undefined;
+      if (!msg) return;
+      const cur = readSaved().filter((m) => m.id !== messageId);
+      try {
+        window.localStorage.setItem(savedKey(), JSON.stringify([{ ...msg, pending: false }, ...cur].slice(0, 200)));
+      } catch {
+        /* quota */
+      }
+    },
+    [findChatOf, readSaved, savedKey],
+  );
+  const unsaveMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        window.localStorage.setItem(savedKey(), JSON.stringify(readSaved().filter((m) => m.id !== messageId)));
+      } catch {
+        /* quota */
+      }
+    },
+    [readSaved, savedKey],
+  );
+  const listSaved = useCallback(() => Promise.resolve(readSaved()), [readSaved]);
   const createPoll = useCallback(async (chatId: string, question: string, options: string[], allowMultiple: boolean) => {
     const msg = await messaging.createPoll(chatId, question, options, allowMultiple);
     dispatch({ t: "ADD_MESSAGE", message: msg, isOwn: true, mentionsMe: false, activeChatId: activeRef.current });
   }, []);
-  const votePoll = useCallback((messageId: string, optionIndex: number) => messaging.votePoll(messageId, optionIndex), []);
+  const votePoll = useCallback(
+    async (messageId: string, optionIndex: number) => {
+      const meId = meRef.current?.id;
+      const chatId = findChatOf(messageId);
+      if (!meId || !chatId) return;
+      dispatch({ t: "POLL_VOTE", chatId, pollId: messageId, userId: meId, optionIndex, meId });
+      await messaging.sendMessage({ chatId, type: "poll-vote", content: "", targetId: messageId, optionIndex }).catch(() => {});
+    },
+    [findChatOf],
+  );
   const markViewOnce = useCallback(async (message: Message) => {
-    await messaging.markViewOnce(message.id);
+    if (meRef.current) markViewedOnce(meRef.current.id, message.id); // survives re-fetch
     dispatch({ t: "VIEWONCE", chatId: message.chatId, messageId: message.id });
   }, []);
   const vaultStatus = useCallback(() => messaging.vaultStatus(), []);
