@@ -124,8 +124,14 @@ export default function OnboardingPage() {
         ) : (
           <Card className="mt-5 space-y-4 p-5">
             <div className="flex items-center gap-4">
-              <button type="button" onClick={() => fileRef.current?.click()} className="shrink-0">
+              <button type="button" onClick={() => fileRef.current?.click()} className="relative shrink-0" aria-label="Upload profile picture">
                 <Avatar name={handle || "u"} src={avatarPreview} size={64} />
+                {/* plus badge — makes it obvious the circle is tappable */}
+                <span className="absolute -bottom-0.5 -right-0.5 grid h-6 w-6 place-items-center rounded-full bg-accent text-white ring-2 ring-[color:var(--surface)]">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </span>
               </button>
               <div className="text-sm text-ink-soft">
                 <button type="button" onClick={() => fileRef.current?.click()} className="font-medium text-accent">

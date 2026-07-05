@@ -14,12 +14,19 @@ import { shortAddr, timeAgo } from "@/lib/utils";
 
 type Notif = Awaited<ReturnType<typeof trpc.notifications.query>>[number];
 
-const VERB: Record<Notif["type"], string> = {
-  follow: "followed you",
-  like: "liked your post",
-  repost: "reposted your post",
-  reply: "replied to your post",
-};
+function verbFor(n: Notif): string {
+  const target = n.targetIsReply ? "comment" : "post";
+  switch (n.type) {
+    case "follow":
+      return "followed you";
+    case "like":
+      return `liked your ${target}`;
+    case "repost":
+      return `reposted your ${target}`;
+    case "reply":
+      return `replied to your ${target}`;
+  }
+}
 
 export default function NotificationsPage() {
   const account = useSocialAccount();
@@ -88,7 +95,7 @@ function NotifRow({ n }: { n: Notif }) {
         <div className="min-w-0 flex-1">
           <p className="text-[15px] leading-snug">
             <span className="font-bold">{name}</span>{" "}
-            <span className="text-ink-soft">{VERB[n.type]}</span>{" "}
+            <span className="text-ink-soft">{verbFor(n)}</span>{" "}
             <span className="whitespace-nowrap font-mono text-[12.5px] text-ink-faint">· {timeAgo(n.createdAtMs)}</span>
           </p>
           {preview ? <p className="mt-0.5 truncate text-[14px] text-ink-soft">{preview}</p> : null}

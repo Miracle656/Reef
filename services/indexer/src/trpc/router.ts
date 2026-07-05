@@ -247,10 +247,13 @@ export const appRouter = router({
       // My posts — replies + reactions target these.
       const myPosts = await ctx.prisma.post.findMany({
         where: { author: me, deleted: false },
-        select: { id: true, text: true },
+        select: { id: true, text: true, replyTo: true },
       });
       const myPostIds = myPosts.map((p) => p.id);
       const postText = new Map(myPosts.map((p) => [p.id, p.text]));
+      // Whether the acted-on post was itself a comment — clients word the
+      // notification "liked your comment" vs "liked your post" off this.
+      const isReply = new Map(myPosts.map((p) => [p.id, p.replyTo != null]));
 
       const [follows, replies, reactions] = await Promise.all([
         ctx.prisma.follow.findMany({
@@ -279,6 +282,7 @@ export const appRouter = router({
         actor: string;
         postId?: string;
         preview?: string;
+        targetIsReply?: boolean;
         createdAtMs: number;
       };
       const items: NotifItem[] = [
@@ -288,6 +292,7 @@ export const appRouter = router({
           actor: r.author,
           postId: r.id,
           preview: r.text.slice(0, 140),
+          targetIsReply: isReply.get(r.replyTo ?? "") ?? false,
           createdAtMs: Number(r.createdAtMs),
         })),
         ...reactions.map((r) => ({
@@ -295,6 +300,7 @@ export const appRouter = router({
           actor: r.reactor,
           postId: r.postId,
           preview: postText.get(r.postId)?.slice(0, 140),
+          targetIsReply: isReply.get(r.postId) ?? false,
           createdAtMs: Number(r.timestamp),
         })),
       ]
