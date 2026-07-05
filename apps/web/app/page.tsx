@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSocialAccount } from "@/lib/account";
 import { walrus } from "@umbra/core";
@@ -15,6 +16,7 @@ import { trpc } from "@/lib/trpc";
 
 export default function HomePage() {
   const account = useSocialAccount();
+  const [tab, setTab] = useState<"all" | "following">("all");
   const profile = useQuery({
     queryKey: ["profile-by-addr", account?.address],
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
@@ -30,8 +32,24 @@ export default function HomePage() {
       title="Home"
       header={
         <div className="flex gap-8 px-6">
-          <button className="border-b-[2.5px] border-accent pb-3 text-[15px] font-bold text-ink">For you</button>
-          <button className="border-b-[2.5px] border-transparent pb-3 text-[15px] font-medium text-ink-faint transition-colors hover:text-ink-soft">Following</button>
+          {(
+            [
+              ["all", "For you"],
+              ["following", "Following"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={
+                tab === key
+                  ? "border-b-[2.5px] border-accent pb-3 text-[15px] font-bold text-ink"
+                  : "border-b-[2.5px] border-transparent pb-3 text-[15px] font-medium text-ink-faint transition-colors hover:text-ink-soft"
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
       }
       right={profile.data ? <RightSidebar /> : undefined}
@@ -53,7 +71,7 @@ export default function HomePage() {
               <ComposeForm placeholder="What's happening on the reef?" />
             </div>
           </div>
-          <Feed />
+          <Feed scope={tab} />
         </>
       )}
     </AppShell>

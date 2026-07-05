@@ -6,11 +6,11 @@ import { trpc } from "@/lib/trpc";
 import { PostCard } from "./post-card";
 import { Spinner } from "./ui";
 
-export function Feed() {
+export function Feed({ scope = "all" }: { scope?: "all" | "following" }) {
   const account = useSocialAccount();
   const feed = useQuery({
-    queryKey: ["feed", account?.address],
-    queryFn: () => trpc.feed.query({ address: account!.address }),
+    queryKey: ["feed", scope, account?.address],
+    queryFn: () => trpc.feed.query({ address: account!.address, scope }),
     enabled: Boolean(account),
     refetchInterval: 20000,
   });
@@ -22,7 +22,11 @@ export function Feed() {
 
   const posts = feed.data ?? [];
   if (posts.length === 0)
-    return <p className="py-12 text-center text-sm text-ink-soft">Your feed is quiet. Follow people to fill it up.</p>;
+    return (
+      <p className="py-12 text-center text-sm text-ink-soft">
+        {scope === "following" ? "Your feed is quiet. Follow people to fill it up." : "Nothing on the reef yet — be the first to post."}
+      </p>
+    );
 
   return (
     <div>

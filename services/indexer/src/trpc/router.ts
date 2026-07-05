@@ -108,16 +108,28 @@ export const appRouter = router({
     return toPost(row, likeCount, replyCount);
   }),
 
-  // --- home feed: reverse-chron posts from followed accounts ---
+  // --- home feed: reverse-chron. "all" is the global firehose (For-you tab);
+  // "following" gates to followed accounts + self. Defaults to "following" so
+  // clients that don't send a scope keep their old behavior. ---
   feed: publicProcedure
-    .input(z.object({ address: SuiAddress, limit: z.number().int().min(1).max(100).default(30), beforeMs: z.number().int().optional() }))
+    .input(
+      z.object({
+        address: SuiAddress,
+        limit: z.number().int().min(1).max(100).default(30),
+        beforeMs: z.number().int().optional(),
+        scope: z.enum(["all", "following"]).default("following"),
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      const follows = await ctx.prisma.follow.findMany({ where: { follower: input.address }, select: { followee: true } });
-      // include the user's own posts alongside the accounts they follow
-      const authors = [...new Set([...follows.map((f) => f.followee), input.address])];
+      let authorFilter: { author?: { in: string[] } } = {};
+      if (input.scope === "following") {
+        const follows = await ctx.prisma.follow.findMany({ where: { follower: input.address }, select: { followee: true } });
+        // include the user's own posts alongside the accounts they follow
+        authorFilter = { author: { in: [...new Set([...follows.map((f) => f.followee), input.address])] } };
+      }
       const rows = await ctx.prisma.post.findMany({
         where: {
-          author: { in: authors },
+          ...authorFilter,
           deleted: false,
           replyTo: null,
           ...(input.beforeMs ? { createdAtMs: { lt: BigInt(input.beforeMs) } } : {}),
