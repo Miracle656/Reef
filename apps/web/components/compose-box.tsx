@@ -144,10 +144,19 @@ export function ComposeForm({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={files.length >= MAX_IMAGES}
-            className="text-sm font-medium text-ink-soft hover:text-accent disabled:opacity-40"
+            title="Add image"
+            aria-label="Add image"
+            className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted hover:text-accent disabled:opacity-40"
           >
-            + Image{files.length > 0 ? ` (${files.length}/${MAX_IMAGES})` : ""}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="5" width="18" height="14" rx="3" />
+              <circle cx="9" cy="10" r="1.6" />
+              <path d="M5 17l4.2-4.6 3.3 3.6 2.3-2.5L21 18" />
+            </svg>
           </button>
+          {files.length > 0 ? (
+            <span className="text-xs text-ink-faint">{files.length}/{MAX_IMAGES}</span>
+          ) : null}
           <input
             ref={fileRef}
             type="file"
@@ -163,12 +172,17 @@ export function ComposeForm({
             <button
               type="button"
               onClick={() => setShowPairs((v) => !v)}
-              className="text-sm font-medium text-ink-soft hover:text-accent"
+              title="Share a trading pair"
+              aria-label="Share a trading pair"
+              className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted hover:text-accent"
             >
-              + Trade
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 17l5-5 4 4 7-8" />
+                <path d="M15 8h4v4" />
+              </svg>
             </button>
             {showPairs ? (
-              <div className="absolute bottom-full left-0 z-30 mb-2 max-h-60 w-44 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+              <div className="absolute left-0 top-full z-30 mt-2 max-h-60 w-44 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
                 {PAIRS.map((p) => (
                   <button
                     key={p.key}
@@ -186,12 +200,18 @@ export function ComposeForm({
             <button
               type="button"
               onClick={() => setShowMarkets((v) => !v)}
-              className="text-sm font-medium text-ink-soft hover:text-accent"
+              title="Share a prediction market"
+              aria-label="Share a prediction market"
+              className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted hover:text-accent"
             >
-              + Predict
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="8.5" />
+                <circle cx="12" cy="12" r="4.5" />
+                <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+              </svg>
             </button>
             {showMarkets ? (
-              <div className="absolute bottom-full left-0 z-30 mb-2 max-h-60 w-56 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+              <div className="absolute left-0 top-full z-30 mt-2 max-h-60 w-56 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
                 {markets.isLoading ? (
                   <div className="px-3 py-2 text-sm text-ink-faint">Loading markets…</div>
                 ) : markets.data && markets.data.length > 0 ? (

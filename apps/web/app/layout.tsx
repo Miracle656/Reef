@@ -29,8 +29,22 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for the link-preview image URLs (og/twitter file convention).
+  metadataBase: new URL("https://reef-web-one.vercel.app"),
   title: "ReeF",
   description: "A Sui-native decentralized social superapp.",
+  openGraph: {
+    title: "ReeF — the social layer of Sui",
+    description: "Own your identity, your posts and your audience. Walletless, gasless, on Sui.",
+    siteName: "ReeF",
+    type: "website",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ReeF — the social layer of Sui",
+    description: "Own your identity, your posts and your audience. Walletless, gasless, on Sui.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

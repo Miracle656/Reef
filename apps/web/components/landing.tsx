@@ -52,7 +52,7 @@ const PRIMITIVES = [
   { cap: "Trading", prim: "DeepBook v3 — gasless swaps", status: "live" },
   { cap: "Prediction markets", prim: "DeepBook Predict (BTC binary)", status: "live" },
   { cap: "Creator coins", prim: "Per-creator Coin + pool", status: "parked" },
-  { cap: "DMs · groups", prim: "Sui Messaging SDK", status: "planned" },
+  { cap: "Encrypted DMs", prim: "Sui Messaging SDK + Seal", status: "live" },
 ];
 const PACKAGES = [
   { tag: "contract", color: "#7CFCD8", name: "Move package", desc: "profile · post · follow · registry — published to testnet." },
@@ -65,13 +65,13 @@ const FEATURES = [
   { icon: "🎯", bg: "rgba(255,122,69,.16)", t: "Prediction markets", d: "Take BTC binary options on DeepBook Predict — Up or Down, settled on-chain by the orderbook at expiry. A market, not a casino." },
   { icon: "🖼️", bg: "rgba(124,252,216,.3)", t: "Walrus media", d: "Photos and clips upload straight to Walrus and stream back through the reef proxy. No S3, no storage bill." },
   { icon: "🆔", bg: "rgba(255,209,102,.3)", t: "Real handles", d: "Claim @you.reef and sign in with Google via zkLogin. A self-custodial Sui address and a free SuiNS name from day one." },
-  { icon: "💬", bg: "rgba(21,21,26,.08)", t: "Messaging · soon", d: "Native Sui DMs and group chats over the Messaging SDK — the same walletless, gasless identity you already use." },
+  { icon: "💬", bg: "rgba(21,21,26,.08)", t: "Encrypted messages", d: "End-to-end encrypted DMs on the Sui messaging stack — instant inbox, message requests, live typing. The same walletless, gasless identity you already use." },
 ];
 const STATUSES = [
   { label: "Working", color: "#18C2C2", text: "Walletless sign-in, onboarding, feed, posting, replies, reactions, search, profiles, follow — web & mobile." },
-  { label: "Working", color: "#18C2C2", text: "Gasless DeepBook market swaps (SUI ⇄ DEEP) and on-chain BTC prediction bets, signed by the zkLogin account." },
+  { label: "Working", color: "#18C2C2", text: "Gasless DeepBook market swaps (SUI ⇄ DEEP), on-chain BTC prediction bets, and end-to-end encrypted DMs — all signed by the zkLogin account." },
   { label: "In progress", color: "#FFD166", text: "SuiNS leaf-subname minting; mobile trade execution; turning the web Predict tab into a desktop market grid." },
-  { label: "Parked / later", color: "#9A9AA6", text: "Creator-coin trading; limit orders (BalanceManager); DMs; Seal-gated content; AI agents (Nautilus)." },
+  { label: "Parked / later", color: "#9A9AA6", text: "Creator-coin trading; limit orders (BalanceManager); group chats; Seal-gated content; AI agents (Nautilus)." },
 ];
 
 // ── sign-in ──────────────────────────────────────────────────────────────────
@@ -117,6 +117,12 @@ export function Landing() {
         if (blob) gsap.to(blob, { yPercent: 30, ease: "none", scrollTrigger: { trigger: root.current, start: "top top", end: "60% top", scrub: 0.6 } });
       }
 
+      // Flip the fixed navbar to dark glass while it floats over a dark
+      // section — the cream glass reads as muddy grey on them.
+      root.current!.querySelectorAll<HTMLElement>("[data-navdark]").forEach((el) => {
+        ScrollTrigger.create({ trigger: el, start: "top 40", end: "bottom 40", toggleClass: { targets: "#reef-nav", className: "nav-dark" } });
+      });
+
       const cursor = root.current!.querySelector<HTMLElement>("#reef-cursor");
       if (cursor && fine && !reduce) {
         const xt = gsap.quickTo(cursor, "x", { duration: 0.4, ease: "power3" });
@@ -153,6 +159,11 @@ export function Landing() {
         @media (max-width:760px){.rl-hide-sm{display:none!important}}
         @media (max-width:980px){.rl-grid-prod{grid-template-columns:1fr!important}}
         #reef-root a{color:inherit;text-decoration:none}
+        #reef-nav{transition:background .35s,border-color .35s}
+        #reef-nav.nav-dark{background:rgba(9,14,21,.62)!important;border-bottom-color:rgba(234,231,223,.1)!important}
+        #reef-nav.nav-dark .rl-navlinks{color:#A9AEB8!important}
+        #reef-nav.nav-dark .rl-navbtn{background:#EAE7DF!important;color:#15151A!important}
+        #reef-nav.nav-dark .rl-g{background:#15151A!important;color:#fff!important}
       `}</style>
 
       {/* noise */}
@@ -162,16 +173,17 @@ export function Landing() {
       <div id="reef-cursor" className="rl-hide-sm" style={{ position: "fixed", top: 0, left: 0, width: 11, height: 11, borderRadius: "50%", background: "#0A84FF", zIndex: 9999, pointerEvents: "none", transform: "translate(-50%,-50%)", mixBlendMode: "multiply", transition: "width .25s cubic-bezier(.22,1,.36,1),height .25s cubic-bezier(.22,1,.36,1),background .25s", opacity: 0 }} />
 
       {/* NAV */}
-      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px clamp(18px,4vw,52px)", backdropFilter: "blur(14px)", background: "rgba(234,231,223,.62)", borderBottom: "1px solid rgba(21,21,26,.1)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontWeight: 900, fontSize: 25, letterSpacing: "-.02em" }}>ReeF</span>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF7A45", display: "inline-block", transform: "translateY(-1px)" }} />
+      <nav id="reef-nav" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px clamp(18px,4vw,52px)", backdropFilter: "blur(14px)", background: "rgba(234,231,223,.62)", borderBottom: "1px solid rgba(21,21,26,.1)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/reef-logo.png" alt="ReeF" style={{ height: 26, display: "block" }} />
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF7A45", display: "inline-block" }} />
         </div>
-        <div className="rl-hide-sm" style={{ display: "flex", gap: 30, fontFamily: MONO, fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "#565660" }}>
+        <div className="rl-hide-sm rl-navlinks" style={{ display: "flex", gap: 30, fontFamily: MONO, fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "#565660", transition: "color .35s" }}>
           <a href="#build">Product</a><a href="#features">Features</a><a href="#arch">Architecture</a><a href="#status">Status</a>
         </div>
-        <button data-magnetic onClick={signIn} style={{ display: "flex", alignItems: "center", gap: 9, border: "none", cursor: "pointer", background: INK, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 14, padding: "11px 18px 11px 13px", borderRadius: 100 }}>
-          <span style={{ width: 19, height: 19, borderRadius: "50%", background: "#fff", color: INK, fontWeight: 900, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>G</span>
+        <button data-magnetic onClick={signIn} className="rl-navbtn" style={{ display: "flex", alignItems: "center", gap: 9, border: "none", cursor: "pointer", background: INK, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 14, padding: "11px 18px 11px 13px", borderRadius: 100, transition: "background .35s,color .35s" }}>
+          <span className="rl-g" style={{ width: 19, height: 19, borderRadius: "50%", background: "#fff", color: INK, fontWeight: 900, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .35s,color .35s" }}>G</span>
           {isPending ? "Signing in…" : "Continue with Google"}
         </button>
       </nav>
@@ -205,7 +217,7 @@ export function Landing() {
       </header>
 
       {/* TICKER */}
-      <section style={{ position: "relative", zIndex: 2, borderTop: "1px solid rgba(21,21,26,.14)", borderBottom: "1px solid rgba(21,21,26,.14)", background: INK, color: "#EAE7DF", overflow: "hidden", padding: "15px 0" }}>
+      <section data-navdark style={{ position: "relative", zIndex: 2, borderTop: "1px solid rgba(21,21,26,.14)", borderBottom: "1px solid rgba(21,21,26,.14)", background: INK, color: "#EAE7DF", overflow: "hidden", padding: "15px 0" }}>
         <div style={{ display: "flex", width: "max-content", animation: "reefMq 32s linear infinite" }}>
           <div style={{ display: "flex" }}>
             {tickerLoop.map((t, i) => (
@@ -304,7 +316,7 @@ export function Landing() {
       </section>
 
       {/* ARCHITECTURE */}
-      <section id="arch" style={{ position: "relative", zIndex: 2, background: INK, color: "#EAE7DF", padding: "clamp(70px,12vh,150px) clamp(18px,4vw,52px)" }}>
+      <section id="arch" data-navdark style={{ position: "relative", zIndex: 2, background: INK, color: "#EAE7DF", padding: "clamp(70px,12vh,150px) clamp(18px,4vw,52px)" }}>
         <div style={{ maxWidth: 1480, margin: "0 auto" }}>
           <Eyebrow n="03" light>On-chain model</Eyebrow>
           <h2 data-reveal style={{ margin: "0 0 clamp(40px,6vh,72px)", fontWeight: 700, fontSize: "clamp(28px,4.2vw,60px)", lineHeight: 1.04, letterSpacing: "-.025em", maxWidth: 1000 }}>
@@ -372,21 +384,45 @@ export function Landing() {
         </div>
       </section>
 
-      {/* FOOTER CTA */}
-      <footer style={{ position: "relative", zIndex: 2, background: "#0A84FF", color: "#fff", padding: "clamp(70px,14vh,160px) clamp(18px,4vw,52px) clamp(40px,6vh,60px)", overflow: "hidden" }}>
-        <div style={{ position: "absolute", bottom: "-30%", right: "-8%", width: "min(50vw,640px)", height: "min(50vw,640px)", borderRadius: "50%", background: "radial-gradient(circle at 40% 40%,rgba(124,252,216,.55),rgba(24,194,194,0) 60%)" }} />
-        <div style={{ maxWidth: 1480, margin: "0 auto", position: "relative" }}>
-          <h2 data-reveal style={{ margin: 0, fontWeight: 900, fontSize: "clamp(44px,9vw,140px)", lineHeight: 0.86, letterSpacing: "-.035em" }}>Own your<br />signal.</h2>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 30, marginTop: "clamp(40px,6vh,70px)" }}>
-            <button data-magnetic onClick={signIn} style={{ display: "flex", alignItems: "center", gap: 10, border: "none", cursor: "pointer", background: "#fff", color: INK, fontFamily: "inherit", fontWeight: 700, fontSize: 17, padding: "17px 28px 17px 16px", borderRadius: 100 }}>
-              <span style={{ width: 24, height: 24, borderRadius: "50%", background: INK, color: "#fff", fontWeight: 900, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>G</span>
-              {isPending ? "Signing in…" : "Continue with Google →"}
-            </button>
-            <span style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".06em", lineHeight: 1.7, color: "rgba(255,255,255,.8)", maxWidth: 360 }}>ReeF — the social layer of Sui. Testnet build · codename umbra · apps/web · apps/mobile · packages/move · packages/core · services/indexer.</span>
+      {/* FOOTER — links on top, giant wordmark cut off at the bottom (DeepBook
+          style), sinking into a coral seabed */}
+      <footer data-navdark style={{ position: "relative", zIndex: 2, background: "linear-gradient(180deg,#07090D 0%,#0A1420 55%,#06202F 100%)", color: "#EAE7DF", overflow: "hidden" }}>
+        <div style={{ position: "relative", zIndex: 3, maxWidth: 1480, margin: "0 auto", padding: "clamp(50px,8vh,90px) clamp(18px,4vw,52px) 0" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: 30 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 380 }}>
+              <button data-magnetic onClick={signIn} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 10, border: "none", cursor: "pointer", background: "#0A84FF", color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 16, padding: "15px 24px 15px 14px", borderRadius: 100, boxShadow: "0 12px 30px -10px rgba(10,132,255,.55)" }}>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "#fff", color: INK, fontWeight: 900, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>G</span>
+                {isPending ? "Signing in…" : "Continue with Google →"}
+              </button>
+              <span style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".06em", lineHeight: 1.7, color: "rgba(234,231,223,.6)" }}>ReeF — the social layer of Sui. Your identity, posts and audience are yours: no seed phrases, no gas, no middlemen.</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontWeight: 700, fontSize: "clamp(17px,1.6vw,21px)", letterSpacing: "-.01em" }}>
+              <a href="#reef-root">Home</a>
+              <a href="#build">Product</a>
+              <a href="#features">Features</a>
+              <a href="#arch">Architecture</a>
+              <a href="#status">Status</a>
+            </div>
           </div>
-          <div style={{ marginTop: "clamp(40px,8vh,80px)", paddingTop: 24, borderTop: "1px solid rgba(255,255,255,.25)", display: "flex", flexWrap: "wrap", gap: 18, justifyContent: "space-between", fontFamily: MONO, fontSize: 11, letterSpacing: ".06em", color: "rgba(255,255,255,.7)" }}>
-            <span>ReeF © 2026 · built on Sui</span>
-            <span>pnpm · turborepo · next 15 · expo 54 · react 19</span>
+          <div style={{ marginTop: "clamp(30px,5vh,50px)", display: "flex", flexWrap: "wrap", gap: 18, justifyContent: "space-between", fontFamily: MONO, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(234,231,223,.55)" }}>
+            <span>● 2026 © ReeF · built on Sui</span>
+            <span className="rl-hide-sm">● testnet build · codename umbra</span>
+          </div>
+        </div>
+
+        {/* The wordmark art carries its own dark background — screen-blend melts
+            it into ours, the mask fades its top edge, and the negative bottom
+            margin crops the letters at the page edge, behind the seabed. */}
+        <div style={{ position: "relative", overflow: "hidden", marginTop: "clamp(10px,3vh,36px)" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/reef-wordmark.webp"
+            alt="REEF"
+            style={{ display: "block", width: "100%", marginTop: "-9%", marginBottom: "-16%", mixBlendMode: "screen", WebkitMaskImage: "linear-gradient(180deg,transparent 0,#000 22%,#000 100%)", maskImage: "linear-gradient(180deg,transparent 0,#000 22%,#000 100%)" }}
+          />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/reef-bed.webp" alt="" aria-hidden style={{ display: "block", width: "100%" }} />
           </div>
         </div>
       </footer>
