@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useCurrentWallet } from "@mysten/dapp-kit";
 import { getSession } from "@mysten/enoki";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSocialAccount } from "@/lib/account";
 import { buildOnboardTx, walrus } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
+import { toast } from "@/components/toaster";
 import { Avatar, Button, Card, Input, Spinner, Textarea } from "@/components/ui";
 import { SUINS_MINT_URL, umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
+import { trpc } from "@/lib/trpc";
 
 /** Decode a JWT payload (UTF-8 safe). */
 function decodeJwt(jwt: string): { name?: string; picture?: string; email?: string } {
@@ -22,6 +25,7 @@ export default function OnboardingPage() {
   const account = useSocialAccount();
   const router = useRouter();
   const run = useGasless();
+  const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [handle, setHandle] = useState("");
@@ -91,6 +95,19 @@ export default function OnboardingPage() {
       }
       // 3. create profile + follow set in one gasless tx
       await run(buildOnboardTx(umbraConfig, { handle, displayName: displayName || handle, bio, avatarBlobId, suinsName }));
+      toast(`Profile created ✓ — welcome to the reef, @${handle}`);
+      // Wait until the indexer has ingested the profile before going home —
+      // otherwise the homepage still says "One step left" and bounces the
+      // user right back to an empty form.
+      for (let i = 0; i < 12; i++) {
+        try {
+          if (await trpc.profileByAddress.query({ address: account.address })) break;
+        } catch {
+          /* indexer hiccup — keep waiting */
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      qc.invalidateQueries({ queryKey: ["profile-by-addr"] });
       router.push("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Onboarding failed");
@@ -161,7 +178,7 @@ export default function OnboardingPage() {
 
             <Button className="w-full" disabled={!handleOk || busy} onClick={submit}>
               {busy ? <Spinner className="border-on-ink" /> : null}
-              Claim @{handle || "handle"}
+              {busy ? "Setting up your reef…" : `Claim @${handle || "handle"}`}
             </Button>
           </Card>
         )}
