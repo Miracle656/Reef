@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { ImageResponse } from "next/og";
+import { OG_BG } from "./og-bg";
 
 /**
  * Per-profile share card: the reef template (water + coral bed + REEF logo)
@@ -53,8 +52,7 @@ export default async function Image({ params }: { params: Promise<{ handle: stri
   const { handle } = await params;
   const profile = await getProfile(handle.toLowerCase());
   const avatar = await getAvatar(profile?.avatarBlobId ?? null);
-  const bg = await readFile(join(process.cwd(), "app/u/[handle]/og-bg.jpg"));
-  const bgSrc = `data:image/jpeg;base64,${bg.toString("base64")}`;
+  const bgSrc = OG_BG;
 
   const name = profile?.displayName || profile?.handle || handle;
   const label = `@${profile?.handle ?? handle}.reef`;
