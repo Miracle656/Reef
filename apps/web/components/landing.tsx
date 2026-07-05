@@ -402,6 +402,13 @@ export function Landing() {
               <a href="#features">Features</a>
               <a href="#arch">Architecture</a>
               <a href="#status">Status</a>
+              <a href="https://t.me/+hAmVJ0G74TA1MWVk" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 9, color: "#4DA2FF" }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 2 11 13" />
+                  <path d="M22 2 15 22l-4-9-9-4Z" />
+                </svg>
+                Telegram
+              </a>
             </div>
           </div>
           <div style={{ marginTop: "clamp(30px,5vh,50px)", display: "flex", flexWrap: "wrap", gap: 18, justifyContent: "space-between", fontFamily: MONO, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(234,231,223,.55)" }}>
