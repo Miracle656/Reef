@@ -194,7 +194,7 @@ export function MobileNav() {
     <>
       {menuOpen ? <div className="fixed inset-0 z-30 md:hidden" onClick={() => setMenuOpen(false)} /> : null}
       <nav className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-md items-center justify-between rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-3 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
-        {pill.slice(0, 2).map((it) => (
+        {pill.slice(0, 3).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
         <button
@@ -205,7 +205,7 @@ export function MobileNav() {
         >
           <PlusIcon className="h-5 w-5" />
         </button>
-        {pill.slice(2).map((it) => (
+        {pill.slice(3).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
         {/* me: profile + settings */}
