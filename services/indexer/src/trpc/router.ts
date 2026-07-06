@@ -372,12 +372,23 @@ export const appRouter = router({
     return { ok };
   }),
 
-  /** Live stories grouped per author, the viewer's own group first. */
+  /** Live stories grouped per author, the viewer's own group first.
+   *  Visibility is follower-gated: you see stories from people you follow,
+   *  plus your own. */
   statusList: publicProcedure
     .input(z.object({ viewer: SuiAddress.optional() }))
     .query(async ({ ctx, input }) => {
+      if (!input.viewer) return [];
+      const follows = await ctx.prisma.follow.findMany({
+        where: { follower: input.viewer },
+        select: { followee: true },
+      });
+      const visibleAuthors = [...new Set([...follows.map((f) => f.followee), input.viewer])];
       const rows = await ctx.prisma.status.findMany({
-        where: { createdAtMs: { gte: BigInt(Date.now() - STATUS_TTL_MS) } },
+        where: {
+          owner: { in: visibleAuthors },
+          createdAtMs: { gte: BigInt(Date.now() - STATUS_TTL_MS) },
+        },
         orderBy: { createdAtMs: "asc" },
       });
       if (rows.length === 0) return [];
