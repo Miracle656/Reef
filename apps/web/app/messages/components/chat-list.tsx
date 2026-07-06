@@ -139,7 +139,7 @@ export function ChatList({ onNew, onNewGroup, onLock }: { onNew: () => void; onN
       ) : null}
 
       {/* list */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-24 md:pb-4">
         {state.loadingChats ? (
           <div className="grid place-items-center py-16"><Spinner /></div>
         ) : chats.length === 0 ? (

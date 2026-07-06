@@ -40,7 +40,8 @@ function Shell() {
         </div>
       </section>
 
-      <MobileNav />
+      {/* hidden while a thread is open on mobile — it would cover the composer */}
+      {!hasActive ? <MobileNav /> : null}
 
       {modal ? <NewChatModal mode={modal} onClose={() => setModal(null)} /> : null}
       {lockOpen ? <ChatLockModal onClose={() => setLockOpen(false)} /> : null}

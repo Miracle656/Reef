@@ -175,19 +175,25 @@ function RailItem({ href, label, active, icon, badge }: Item) {
   );
 }
 
-/** Mobile bottom pill — the rail is hidden on small screens. */
+/** Mobile bottom bar — the rail is hidden on small screens, so EVERY
+ *  destination must be reachable here: Home/Search/Trade/Notifications/
+ *  Messages as icon pills, compose in the middle, and the avatar opens a
+ *  menu with Profile + Settings. */
 export function MobileNav() {
-  const { account, profileHref, items } = useNav();
+  const { account, profile, profileHref, items } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   if (!account) return null;
-  // Twitter-style bottom bar: Home · Search · Notifications · Messages.
-  const pill = ["Home", "Search", "Notifications", "Messages"]
+  const pill = ["Home", "Search", "Trade", "Notifications", "Messages"]
     .map((l) => items.find((i) => i.label === l))
     .filter(Boolean) as Item[];
+  const avatarUrl = profile.data?.avatarBlobId ? walrus.urlFor(umbraConfig, profile.data.avatarBlobId) : null;
+  const meActive = items.find((i) => i.label === "Profile")?.active || items.find((i) => i.label === "Settings")?.active;
 
   return (
     <>
-      <nav className="fixed bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-2 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
+      {menuOpen ? <div className="fixed inset-0 z-30 md:hidden" onClick={() => setMenuOpen(false)} /> : null}
+      <nav className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-md items-center justify-between rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-3 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
         {pill.slice(0, 2).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
@@ -195,16 +201,38 @@ export function MobileNav() {
           type="button"
           aria-label="New post"
           onClick={() => setComposeOpen(true)}
-          className="lift mx-1 grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
+          className="lift grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
         >
           <PlusIcon className="h-5 w-5" />
         </button>
         {pill.slice(2).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
+        {/* me: profile + settings */}
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Profile and settings"
+            onClick={() => setMenuOpen((v) => !v)}
+            className={`grid h-10 w-10 place-items-center rounded-full transition-colors ${meActive ? "bg-ink" : ""}`}
+          >
+            <span className="overflow-hidden rounded-full ring-2 ring-[color:var(--border-strong)]">
+              <Avatar name={profile.data?.handle ?? "you"} src={avatarUrl} size={28} />
+            </span>
+          </button>
+          {menuOpen ? (
+            <div className="absolute bottom-full right-0 z-40 mb-3 w-44 rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+              <Link href={profileHref} onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
+                <UserIcon className="h-[18px] w-[18px]" /> Profile
+              </Link>
+              <Link href="/settings" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
+                <GearIcon className="h-[18px] w-[18px]" /> Settings
+              </Link>
+            </div>
+          ) : null}
+        </div>
       </nav>
       <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
-      <span className="sr-only">{profileHref}</span>
     </>
   );
 }
@@ -213,15 +241,16 @@ function MobilePill({ href, label, active, icon, badge }: Item) {
   return (
     <Link
       href={href}
-      className={`flex flex-col items-center gap-0.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-colors ${
+      aria-label={label}
+      title={label}
+      className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${
         active ? "bg-ink text-on-ink" : "text-ink-soft hover:text-ink"
       }`}
     >
-      <span className="relative [&>svg]:h-5 [&>svg]:w-5">
+      <span className="relative [&>svg]:h-[21px] [&>svg]:w-[21px]">
         {icon}
         {badge ? <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold leading-none text-on-accent">{badge > 9 ? "9+" : badge}</span> : null}
       </span>
-      <span>{label}</span>
     </Link>
   );
 }
