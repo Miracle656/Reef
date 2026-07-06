@@ -12,8 +12,8 @@ import type { Chat } from "../lib/types";
 import { StoriesBar } from "./stories";
 import { BackIcon, BellOffIcon, LockIcon, PlusIcon, SearchIcon, UsersIcon } from "./icons";
 
-export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; onNewGroup: () => void; onVault: () => void }) {
-  const { state, me, activeChat, openChat } = useMessaging();
+export function ChatList({ onNew, onNewGroup, onLock }: { onNew: () => void; onNewGroup: () => void; onLock: () => void }) {
+  const { state, me, activeChat, openChat, chatLock } = useMessaging();
   const [q, setQ] = useState("");
   const [showRequests, setShowRequests] = useState(false);
   const [, bump] = useReducer((x: number) => x + 1, 0); // re-render after Accept
@@ -29,7 +29,12 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
   // Read fresh each render — replying elsewhere (provider) also accepts a chat.
   const accepted = me ? readAccepted(me.id) : new Set<string>();
 
-  const all = useMemo(() => state.chats.filter((c) => !c.archived), [state.chats]);
+  // locked chats stay hidden until the chat lock is unlocked (see chat-lock.ts)
+  const lockedIds = useMemo(() => new Set(chatLock.lockedIds), [chatLock.lockedIds]);
+  const all = useMemo(
+    () => state.chats.filter((c) => !c.archived && (chatLock.unlocked || !lockedIds.has(c.id))),
+    [state.chats, chatLock.unlocked, lockedIds],
+  );
   const requests = useMemo(
     () => (me ? all.filter((c) => isRequestChat(c, me.id, following, accepted)) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,12 +75,15 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
         <h1 className="flex-1 text-[22px] font-black tracking-tight">Messages</h1>
         <button
           type="button"
-          onClick={onVault}
-          aria-label="Vault"
-          title="The Vault — passcode-locked chats"
-          className="grid h-9 w-9 place-items-center rounded-full text-ink-soft transition-colors hover:bg-surface-muted"
+          onClick={onLock}
+          aria-label="Chat lock"
+          title="Chat lock — passcode-protect chats"
+          className={`relative grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-surface-muted ${
+            chatLock.unlocked ? "text-accent" : "text-ink-soft"
+          }`}
         >
           <LockIcon className="h-[18px] w-[18px]" />
+          {chatLock.unlocked ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent" /> : null}
         </button>
         <button
           type="button"
@@ -145,7 +153,7 @@ export function ChatList({ onNew, onNewGroup, onVault }: { onNew: () => void; on
           </div>
         ) : (
           chats.map((c) => (
-            <ChatRow key={c.id} chat={c} meId={me?.id} active={activeChat?.id === c.id} onClick={() => openChat(c.id)} />
+            <ChatRow key={c.id} chat={c} meId={me?.id} active={activeChat?.id === c.id} locked={lockedIds.has(c.id)} onClick={() => openChat(c.id)} />
           ))
         )}
       </div>
@@ -209,7 +217,7 @@ function RequestsPane({
   );
 }
 
-function ChatRow({ chat, meId, active, onClick }: { chat: Chat; meId?: string; active: boolean; onClick: () => void }) {
+function ChatRow({ chat, meId, active, locked = false, onClick }: { chat: Chat; meId?: string; active: boolean; locked?: boolean; onClick: () => void }) {
   const av = chatAvatar(chat, meId);
   const unread = chat.unreadCount ?? 0;
   return (
@@ -229,6 +237,7 @@ function ChatRow({ chat, meId, active, onClick }: { chat: Chat; meId?: string; a
           <span className={`min-w-0 flex-1 truncate text-[15px] ${unread ? "font-bold text-ink" : "font-semibold text-ink"}`}>
             {chatName(chat, meId)}
           </span>
+          {locked ? <LockIcon className="h-3 w-3 shrink-0 text-ink-faint" /> : null}
           <span className="shrink-0 font-mono text-[11px] text-ink-faint">{timeAgo(chat.lastMessageAt)}</span>
         </span>
         <span className="mt-0.5 flex items-center gap-2">

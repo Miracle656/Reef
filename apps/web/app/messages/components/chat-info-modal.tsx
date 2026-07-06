@@ -10,7 +10,7 @@ import type { Chat, Participant } from "../lib/types";
 import { PlusIcon, SearchIcon, XIcon } from "./icons";
 
 export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => void }) {
-  const { me, updateGroup, addParticipants, removeParticipant, setAdmin, leaveGroup, setChatSettings, setChatVaulted, blockUser, unblockUser, listBlocked, reportUser } = useMessaging();
+  const { me, updateGroup, addParticipants, removeParticipant, setAdmin, leaveGroup, setChatSettings, chatLock, setChatLocked, blockUser, unblockUser, listBlocked, reportUser } = useMessaging();
   const isGroup = chat.type === "group";
   const meId = me?.id;
   const iAmAdmin = isGroup && (chat.adminIds ?? []).includes(meId ?? "");
@@ -99,7 +99,18 @@ export function ChatInfoModal({ chat, onClose }: { chat: Chat; onClose: () => vo
           <div className="my-2 space-y-1 rounded-2xl border border-[color:var(--glass-border)] p-1.5">
             <Toggle label="Mute notifications" checked={!!chat.muted} onChange={(v) => void setChatSettings(chat.id, { muted: v })} />
             <Toggle label="Archive chat" checked={!!chat.archived} onChange={(v) => void setChatSettings(chat.id, { archived: v })} />
-            <Toggle label="Keep in Vault" checked={!!chat.vaulted} onChange={(v) => void setChatVaulted(chat.id, v)} />
+            <Toggle
+              label="Lock this chat"
+              checked={chatLock.lockedIds.includes(chat.id)}
+              onChange={(v) => {
+                if (!chatLock.hasPasscode) {
+                  toast("Set up Chat lock first — tap the lock icon above your chats");
+                  return;
+                }
+                setChatLocked(chat.id, v);
+                if (v) toast("Chat locked — hidden once Chat lock re-locks");
+              }}
+            />
             {isGroup && iAmAdmin ? (
               <>
                 <Toggle label="Allow asides (private msgs)" checked={!!chat.allowAsides} onChange={(v) => void updateGroup(chat.id, { allowAsides: v })} />

@@ -11,7 +11,7 @@
  * `provider.tsx` through `runtime.ts` — this file stays hook-free.
  *
  * v1 scope: DMs + groups create/send/receive/list. Rich features (reactions,
- * polls, pins, whisper, stories, vault, Chosen) are safe no-ops or throw until
+ * polls, pins, whisper, Chosen) are safe no-ops or throw until
  * ported — see the SECONDARY / UNSUPPORTED sections. Real-time is polling for now
  * (swap to client.messaging.subscribe later).
  */
@@ -1103,21 +1103,17 @@ export class SuiMessaging implements Messaging {
   async unblockUser(_userId: string): Promise<void> {}
   async listBlocked(): Promise<Participant[]> { return []; }
   async reportUser(_userId: string, _reason: string, _chatId?: string): Promise<void> {}
+  // stories + chat lock live in provider.tsx (need the zkLogin signer / are
+  // device-local) — these adapter methods are unused fallbacks.
   async listStatus(): Promise<StatusGroup[]> { return []; }
   async viewStatus(_statusId: string): Promise<void> {}
   async deleteStatus(_statusId: string): Promise<void> {}
-  async vaultStatus(): Promise<{ hasPasscode: boolean; unlocked: boolean }> { return { hasPasscode: false, unlocked: true }; }
-  async listVaultChats(): Promise<Chat[]> { return []; }
-  lockVault(): void {}
+  async postStatus(_i: StatusInput): Promise<void> {}
 
   // ── UNSUPPORTED yet: throw (feature needs a design pass) ──────────────────────
   async createPoll(chatId: string, question: string, options: string[], allowMultiple: boolean): Promise<Message> {
     return this.sendMessage({ chatId, type: "poll", content: question, pollOptions: options, allowMultiple });
   }
-  async vaultSetup(_p: string, _c?: string): Promise<void> { TODO("vaultSetup"); }
-  async vaultUnlock(_p: string): Promise<boolean> { return TODO("vaultUnlock"); }
-  async setChatVaulted(_c: string, _v: boolean): Promise<void> { TODO("setChatVaulted"); }
-  async postStatus(_i: StatusInput): Promise<void> { TODO("postStatus"); }
   async chosenStart(_c: string, _cfg: ChosenConfig): Promise<void> { TODO("chosenStart"); }
   async chosenJoin(_c: string): Promise<void> { TODO("chosenJoin"); }
   async chosenLeave(_c: string): Promise<void> { TODO("chosenLeave"); }

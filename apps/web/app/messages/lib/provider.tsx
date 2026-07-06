@@ -31,6 +31,15 @@ import { createReefMessagingClient } from "./messaging-client";
 import { messagingEnv, isMessagingConfigured } from "./sui-config";
 import { setMessagingRuntime } from "./runtime";
 import { markAccepted, requestPeerOf } from "./requests";
+import {
+  getChatLockState,
+  lockChatLockNow,
+  setChatLocked as storeChatLocked,
+  setRelockMinutes as storeRelockMinutes,
+  setupChatLock,
+  unlockChatLock,
+  type ChatLockState,
+} from "./chat-lock";
 import { applyControl, applyVote, markViewedOnce } from "./control";
 import { CONTROL_TYPES } from "./types";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
@@ -328,11 +337,13 @@ interface MessagingContext {
   createPoll: (chatId: string, question: string, options: string[], allowMultiple: boolean) => Promise<void>;
   votePoll: (messageId: string, optionIndex: number) => Promise<void>;
   markViewOnce: (message: Message) => Promise<void>;
-  vaultStatus: () => Promise<{ hasPasscode: boolean; unlocked: boolean }>;
-  vaultSetup: (passcode: string, currentPasscode?: string) => Promise<void>;
-  unlockVault: (passcode: string) => Promise<boolean>;
-  lockVault: () => void;
-  setChatVaulted: (chatId: string, vaulted: boolean) => Promise<void>;
+  // chat lock (client-side passcode; auto-relocks after chatLock.relockMinutes)
+  chatLock: ChatLockState;
+  chatLockSetup: (passcode: string, currentPasscode?: string) => Promise<void>;
+  chatLockUnlock: (passcode: string) => Promise<boolean>;
+  chatLockNow: () => void;
+  setChatLocked: (chatId: string, locked: boolean) => void;
+  setChatLockRelock: (minutes: number) => void;
   // stories
   listStatus: () => Promise<StatusGroup[]>;
   postStatus: (input: StatusInput) => Promise<void>;
@@ -715,29 +726,54 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     if (meRef.current) markViewedOnce(meRef.current.id, message.id); // survives re-fetch
     dispatch({ t: "VIEWONCE", chatId: message.chatId, messageId: message.id });
   }, []);
-  const vaultStatus = useCallback(() => messaging.vaultStatus(), []);
-  const vaultSetup = useCallback((passcode: string, currentPasscode?: string) => messaging.vaultSetup(passcode, currentPasscode), []);
-  const unlockVault = useCallback(async (passcode: string) => {
-    const ok = await messaging.vaultUnlock(passcode);
-    if (ok) {
-      const vault = await messaging.listVaultChats();
-      dispatch({ t: "ADD_CHATS", chats: vault });
+  // chat lock — passcode + auto-relock, entirely on this device (see chat-lock.ts).
+  // lockEpoch forces re-derivation of the state after setup/unlock/lock/expiry.
+  const [lockEpoch, bumpLock] = useReducer((x: number) => x + 1, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const chatLock = useMemo(() => getChatLockState(me?.id), [me?.id, lockEpoch]);
+  useEffect(() => {
+    // when the unlock window closes, re-render so locked chats vanish again
+    if (chatLock.msLeft == null) return;
+    const t = setTimeout(() => bumpLock(), chatLock.msLeft + 250);
+    return () => clearTimeout(t);
+  }, [chatLock.msLeft]);
+  useEffect(() => {
+    // relocking closes a locked chat that's still open on screen
+    if (!chatLock.unlocked && state.activeChatId && chatLock.lockedIds.includes(state.activeChatId)) {
+      openChat(null);
     }
+  }, [chatLock.unlocked, chatLock.lockedIds, state.activeChatId, openChat]);
+  const chatLockSetup = useCallback(async (passcode: string, currentPasscode?: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) throw new Error("Sign in first");
+    await setupChatLock(meId, passcode, currentPasscode);
+    bumpLock();
+  }, []);
+  const chatLockUnlock = useCallback(async (passcode: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) return false;
+    const ok = await unlockChatLock(meId, passcode);
+    if (ok) bumpLock();
     return ok;
   }, []);
-  const lockVault = useCallback(() => {
-    messaging.lockVault();
-    void refreshChats();
-  }, [refreshChats]);
-  const setChatVaulted = useCallback(async (chatId: string, vaulted: boolean) => {
-    await messaging.setChatVaulted(chatId, vaulted);
-    if (vaulted) {
-      dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, vaulted: true } });
-      await refreshChats();
-    } else {
-      dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, vaulted: false } });
-    }
-  }, [refreshChats]);
+  const chatLockNow = useCallback(() => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    lockChatLockNow(meId);
+    bumpLock();
+  }, []);
+  const setChatLocked = useCallback((chatId: string, locked: boolean) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    storeChatLocked(meId, chatId, locked);
+    bumpLock();
+  }, []);
+  const setChatLockRelock = useCallback((minutes: number) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    storeRelockMinutes(meId, minutes);
+    bumpLock();
+  }, []);
 
   // stories — indexer-hosted (24h ephemeral), signed with the zkLogin key so
   // nobody can post or delete as you. Unlike chat media, story images are
@@ -859,11 +895,12 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     createPoll,
     votePoll,
     markViewOnce,
-    vaultStatus,
-    vaultSetup,
-    unlockVault,
-    lockVault,
-    setChatVaulted,
+    chatLock,
+    chatLockSetup,
+    chatLockUnlock,
+    chatLockNow,
+    setChatLocked,
+    setChatLockRelock,
     listStatus,
     postStatus,
     viewStatus,

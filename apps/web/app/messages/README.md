@@ -26,7 +26,7 @@ lib/
 1. Implement every method of `Messaging` in `sui-adapter.ts` on top of:
    - `@mysten/sui-stack-messaging` — channels / DMs / groups / messages
    - `@mysten/walrus` — attachments (`uploadMedia` → blobId → URL)
-   - `@mysten/seal` — gated content (the Vault / whisper / asides)
+   - `@mysten/seal` — gated content (Chat lock / whisper / asides)
    - the zkLogin address passed to `setCurrentUser(me)` — identity
 2. Feed real-time updates into `subscribe(handler)` (poll the SDK/indexer and
    emit the same `MessagingEvent`s the mock emits).
@@ -47,7 +47,7 @@ sign-in — Mystry's OTP/invite auth was intentionally dropped.
   reactions, edit, reply, forward, in-chat search, media + file + image viewer,
   typing, read receipts, mute/archive, whisper messages, polls, location,
   view-once photos, disappearing-message timer, saved + pinned, @mentions,
-  the Vault (passcode-locked chats).
+  Chat lock (passcode-protected chats, device-local).
 - **Not yet built:** aside *send* flow (audience picker — redaction rendering is
   already in `message-bubble.tsx`), stories/status, the Chosen party game.
 
@@ -56,5 +56,5 @@ sign-in — Mystry's OTP/invite auth was intentionally dropped.
 `mock-adapter.ts` persists to `localStorage["reef:messages:v1"]`, seeds a few
 contacts/conversations, and has seeded contacts auto-reply so a single-user demo
 feels alive. None of this is real multi-device messaging — that arrives with the
-Sui adapter. The vault passcode in the mock is stored in plaintext (mock only);
+Sui adapter. Chat lock passcodes are salted-SHA-256 hashed in localStorage (see lib/chat-lock.ts);
 the real adapter must use Seal.

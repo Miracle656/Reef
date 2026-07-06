@@ -168,13 +168,8 @@ export interface Messaging {
   votePoll(messageId: string, optionIndex: number): Promise<void>;
   markViewOnce(messageId: string): Promise<void>;
 
-  // the vault (passcode-locked chats) (phase C) --------------------------
-  vaultStatus(): Promise<{ hasPasscode: boolean; unlocked: boolean }>;
-  vaultSetup(passcode: string, currentPasscode?: string): Promise<void>;
-  vaultUnlock(passcode: string): Promise<boolean>;
-  lockVault(): void;
-  listVaultChats(): Promise<Chat[]>;
-  setChatVaulted(chatId: string, vaulted: boolean): Promise<void>;
+  // NOTE: chat lock (passcode-protected chats) is NOT an adapter concern — it's
+  // device-local by design and lives in provider.tsx + lib/chat-lock.ts.
 
   // group / chat management ----------------------------------------------
   updateGroup(chatId: string, patch: GroupPatch): Promise<Chat>;
