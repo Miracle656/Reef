@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { deepbook, walrus, type Post } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
@@ -8,12 +9,15 @@ import { trpc } from "@/lib/trpc";
 import { shortAddr, timeAgo } from "@/lib/utils";
 import { PAIRS, useDeepBook, type Pair } from "@/lib/deepbook";
 import { getOracleState, toUsd } from "@/lib/predict";
-import { renderEmoji, isOnlyEmoji } from "@/lib/emoji";
+import { isOnlyEmoji } from "@/lib/emoji";
+import { RichText } from "./rich-text";
+import { QuoteCard } from "./quote-card";
 import { Avatar } from "./ui";
 import { CoinIcon, PairIcons } from "./market-select";
 import { ActionBar } from "./action-bar";
 
 export function PostCard({ post }: { post: Post }) {
+  const router = useRouter();
   const author = useQuery({
     queryKey: ["profile-by-addr", post.author],
     queryFn: () => trpc.profileByAddress.query({ address: post.author }),
@@ -23,8 +27,13 @@ export function PostCard({ post }: { post: Post }) {
   const verified = Boolean(a?.suinsName);
   const pair = post.text ? detectPair(post.text) : null;
   const market = post.text ? detectPredictMarket(post.text) : null;
-  // Hide the raw /m/<id> link from the body — the embed card replaces it.
-  const bodyText = market && post.text ? post.text.replace(/\/m\/[A-Za-z0-9_-]+(?:\?strike=[0-9.]+)?/, "").trim() : post.text;
+  // A /p/<id> reference makes this a quote post — embed the quoted card.
+  const quoteId = post.text?.match(/(?:https?:\/\/[^\s]+)?\/p\/(0x[0-9a-fA-F]+)/)?.[1] ?? null;
+  // Hide raw /m/<id> and /p/<id> links from the body — embed cards replace them.
+  let bodyText = post.text ?? "";
+  if (market) bodyText = bodyText.replace(/\/m\/[A-Za-z0-9_-]+(?:\?strike=[0-9.]+)?/, "");
+  if (quoteId) bodyText = bodyText.replace(/(?:https?:\/\/[^\s]+)?\/p\/0x[0-9a-fA-F]+/, "");
+  bodyText = bodyText.trim();
 
   return (
     <article className="border-b border-[color:var(--glass-border)] px-5 py-4 transition-colors hover:bg-[color:color-mix(in_srgb,var(--accent)_3%,transparent)]">
@@ -46,9 +55,13 @@ export function PostCard({ post }: { post: Post }) {
           </div>
 
           {bodyText ? (
-            <Link href={`/p/${post.id}`} className="mt-1 block whitespace-pre-wrap break-words text-[15.5px] leading-[1.5] text-[#26262c]">
-              {renderEmoji(bodyText, isOnlyEmoji(bodyText) ? 40 : 20)}
-            </Link>
+            // div (not Link) so links/mentions inside the text stay valid anchors
+            <div
+              onClick={() => router.push(`/p/${post.id}`)}
+              className="mt-1 block cursor-pointer whitespace-pre-wrap break-words text-[15.5px] leading-[1.5] text-[#26262c]"
+            >
+              <RichText text={bodyText} emojiSize={isOnlyEmoji(bodyText) ? 40 : 20} />
+            </div>
           ) : null}
 
           {post.media.length === 1 ? (
@@ -67,6 +80,7 @@ export function PostCard({ post }: { post: Post }) {
             </div>
           ) : null}
 
+          {quoteId && quoteId !== post.id ? <QuoteCard id={quoteId} /> : null}
           {pair ? <TradeEmbed pair={pair} /> : null}
           {market ? <PredictEmbed id={market.id} strike={market.strike} /> : null}
 

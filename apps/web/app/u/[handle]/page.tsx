@@ -9,7 +9,9 @@ import { AppShell } from "@/components/app-shell";
 import { RightSidebar } from "@/components/right-sidebar";
 import { CoinIcon } from "@/components/market-select";
 import { FollowButton } from "@/components/follow-button";
+import { EditProfileButton } from "@/components/edit-profile";
 import { PostCard } from "@/components/post-card";
+import { RichText } from "@/components/rich-text";
 import { Avatar, Button, Card, Spinner } from "@/components/ui";
 import { toast } from "@/components/toaster";
 import { umbraConfig } from "@/lib/config";
@@ -109,6 +111,7 @@ export default function ProfilePage() {
           </span>
           <div className="mb-2 flex items-center gap-2">
             <ShareProfileButton handle={p.handle} />
+            <EditProfileButton profile={p} />
             <FollowButton target={p.owner} />
           </div>
         </div>
@@ -121,7 +124,11 @@ export default function ProfilePage() {
           @{p.handle}
           {p.suinsName ? <span className="text-accent"> · {p.suinsName}</span> : null}
         </div>
-        {p.bio ? <p className="mt-3 max-w-[480px] text-[15px] leading-[1.5] text-[#26262c]">{p.bio}</p> : null}
+        {p.bio ? (
+          <p className="mt-3 max-w-[480px] text-[15px] leading-[1.5] text-[#26262c]">
+            <RichText text={p.bio} />
+          </p>
+        ) : null}
         <div className="mt-3.5 flex gap-5 text-[14.5px]">
           <span><b className="font-bold">{p.followingCount}</b> <span className="text-ink-faint">Following</span></span>
           <span><b className="font-bold">{p.followersCount}</b> <span className="text-ink-faint">Followers</span></span>

@@ -2,29 +2,36 @@
 
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { buildCreatePostTx, walrus } from "@umbra/core";
+import { buildCreatePostTx, walrus, type Post } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
+import { trpc } from "@/lib/trpc";
 import { PAIRS, type Pair } from "@/lib/deepbook";
 import { listMarkets, toUsd } from "@/lib/predict";
 import { toast } from "./toaster";
-import { Button, Card, Spinner } from "./ui";
+import { QuoteCard } from "./quote-card";
+import { Avatar, Button, Card, Spinner } from "./ui";
 
 const MAX = 560;
 const MAX_IMAGES = 2;
 
-/** Shared composer. `withTokenize` shows the tokenize toggle (modal/full mode). */
+/** Shared composer. `withTokenize` shows the tokenize toggle (modal/full mode).
+ *  `quote` turns it into a quote composer: the quoted post previews below the
+ *  textarea and a /p/<id> ref is appended on submit (the feed renders it as an
+ *  embedded card). */
 export function ComposeForm({
   withTokenize = false,
   autoFocus = false,
   onPosted,
   replyTo,
+  quote,
   placeholder = "What's happening in Lagos?",
 }: {
   withTokenize?: boolean;
   autoFocus?: boolean;
   onPosted?: () => void;
   replyTo?: string;
+  quote?: Post;
   placeholder?: string;
 }) {
   const [text, setText] = useState("");
@@ -35,7 +42,32 @@ export function ComposeForm({
   const [tokenize, setTokenize] = useState(false);
   const [showPairs, setShowPairs] = useState(false);
   const [showMarkets, setShowMarkets] = useState(false);
+  // Active "@…" token at the caret — drives the tag-someone dropdown.
+  const [mention, setMention] = useState<{ start: number; q: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const mentionHits = useQuery({
+    queryKey: ["mention-search", mention?.q],
+    queryFn: () => trpc.searchProfiles.query({ q: mention!.q, limit: 6 }),
+    enabled: Boolean(mention?.q),
+  });
+
+  /** Re-derive the @token the caret is sitting in (or null). */
+  function trackMention(el: HTMLTextAreaElement) {
+    const pos = el.selectionStart ?? el.value.length;
+    const before = el.value.slice(0, pos);
+    const m = before.match(/(^|[^\w@])@([a-z0-9_]{1,20})$/i);
+    setMention(m ? { start: pos - m[2]!.length - 1, q: m[2]!.toLowerCase() } : null);
+  }
+
+  function pickMention(handle: string) {
+    if (!mention) return;
+    const end = mention.start + 1 + mention.q.length;
+    setText((t) => t.slice(0, mention.start) + `@${handle} ` + t.slice(end));
+    setMention(null);
+    textRef.current?.focus();
+  }
 
   const markets = useQuery({ queryKey: ["compose-markets"], queryFn: () => listMarkets(12), enabled: showMarkets });
 
@@ -53,7 +85,9 @@ export function ComposeForm({
   const run = useGasless();
   const qc = useQueryClient();
 
-  const canPost = (text.trim().length > 0 || files.length > 0) && text.length <= MAX && !busy;
+  // leave room for the appended /p/<id> ref when quoting (post text caps at 560 on-chain)
+  const max = quote ? MAX - 80 : MAX;
+  const canPost = (text.trim().length > 0 || files.length > 0 || Boolean(quote)) && text.length <= max && !busy;
 
   function pickFiles(list: FileList | null) {
     const incoming = Array.from(list ?? []);
@@ -81,7 +115,10 @@ export function ComposeForm({
         const bytes = new Uint8Array(await f.arrayBuffer());
         media.push((await walrus.upload(umbraConfig, bytes)).blobId);
       }
-      await run(buildCreatePostTx(umbraConfig, { text: text.trim(), media, replyTo: replyTo ?? null }));
+      // quote posts carry the quoted post as a trailing /p/<id> ref — the feed
+      // swaps it for an embedded card
+      const finalText = quote ? `${text.trim()} /p/${quote.id}`.trim() : text.trim();
+      await run(buildCreatePostTx(umbraConfig, { text: finalText, media, replyTo: replyTo ?? null }));
       setText("");
       setFiles([]);
       setPreviews([]);
@@ -107,15 +144,45 @@ export function ComposeForm({
 
   return (
     <div>
-      <textarea
-        autoFocus={autoFocus}
-        rows={3}
-        value={text}
-        maxLength={MAX}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={placeholder}
-        className="w-full resize-none bg-transparent text-[15px] placeholder:text-ink-faint focus:outline-none"
-      />
+      <div className="relative">
+        <textarea
+          ref={textRef}
+          autoFocus={autoFocus}
+          rows={3}
+          value={text}
+          maxLength={max}
+          onChange={(e) => {
+            setText(e.target.value);
+            trackMention(e.target);
+          }}
+          onSelect={(e) => trackMention(e.currentTarget)}
+          onBlur={() => setTimeout(() => setMention(null), 150)}
+          placeholder={placeholder}
+          className="w-full resize-none bg-transparent text-[15px] placeholder:text-ink-faint focus:outline-none"
+        />
+        {mention?.q && mentionHits.data?.length ? (
+          <div className="absolute left-0 top-full z-30 max-h-64 w-72 overflow-y-auto rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+            {mentionHits.data.map((p) => (
+              <button
+                key={p.handle}
+                type="button"
+                // mousedown (not click) so the textarea's blur doesn't close us first
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickMention(p.handle);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left hover:bg-surface-muted"
+              >
+                <Avatar name={p.handle} src={p.avatarBlobId ? walrus.urlFor(umbraConfig, p.avatarBlobId) : null} size={32} />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{p.displayName || p.handle}</span>
+                  <span className="block truncate font-mono text-[11.5px] text-ink-faint">@{p.handle}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       {previews.length > 0 ? (
         <div className={`mt-2 grid gap-2 ${previews.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -135,6 +202,8 @@ export function ComposeForm({
           ))}
         </div>
       ) : null}
+
+      {quote ? <QuoteCard id={quote.id} linkable={false} /> : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
@@ -234,7 +303,7 @@ export function ComposeForm({
               </div>
             ) : null}
           </div>
-          <span className={`text-xs ${text.length > MAX ? "text-danger" : "text-ink-faint"}`}>{text.length}/{MAX}</span>
+          <span className={`text-xs ${text.length > max ? "text-danger" : "text-ink-faint"}`}>{text.length}/{max}</span>
         </div>
         <Button size="sm" disabled={!canPost} onClick={submit}>
           {busy ? <Spinner className="border-on-ink" /> : null}

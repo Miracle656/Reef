@@ -82,6 +82,8 @@ export interface StatusInput {
   type: "text" | "image";
   content: string;
   mediaUrl?: string;
+  /** raw image — the backend uploads it (public Walrus blob, stories aren't E2E) */
+  file?: File;
   bg?: string;
 }
 

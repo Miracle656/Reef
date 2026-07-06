@@ -19,12 +19,12 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { walrus } from "@umbra/core";
+import { canonicalStatusBytes, canonicalStatusDeleteBytes, walrus } from "@umbra/core";
 import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
-import { useGasless } from "@/lib/gasless";
+import { useEnokiSignPersonalMessage, useGasless } from "@/lib/gasless";
 import { markMsgsSeen } from "@/lib/msg-seen";
 import { getDelegateKeypair } from "./messaging-identity";
 import { createReefMessagingClient } from "./messaging-client";
@@ -739,11 +739,70 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshChats]);
 
-  // stories
-  const listStatus = useCallback(() => messaging.listStatus(), []);
-  const postStatus = useCallback((input: StatusInput) => messaging.postStatus(input), []);
-  const viewStatus = useCallback((statusId: string) => messaging.viewStatus(statusId), []);
-  const deleteStatus = useCallback((statusId: string) => messaging.deleteStatus(statusId), []);
+  // stories — indexer-hosted (24h ephemeral), signed with the zkLogin key so
+  // nobody can post or delete as you. Unlike chat media, story images are
+  // public Walrus blobs (a story is a broadcast, not an E2E message).
+  const signMsg = useEnokiSignPersonalMessage();
+  const listStatus = useCallback(async (): Promise<StatusGroup[]> => {
+    const groups = await trpc.statusList.query({ viewer: meRef.current?.id });
+    return groups.map((g) => ({
+      user: {
+        id: g.user.address,
+        username: g.user.handle ?? `${g.user.address.slice(0, 6)}…${g.user.address.slice(-4)}`,
+        displayName: g.user.displayName ?? g.user.handle ?? undefined,
+        avatarUrl: g.user.avatarBlobId ? walrus.urlFor(umbraConfig, g.user.avatarBlobId) : undefined,
+      },
+      items: g.items.map((s) => ({
+        id: s.id,
+        userId: s.owner,
+        type: s.type,
+        content: s.content,
+        mediaUrl: s.mediaBlobId ? walrus.urlFor(umbraConfig, s.mediaBlobId) : undefined,
+        bg: s.bg ?? undefined,
+        createdAt: new Date(s.createdAtMs).toISOString(),
+        viewedBy: s.viewedBy,
+      })),
+      hasUnseen: g.hasUnseen,
+    }));
+  }, []);
+  const postStatus = useCallback(
+    async (input: StatusInput) => {
+      const meId = meRef.current?.id;
+      if (!meId) throw new Error("Sign in first");
+      let mediaBlobId: string | null = null;
+      if (input.file) {
+        const bytes = new Uint8Array(await input.file.arrayBuffer());
+        mediaBlobId = (await walrus.upload(umbraConfig, bytes)).blobId;
+      }
+      const message = {
+        owner: meId,
+        type: input.type,
+        content: input.content,
+        mediaBlobId,
+        bg: input.bg ?? null,
+        timestamp: Date.now(),
+      };
+      const { signature } = await signMsg(canonicalStatusBytes(message));
+      const r = await trpc.statusPost.mutate({ message, signature });
+      if (!r.ok) throw new Error("Story didn't go through — try again");
+    },
+    [signMsg],
+  );
+  const viewStatus = useCallback(async (statusId: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    await trpc.statusView.mutate({ statusId, viewer: meId }).catch(() => {});
+  }, []);
+  const deleteStatus = useCallback(
+    async (statusId: string) => {
+      const meId = meRef.current?.id;
+      if (!meId) return;
+      const message = { owner: meId, statusId, timestamp: Date.now() };
+      const { signature } = await signMsg(canonicalStatusDeleteBytes(message));
+      await trpc.statusDelete.mutate({ message, signature });
+    },
+    [signMsg],
+  );
 
   // chosen game (events drive state via the subscription)
   const chosen = useMemo(

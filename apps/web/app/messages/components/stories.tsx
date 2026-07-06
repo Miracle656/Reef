@@ -122,25 +122,37 @@ function StoryViewer({ group, onClose }: { group: StatusGroup; onClose: () => vo
 }
 
 function StatusComposer({ onClose }: { onClose: () => void }) {
-  const { postStatus, uploadMedia } = useMessaging();
+  const { postStatus } = useMessaging();
   const [text, setText] = useState("");
   const [bg, setBg] = useState(BGS[0]!);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const imgRef = useRef<HTMLInputElement>(null);
 
   const postText = async () => {
     if (!text.trim()) return;
     setBusy(true);
-    await postStatus({ type: "text", content: text.trim(), bg });
-    onClose();
+    setError(null);
+    try {
+      await postStatus({ type: "text", content: text.trim(), bg });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't post your story");
+      setBusy(false);
+    }
   };
 
   const postImage = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    const up = await uploadMedia(file);
-    await postStatus({ type: "image", content: "", mediaUrl: up.url });
-    onClose();
+    setError(null);
+    try {
+      await postStatus({ type: "image", content: "", file });
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't post your story");
+      setBusy(false);
+    }
   };
 
   return createPortal(
@@ -164,6 +176,7 @@ function StatusComposer({ onClose }: { onClose: () => void }) {
             <button key={c} onClick={() => setBg(c)} className={`h-7 w-7 rounded-full ${bg === c ? "ring-2 ring-offset-2 ring-ink" : ""}`} style={{ background: c }} aria-label="bg" />
           ))}
         </div>
+        {error ? <p className="mb-2 text-sm text-danger">{error}</p> : null}
         <div className="flex gap-2">
           <Button onClick={() => void postText()} disabled={!text.trim() || busy} className="flex-1">Post text</Button>
           <Button variant="outline" onClick={() => imgRef.current?.click()} disabled={busy}>Photo</Button>

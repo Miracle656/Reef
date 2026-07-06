@@ -17,14 +17,36 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
   const post = useQuery({ queryKey: ["post", id], queryFn: () => trpc.post.query({ id }) });
   const replies = useQuery({ queryKey: ["replies", id], queryFn: () => trpc.repliesForPost.query({ postId: id }) });
 
+  // Thread context: walk the reply chain upwards so a comment shows what it
+  // was replying to, all the way to the root post.
+  const replyTo = post.data?.replyTo;
+  const ancestors = useQuery({
+    queryKey: ["thread-ancestors", replyTo],
+    enabled: Boolean(replyTo),
+    queryFn: async () => {
+      const chain: NonNullable<typeof post.data>[] = [];
+      let cur: string | null | undefined = replyTo;
+      for (let i = 0; i < 8 && cur; i++) {
+        const p = await trpc.post.query({ id: cur });
+        if (!p) break;
+        chain.unshift(p);
+        cur = p.replyTo;
+      }
+      return chain;
+    },
+  });
+
   return (
-    <AppShell title="Post" back="/" flush right={<RightSidebar />}>
+    <AppShell title={replyTo ? "Thread" : "Post"} back="/" flush right={<RightSidebar />}>
       {post.isLoading ? (
         <div className="grid place-items-center py-12"><Spinner /></div>
       ) : !post.data ? (
         <p className="py-12 text-center text-ink-soft">Post not found.</p>
       ) : (
         <>
+          {ancestors.data?.map((a) => (
+            <PostCard key={a.id} post={a} />
+          ))}
           <PostCard post={post.data} />
 
           {account ? (

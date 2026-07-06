@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { canonicalReactionBytes, type Post, type ReactionMessage } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
 import { useEnokiSignPersonalMessage } from "@/lib/gasless";
 import { trpc } from "@/lib/trpc";
+import { ComposeForm } from "./compose-box";
 import { toast } from "./toaster";
 
 type Kind = "like" | "repost" | "bookmark";
@@ -14,6 +16,8 @@ export function ActionBar({ post }: { post: Post }) {
   const account = useSocialAccount();
   const sign = useEnokiSignPersonalMessage();
   const qc = useQueryClient();
+  const [repostMenu, setRepostMenu] = useState(false);
+  const [quoting, setQuoting] = useState(false);
 
   const s = useQuery({
     queryKey: ["post-actions", post.id, account?.address],
@@ -54,23 +58,75 @@ export function ActionBar({ post }: { post: Post }) {
   const busy = toggle.isPending || !account;
 
   return (
-    <div className="mt-3 flex max-w-sm items-center justify-between text-ink-soft">
+    <>
+      {repostMenu ? <div className="fixed inset-0 z-20" onClick={() => setRepostMenu(false)} /> : null}
+      {quoting ? (
+        <div className="fixed inset-0 z-50 grid place-items-start justify-center bg-ink/40 p-4 pt-[12vh]" onClick={() => setQuoting(false)}>
+          <div
+            className="w-full max-w-lg rounded-3xl border border-[color:var(--glass-border)] bg-surface p-5 shadow-[var(--shadow-glass-lg)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-base font-black tracking-tight">Quote post</h3>
+              <button type="button" onClick={() => setQuoting(false)} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted">
+                ✕
+              </button>
+            </div>
+            <ComposeForm autoFocus quote={post} placeholder="Add your take…" onPosted={() => setQuoting(false)} />
+          </div>
+        </div>
+      ) : null}
+      <div className="mt-3 flex max-w-sm items-center justify-between text-ink-soft">
       <Link href={`/p/${post.id}`} className="group inline-flex items-center gap-1.5 text-sm transition-colors hover:text-accent" aria-label="Comments">
         <Icon name="comment" />
         <span>{d?.replyCount ?? 0}</span>
       </Link>
 
-      <button
-        type="button"
-        onClick={() => toggle.mutate({ kind: "repost", active: d?.reposted ?? false })}
-        disabled={busy}
-        className={`inline-flex items-center gap-1.5 text-sm transition-colors hover:text-emerald-500 disabled:opacity-50 ${d?.reposted ? "text-emerald-500" : ""}`}
-        aria-pressed={d?.reposted}
-        aria-label="Repost"
-      >
-        <Icon name="repost" />
-        <span>{d?.reposts ?? 0}</span>
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setRepostMenu((v) => !v);
+          }}
+          disabled={busy}
+          className={`inline-flex items-center gap-1.5 text-sm transition-colors hover:text-emerald-500 disabled:opacity-50 ${d?.reposted ? "text-emerald-500" : ""}`}
+          aria-pressed={d?.reposted}
+          aria-label="Repost or quote"
+        >
+          <Icon name="repost" />
+          <span>{d?.reposts ?? 0}</span>
+        </button>
+        {repostMenu ? (
+          <div className="absolute bottom-full left-0 z-30 mb-2 w-44 rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => {
+                setRepostMenu(false);
+                toggle.mutate({ kind: "repost", active: d?.reposted ?? false });
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-surface-muted"
+            >
+              <Icon name="repost" />
+              {d?.reposted ? "Undo repost" : "Repost"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRepostMenu(false);
+                setQuoting(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-surface-muted"
+            >
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              Quote
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       <button
         type="button"
@@ -100,7 +156,8 @@ export function ActionBar({ post }: { post: Post }) {
       <button type="button" onClick={share} className="inline-flex items-center text-sm transition-colors hover:text-ink" aria-label="Share">
         <Icon name="share" />
       </button>
-    </div>
+      </div>
+    </>
   );
 }
 

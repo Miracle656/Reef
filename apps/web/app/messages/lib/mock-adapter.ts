@@ -692,7 +692,7 @@ export class MockMessaging implements Messaging {
       userId: me.id,
       type: input.type,
       content: input.content,
-      mediaUrl: input.mediaUrl,
+      mediaUrl: input.mediaUrl ?? (input.file ? URL.createObjectURL(input.file) : undefined),
       bg: input.bg,
       createdAt: nowIso(),
       viewedBy: [],
