@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
+import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
 import { ComposeModal } from "./compose-modal";
 import { Avatar } from "./ui";
@@ -32,6 +33,9 @@ export function MessagesIcon({ className = cls }: { className?: string }) {
 export function UserIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>;
 }
+export function BellIcon({ className = cls }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" {...stroke}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>;
+}
 export function GearIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
 }
@@ -39,7 +43,43 @@ export function PlusIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>;
 }
 
-type Item = { href: string; label: string; active: boolean; icon: ReactNode };
+type Item = { href: string; label: string; active: boolean; icon: ReactNode; badge?: number };
+
+/** Unread = notifications newer than the last time the user opened /notifications
+ *  (persisted per-address in localStorage by the notifications page). */
+export function useUnreadNotifs(address?: string): number {
+  const q = useQuery({
+    queryKey: ["notifications", address],
+    queryFn: () => trpc.notifications.query({ address: address!, limit: 30 }),
+    enabled: Boolean(address),
+    refetchInterval: 30_000,
+  });
+  if (!address || !q.data) return 0;
+  const seen = Number((typeof localStorage !== "undefined" && localStorage.getItem(`reef:notif-seen:${address}`)) || 0);
+  return q.data.filter((n) => n.createdAtMs > seen).length;
+}
+
+/** Unread chats = indexer message-pings newer than the last time the user was
+ *  on /messages (`reef:msgs-seen`, stamped by the messages page). Content-free:
+ *  the ping only says "this chat has something new". */
+export function useUnreadMessages(address?: string): number {
+  const q = useQuery({
+    queryKey: ["msg-pings", address],
+    queryFn: () => trpc.messagesSince.query({ address: address! }),
+    enabled: Boolean(address),
+    refetchInterval: 30_000,
+  });
+  // Re-render when the messages page stamps the watermark in this tab.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener(MSGS_SEEN_EVENT, bump);
+    return () => window.removeEventListener(MSGS_SEEN_EVENT, bump);
+  }, []);
+  if (!address || !q.data) return 0;
+  const seen = readMsgsSeen(address);
+  return q.data.filter((p) => p.at > seen).length;
+}
 
 function useNav() {
   const account = useSocialAccount();
@@ -49,13 +89,15 @@ function useNav() {
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
     enabled: Boolean(account),
   });
+  const unread = useUnreadNotifs(account?.address);
+  const msgUnread = useUnreadMessages(account?.address);
   const profileHref = profile.data ? `/u/${profile.data.handle}` : "/onboarding";
   const items: Item[] = [
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
-    { href: "/trade", label: "Trade", active: pathname === "/trade", icon: <MarketsIcon /> },
-    { href: "/trade", label: "Predict", active: pathname.startsWith("/m/"), icon: <CrosshairIcon /> },
-    { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon /> },
+    { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
+    { href: "/notifications", label: "Notifications", active: pathname.startsWith("/notifications"), icon: <BellIcon />, badge: unread },
+    { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon />, badge: msgUnread },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
     { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
   ];
@@ -111,7 +153,7 @@ export function SideRail() {
   );
 }
 
-function RailItem({ href, label, active, icon }: Item) {
+function RailItem({ href, label, active, icon, badge }: Item) {
   return (
     <Link
       href={href}
@@ -120,53 +162,95 @@ function RailItem({ href, label, active, icon }: Item) {
         active ? "bg-ink font-bold text-on-ink" : "font-medium text-ink-soft hover:bg-[color:color-mix(in_srgb,var(--ink)_6%,transparent)]"
       }`}
     >
-      <span className="shrink-0">{icon}</span>
+      <span className="relative shrink-0">
+        {icon}
+        {badge ? (
+          <span className="absolute -right-1.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-on-accent ring-2 ring-[color:var(--surface)]">
+            {badge > 9 ? "9+" : badge}
+          </span>
+        ) : null}
+      </span>
       <span className="reef-lbl text-[16px]">{label}</span>
     </Link>
   );
 }
 
-/** Mobile bottom pill — the rail is hidden on small screens. */
+/** Mobile bottom bar — the rail is hidden on small screens, so EVERY
+ *  destination must be reachable here: Home/Search/Trade/Notifications/
+ *  Messages as icon pills, compose in the middle, and the avatar opens a
+ *  menu with Profile + Settings. */
 export function MobileNav() {
-  const { account, profileHref, items } = useNav();
+  const { account, profile, profileHref, items } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   if (!account) return null;
-  const pill = [items[0], items[1], items[4], items[5]].filter(Boolean) as Item[];
+  const pill = ["Home", "Search", "Trade", "Notifications", "Messages"]
+    .map((l) => items.find((i) => i.label === l))
+    .filter(Boolean) as Item[];
+  const avatarUrl = profile.data?.avatarBlobId ? walrus.urlFor(umbraConfig, profile.data.avatarBlobId) : null;
+  const meActive = items.find((i) => i.label === "Profile")?.active || items.find((i) => i.label === "Settings")?.active;
 
   return (
     <>
-      <nav className="fixed bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-2 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
-        {pill.slice(0, 2).map((it) => (
+      {menuOpen ? <div className="fixed inset-0 z-30 md:hidden" onClick={() => setMenuOpen(false)} /> : null}
+      <nav className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-md items-center justify-between rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-3 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
+        {pill.slice(0, 3).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
         <button
           type="button"
           aria-label="New post"
           onClick={() => setComposeOpen(true)}
-          className="lift mx-1 grid h-11 w-11 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
+          className="lift grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)]"
         >
           <PlusIcon className="h-5 w-5" />
         </button>
-        {pill.slice(2).map((it) => (
+        {pill.slice(3).map((it) => (
           <MobilePill key={it.label} {...it} />
         ))}
+        {/* me: profile + settings */}
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Profile and settings"
+            onClick={() => setMenuOpen((v) => !v)}
+            className={`grid h-10 w-10 place-items-center rounded-full transition-colors ${meActive ? "bg-ink" : ""}`}
+          >
+            <span className="overflow-hidden rounded-full ring-2 ring-[color:var(--border-strong)]">
+              <Avatar name={profile.data?.handle ?? "you"} src={avatarUrl} size={28} />
+            </span>
+          </button>
+          {menuOpen ? (
+            <div className="absolute bottom-full right-0 z-40 mb-3 w-44 rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1 shadow-[var(--shadow-glass-lg)]">
+              <Link href={profileHref} onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
+                <UserIcon className="h-[18px] w-[18px]" /> Profile
+              </Link>
+              <Link href="/settings" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
+                <GearIcon className="h-[18px] w-[18px]" /> Settings
+              </Link>
+            </div>
+          ) : null}
+        </div>
       </nav>
       <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
-      <span className="sr-only">{profileHref}</span>
     </>
   );
 }
 
-function MobilePill({ href, label, active, icon }: Item) {
+function MobilePill({ href, label, active, icon, badge }: Item) {
   return (
     <Link
       href={href}
-      className={`flex flex-col items-center gap-0.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium transition-colors ${
+      aria-label={label}
+      title={label}
+      className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${
         active ? "bg-ink text-on-ink" : "text-ink-soft hover:text-ink"
       }`}
     >
-      <span className="[&>svg]:h-5 [&>svg]:w-5">{icon}</span>
-      <span>{label}</span>
+      <span className="relative [&>svg]:h-[21px] [&>svg]:w-[21px]">
+        {icon}
+        {badge ? <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[9px] font-bold leading-none text-on-accent">{badge > 9 ? "9+" : badge}</span> : null}
+      </span>
     </Link>
   );
 }

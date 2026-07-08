@@ -58,3 +58,36 @@ export const XIcon = ({ className = base }: P) => (
 export const UsersIcon = ({ className = base }: P) => (
   <svg className={className} viewBox="0 0 24 24" {...s}><circle cx="9" cy="8" r="3.5" /><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-2.6-1.5-4.3-4-4.8" /></svg>
 );
+export const LockIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+);
+export const PinIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M12 17v5M9 3h6l-1 6 3 3H7l3-3-1-6z" /></svg>
+);
+export const EyeIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+);
+export const MicIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v4" /></svg>
+);
+export const PollIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M3 21h18M7 21V10M12 21V4M17 21v-7" /></svg>
+);
+export const MapPinIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></svg>
+);
+export const TargetIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" /></svg>
+);
+export const BellOffIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M8.7 3.5A6 6 0 0 1 18 8c0 3 .8 5 2 6M6 8c0 3-1 5-2 6h13M10 20a2 2 0 0 0 4 0M3 3l18 18" /></svg>
+);
+export const MessageIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5z" /></svg>
+);
+export const FileIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" /><path d="M14 3v5h5" /></svg>
+);
+export const WaveIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><path d="M18 11V6a1.5 1.5 0 0 0-3 0M15 11V4.5a1.5 1.5 0 0 0-3 0V11M12 11V6a1.5 1.5 0 0 0-3 0v8" /><path d="M9 12.5 7.5 11A1.6 1.6 0 0 0 5 13l2 3.5A7 7 0 0 0 18 15v-4a1.5 1.5 0 0 0-3 0" /></svg>
+);

@@ -6,7 +6,7 @@ import { MessagingProvider, useMessaging } from "../lib/provider";
 import { ChatList } from "./chat-list";
 import { ChatThread } from "./chat-thread";
 import { NewChatModal } from "./new-chat-modal";
-import { VaultModal } from "./vault-modal";
+import { ChatLockModal } from "./chat-lock-modal";
 
 export function MessagesApp() {
   return (
@@ -19,7 +19,7 @@ export function MessagesApp() {
 function Shell() {
   const { activeChat, openChat } = useMessaging();
   const [modal, setModal] = useState<"direct" | "group" | null>(null);
-  const [vaultOpen, setVaultOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
   const hasActive = Boolean(activeChat);
 
   return (
@@ -31,7 +31,7 @@ function Shell() {
         <div
           className={`${hasActive ? "hidden md:flex" : "flex"} h-full w-full flex-col border-[color:var(--glass-border)] md:w-[336px] md:shrink-0 md:border-r`}
         >
-          <ChatList onNew={() => setModal("direct")} onNewGroup={() => setModal("group")} onVault={() => setVaultOpen(true)} />
+          <ChatList onNew={() => setModal("direct")} onNewGroup={() => setModal("group")} onLock={() => setLockOpen(true)} />
         </div>
 
         {/* thread pane: full width on mobile when a chat is open */}
@@ -40,10 +40,11 @@ function Shell() {
         </div>
       </section>
 
-      <MobileNav />
+      {/* hidden while a thread is open on mobile — it would cover the composer */}
+      {!hasActive ? <MobileNav /> : null}
 
       {modal ? <NewChatModal mode={modal} onClose={() => setModal(null)} /> : null}
-      {vaultOpen ? <VaultModal onClose={() => setVaultOpen(false)} /> : null}
+      {lockOpen ? <ChatLockModal onClose={() => setLockOpen(false)} /> : null}
     </div>
   );
 }

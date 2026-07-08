@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Avatar } from "@/components/ui";
+import { AnimatedEmoji, renderEmoji, isOnlyEmoji } from "@/lib/emoji";
 import { timeShort } from "../lib/format";
+import { downloadMedia, useMediaUrl } from "../lib/media-crypto";
 import type { Message } from "../lib/types";
 import { PollView } from "./poll-view";
-import { CheckIcon, CheckCheckIcon, MoreIcon, ReplyIcon } from "./icons";
+import { CheckIcon, CheckCheckIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, MoreIcon, PaperclipIcon, ReplyIcon } from "./icons";
 
 export interface ReplyPreview {
   name: string;
@@ -62,7 +64,7 @@ export function MessageBubble({
           } ${m.failed ? "opacity-70 ring-1 ring-danger" : ""}`}
         >
           {m.audienceIds?.length && !redacted && !m.isDeleted ? (
-            <span className={`mb-0.5 flex items-center gap-1 text-[11px] italic ${mine ? "text-on-accent/70" : "text-ink-faint"}`}>🔒 Aside · {m.audienceIds.length} can see</span>
+            <span className={`mb-0.5 flex items-center gap-1 text-[11px] italic ${mine ? "text-on-accent/70" : "text-ink-faint"}`}><LockIcon className="h-3 w-3" /> Aside · {m.audienceIds.length} can see</span>
           ) : null}
 
           {m.isForwarded && !m.isDeleted ? (
@@ -84,7 +86,7 @@ export function MessageBubble({
           {m.isDeleted ? (
             <span className="italic opacity-70">Message deleted</span>
           ) : redacted ? (
-            <span className="italic opacity-70">🔒 This message is an aside you can’t read</span>
+            <span className="flex items-center gap-1 italic opacity-70"><LockIcon className="h-3.5 w-3.5" /> This message is an aside you can’t read</span>
           ) : (
             <Content message={m} mine={mine} onOpenImage={onOpenImage} onVotePoll={onVotePoll} onViewOnce={onViewOnce} />
           )}
@@ -105,7 +107,7 @@ export function MessageBubble({
                 onClick={() => onToggleReaction(m, r.emoji)}
                 className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[12px] ${r.mine ? "border-accent bg-accent/15 text-accent-ink" : "border-[color:var(--glass-border)] bg-surface"}`}
               >
-                <span>{r.emoji}</span>
+                <AnimatedEmoji char={r.emoji} size={15} />
                 <span className="font-mono text-[10.5px]">{r.count}</span>
               </button>
             ))}
@@ -148,39 +150,77 @@ function Content({
   if (m.isWhisper) return <Whisper message={m} mine={mine} />;
   if (m.viewOnce && (m.type === "image" || m.fileUrl)) {
     return m.viewOnceViewed ? (
-      <span className="flex items-center gap-1.5 italic opacity-70">👁 Opened</span>
+      <span className="flex items-center gap-1.5 italic opacity-70"><EyeIcon className="h-4 w-4" /> Opened</span>
     ) : (
       <button onClick={() => onViewOnce(m)} className="flex items-center gap-2 font-medium underline">
-        📷 View once · tap to open
+        <EyeIcon className="h-4 w-4" /> View once · tap to open
       </button>
     );
   }
-  if (m.type === "voice" && m.fileUrl) {
-    return (
-      <span className="flex items-center gap-2">
-        <span>🎤</span>
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio controls src={m.fileUrl} className="h-9 max-w-[220px]" />
-      </span>
-    );
-  }
+  if (m.type === "voice" && m.fileUrl) return <VoiceClip message={m} />;
   if (m.type === "poll" && m.poll) return <PollView message={m} mine={mine} onVote={(i) => onVotePoll(m.id, i)} />;
-  if (m.type === "image" && m.fileUrl) {
-    return (
-      <span className="block">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={m.fileUrl} alt={m.fileName ?? "image"} onClick={() => onOpenImage(m.fileUrl!)} className="max-h-72 w-full cursor-zoom-in rounded-[12px] object-cover" />
-        {m.content ? <span className="mt-1 block whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span> : null}
-      </span>
-    );
-  }
+  if (m.type === "image" && m.fileUrl) return <ChatImage message={m} onOpenImage={onOpenImage} />;
   if (m.type === "file" && m.fileUrl) {
     return (
-      <a href={m.fileUrl} download={m.fileName} className="flex items-center gap-2 underline">📎 <span className="truncate">{m.fileName ?? "File"}</span></a>
+      <button
+        onClick={() => void downloadMedia(m.fileUrl!, m.fileName, m.mimeType)}
+        className="flex items-center gap-2 underline"
+      >
+        <PaperclipIcon className="h-4 w-4 shrink-0" /> <span className="truncate">{m.fileName ?? "File"}</span>
+      </button>
     );
   }
-  if (m.type === "location") return <span className="flex items-center gap-1.5">📍 {m.content || "Shared a location"}</span>;
+  if (m.type === "location") {
+    const isCoords = /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(m.content);
+    return isCoords ? (
+      <a
+        href={`https://www.google.com/maps?q=${encodeURIComponent(m.content)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 underline"
+      >
+        <MapPinIcon className="h-4 w-4" /> Shared location · open in Maps
+      </a>
+    ) : (
+      <span className="flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" /> {m.content || "Shared a location"}</span>
+    );
+  }
+  // Emoji-only messages render big (jumbo), like Telegram.
+  if (isOnlyEmoji(m.content)) return <span className="flex flex-wrap gap-0.5 leading-none">{renderEmoji(m.content, 44)}</span>;
   return <span className="whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span>;
+}
+
+/** Chat image — decrypts reef-enc:// media to an object URL before rendering. */
+function ChatImage({ message: m, onOpenImage }: { message: Message; onOpenImage: (url: string) => void }) {
+  const url = useMediaUrl(m.fileUrl, m.mimeType);
+  return (
+    <span className="block">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={m.fileName ?? "image"} onClick={() => onOpenImage(url)} className="max-h-72 w-full cursor-zoom-in rounded-[12px] object-cover" />
+      ) : (
+        <span className="flex h-40 w-56 items-center justify-center rounded-[12px] bg-ink/10 text-xs opacity-70">
+          <ImageIcon className="mr-1.5 h-4 w-4" /> decrypting…
+        </span>
+      )}
+      {m.content ? <span className="mt-1 block whitespace-pre-wrap break-words">{highlightMentions(m.content)}</span> : null}
+    </span>
+  );
+}
+
+function VoiceClip({ message: m }: { message: Message }) {
+  const url = useMediaUrl(m.fileUrl, m.mimeType);
+  return (
+    <span className="flex items-center gap-2">
+      <MicIcon className="h-4 w-4" />
+      {url ? (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio controls src={url} className="h-9 max-w-[220px]" />
+      ) : (
+        <span className="text-xs opacity-70">decrypting…</span>
+      )}
+    </span>
+  );
 }
 
 function Whisper({ message: m, mine }: { message: Message; mine: boolean }) {
@@ -189,7 +229,7 @@ function Whisper({ message: m, mine }: { message: Message; mine: boolean }) {
   return (
     <button onClick={() => setRevealed(true)} className={`flex items-center gap-2 italic ${mine ? "text-on-accent/80" : "text-ink-soft"}`}>
       <span className="select-none blur-[5px]">{m.content || "whisper whisper whisper"}</span>
-      <span className="not-italic">👁</span>
+      <EyeIcon className="h-4 w-4" />
     </button>
   );
 }
@@ -233,7 +273,7 @@ function highlightMentions(text: string) {
     p.startsWith("@") ? (
       <span key={i} className="font-semibold text-accent-ink underline decoration-accent/40">{p}</span>
     ) : (
-      <span key={i}>{p}</span>
+      <span key={i}>{renderEmoji(p)}</span>
     ),
   );
 }

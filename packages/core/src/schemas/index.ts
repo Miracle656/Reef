@@ -137,6 +137,53 @@ export function canonicalReactionBytes(m: ReactionMessage): Uint8Array {
   return new TextEncoder().encode(canonical);
 }
 
+// ---- stories / status (24h ephemeral, signature-verified, indexer-hosted) ---
+
+/** Payload the client signs to post a story. Media is a public Walrus blob. */
+export const StatusMessageSchema = z.object({
+  owner: SuiAddress,
+  type: z.enum(["text", "image"]),
+  content: z.string().max(280),
+  mediaBlobId: z.string().max(120).nullish(),
+  /** background color for text stories, e.g. "#0a84ff" */
+  bg: z.string().max(24).nullish(),
+  timestamp: z.number().int(),
+});
+
+export const SignedStatusSchema = z.object({
+  message: StatusMessageSchema,
+  /** base64 Sui personal-message signature over canonicalStatusBytes(message) */
+  signature: z.string(),
+});
+
+export type StatusMessage = z.infer<typeof StatusMessageSchema>;
+export type SignedStatus = z.infer<typeof SignedStatusSchema>;
+
+/** Canonical bytes for a story post (content last — it's free text). */
+export function canonicalStatusBytes(m: StatusMessage): Uint8Array {
+  const canonical = `umbra:status:${m.owner}:${m.type}:${m.mediaBlobId ?? ""}:${m.bg ?? ""}:${m.timestamp}:${m.content}`;
+  return new TextEncoder().encode(canonical);
+}
+
+/** Payload the client signs to delete one of their stories. */
+export const StatusDeleteMessageSchema = z.object({
+  owner: SuiAddress,
+  statusId: z.string().max(64),
+  timestamp: z.number().int(),
+});
+
+export const SignedStatusDeleteSchema = z.object({
+  message: StatusDeleteMessageSchema,
+  signature: z.string(),
+});
+
+export type StatusDeleteMessage = z.infer<typeof StatusDeleteMessageSchema>;
+export type SignedStatusDelete = z.infer<typeof SignedStatusDeleteSchema>;
+
+export function canonicalStatusDeleteBytes(m: StatusDeleteMessage): Uint8Array {
+  return new TextEncoder().encode(`umbra:status-delete:${m.owner}:${m.statusId}:${m.timestamp}`);
+}
+
 // ---- wallet linking (verified addresses, Farcaster-style) ------------------
 
 /**

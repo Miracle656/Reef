@@ -44,6 +44,14 @@ export interface SendMessageInput {
   viewOnce?: boolean;
   mentionIds?: string[];
   audienceIds?: string[];
+  /** control-message payload (type reaction / pin / poll-vote) */
+  targetId?: string;
+  remove?: boolean;
+  pinned?: boolean;
+  optionIndex?: number;
+  /** poll creation (type "poll"): option texts + choice mode */
+  pollOptions?: string[];
+  allowMultiple?: boolean;
   /** client-generated id for optimistic reconciliation */
   clientId?: string;
 }
@@ -74,6 +82,8 @@ export interface StatusInput {
   type: "text" | "image";
   content: string;
   mediaUrl?: string;
+  /** raw image — the backend uploads it (public Walrus blob, stories aren't E2E) */
+  file?: File;
   bg?: string;
 }
 
@@ -135,6 +145,11 @@ export interface Messaging {
 
   // messages -------------------------------------------------------------
   listMessages(chatId: string, cursor?: string | null): Promise<{ messages: Message[]; nextCursor: string | null }>;
+  /**
+   * OPTIONAL synchronous peek at locally-cached messages for a chat, so the UI
+   * can render a thread instantly while `listMessages` fetches fresh data.
+   */
+  peekMessages?(chatId: string): Message[];
   sendMessage(input: SendMessageInput): Promise<Message>;
   editMessage(messageId: string, content: string): Promise<void>;
   deleteMessage(messageId: string): Promise<void>;
@@ -153,13 +168,8 @@ export interface Messaging {
   votePoll(messageId: string, optionIndex: number): Promise<void>;
   markViewOnce(messageId: string): Promise<void>;
 
-  // the vault (passcode-locked chats) (phase C) --------------------------
-  vaultStatus(): Promise<{ hasPasscode: boolean; unlocked: boolean }>;
-  vaultSetup(passcode: string, currentPasscode?: string): Promise<void>;
-  vaultUnlock(passcode: string): Promise<boolean>;
-  lockVault(): void;
-  listVaultChats(): Promise<Chat[]>;
-  setChatVaulted(chatId: string, vaulted: boolean): Promise<void>;
+  // NOTE: chat lock (passcode-protected chats) is NOT an adapter concern — it's
+  // device-local by design and lives in provider.tsx + lib/chat-lock.ts.
 
   // group / chat management ----------------------------------------------
   updateGroup(chatId: string, patch: GroupPatch): Promise<Chat>;

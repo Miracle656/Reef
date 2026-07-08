@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
-import { chatAvatar, chatName, peerOf } from "../lib/display";
+import { resolveMediaUrl } from "../lib/media-crypto";
+import { chatAvatar, chatName, peerOf, sameId } from "../lib/display";
 import { dayLabel } from "../lib/format";
 import type { Chat, Message } from "../lib/types";
 import { MessageBubble, type ReplyPreview } from "./message-bubble";
@@ -15,7 +16,7 @@ import { SearchPanel } from "./search-panel";
 import { SavedModal } from "./saved-modal";
 import { ChosenGame } from "./chosen-game";
 import { Composer } from "./composer";
-import { BackIcon, MoreIcon, SearchIcon } from "./icons";
+import { BackIcon, MessageIcon, MoreIcon, PinIcon, SearchIcon, TargetIcon, WaveIcon } from "./icons";
 
 const DISAPPEAR_OPTIONS: { label: string; seconds: number }[] = [
   { label: "Off", seconds: 0 },
@@ -100,26 +101,29 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
   if (!chat) {
     return (
       <div className="hidden h-full flex-1 flex-col items-center justify-center gap-3 text-center md:flex">
-        <span className="grid h-16 w-16 place-items-center rounded-full bg-surface-muted text-2xl">🐚</span>
+        <span className="grid h-16 w-16 place-items-center rounded-full bg-surface-muted text-ink-soft"><MessageIcon className="h-7 w-7" /></span>
         <p className="text-[15px] font-semibold">Your messages</p>
-        <p className="max-w-xs text-sm text-ink-soft">Pick a conversation, or start a new one. Going on-chain soon.</p>
+        <p className="max-w-xs text-sm text-ink-soft">Pick a conversation, or start a new one.</p>
       </div>
     );
   }
 
   const av = chatAvatar(chat, me?.id);
   const peer = peerOf(chat, me?.id);
-  const online = peer ? state.onlineUserIds.includes(peer.id) : false;
+  // No presence channel on-chain, so instead of a misleading "offline" a DM
+  // shows the peer's @handle; groups show the member count.
   const statusLine = typing.length
     ? chat.type === "group" ? `${typing.join(", ")} typing…` : "typing…"
-    : chat.type === "group" ? `${chat.participants.length} members` : online ? "online" : "offline";
+    : chat.type === "group" ? `${chat.participants.length} members` : peer?.username ? `@${peer.username}` : "";
 
-  const replyName = replyTo ? (replyTo.senderId === me?.id ? "yourself" : replyTo.sender?.displayName || replyTo.sender?.username || "") : undefined;
+  const replyName = replyTo ? (sameId(replyTo.senderId, me?.id) ? "yourself" : replyTo.sender?.displayName || replyTo.sender?.username || "") : undefined;
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
-      {/* header */}
-      <div className="flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] px-3 py-2.5 backdrop-blur-xl">
+      {/* header — relative z-40 lifts it (and its dropdown) above the messages
+          scroll area; backdrop-blur creates a stacking context, so without a
+          positive z-index the later-sibling message bubbles paint over the menu. */}
+      <div className="relative z-40 flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-[color:color-mix(in_srgb,var(--surface)_82%,transparent)] px-3 py-2.5 backdrop-blur-xl">
         <button onClick={onBack} aria-label="Back" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-soft hover:bg-surface-muted md:hidden">
           <BackIcon className="h-5 w-5" />
         </button>
@@ -142,7 +146,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
           const last = pinned[pinned.length - 1]!;
           return (
             <button onClick={() => jumpTo(last.id)} className="flex items-center gap-2 border-b border-[color:var(--glass-border)] bg-accent/5 px-4 py-2 text-left">
-              <span className="text-[13px]">📌</span>
+              <PinIcon className="h-3.5 w-3.5 text-accent-ink" />
               <span className="min-w-0 flex-1">
                 <span className="block text-[11px] font-semibold text-accent-ink">Pinned · {pinned.length}</span>
                 <span className="block truncate text-[12.5px] text-ink-soft">{last.content || "media"}</span>
@@ -155,7 +159,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
       {/* messages */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visible.length === 0 ? (
-          <div className="grid h-full place-items-center"><p className="text-sm text-ink-faint">Say hi 👋</p></div>
+          <div className="grid h-full place-items-center"><p className="flex items-center gap-1.5 text-sm text-ink-faint"><WaveIcon className="h-4 w-4" /> Say hi</p></div>
         ) : (
           renderRuns(visible, me?.id, chat.type === "group", byId, {
             onOpenActions: setActionMsg,
@@ -163,7 +167,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
             onToggleReaction: (m, e) => void toggleReaction(m, e),
             onJumpToReply: jumpTo,
             onVotePoll: (id, i) => void votePoll(id, i),
-            onViewOnce: (m) => { if (m.fileUrl) setViewerUrl(m.fileUrl); void markViewOnce(m); },
+            onViewOnce: (m) => { if (m.fileUrl) void resolveMediaUrl(m.fileUrl, m.mimeType).then(setViewerUrl).catch(() => {}); void markViewOnce(m); },
           })
         )}
         {typing.length ? <TypingDots /> : null}
@@ -186,7 +190,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
       {actionMsg ? (
         <MessageActions
           message={actionMsg}
-          mine={actionMsg.senderId === me?.id}
+          mine={sameId(actionMsg.senderId, me?.id)}
           onReply={(m) => { setReplyTo(m); setEditing(null); }}
           onForward={(m) => setForwardMsg(m)}
           onEdit={(m) => { setEditing(m); setReplyTo(null); }}
@@ -221,7 +225,7 @@ function HeaderMenu({ chat, onInfo, onSearch, onSaved, onChosen }: { chat: Chat;
             <button className={item} onClick={() => { onInfo(); setOpen(false); }}>{chat.type === "group" ? "Group info" : "Contact info"}</button>
             <button className={item} onClick={() => { onSaved(); setOpen(false); }}>Saved messages</button>
             {chat.type === "group" && chat.allowChosen ? (
-              <button className={item} onClick={() => { onChosen(); setOpen(false); }}>🎯 Play Chosen</button>
+              <button className={`${item} flex items-center gap-2`} onClick={() => { onChosen(); setOpen(false); }}><TargetIcon className="h-4 w-4" /> Play Chosen</button>
             ) : null}
             <button className={`${item} flex items-center justify-between`} onClick={() => setDisOpen((d) => !d)}>
               <span>Disappearing</span>
@@ -271,7 +275,7 @@ function renderRuns(
       );
       lastDay = day;
     }
-    const mine = m.senderId === meId;
+    const mine = sameId(m.senderId, meId);
     const prev = messages[i - 1];
     const next = messages[i + 1];
     const sameAsPrev = prev && prev.senderId === m.senderId && prev.createdAt.slice(0, 10) === day;
@@ -298,8 +302,8 @@ function resolveReply(m: Message, byId: Map<string, Message>, meId: string | und
   if (!m.replyToId) return undefined;
   const t = byId.get(m.replyToId);
   if (!t) return { name: "", text: "Original message" };
-  const name = t.senderId === meId ? "You" : t.sender?.displayName || t.sender?.username || "";
-  const text = t.isDeleted ? "Message deleted" : t.content || (t.type === "image" ? "📷 Photo" : t.type === "file" ? "📎 File" : "media");
+  const name = sameId(t.senderId, meId) ? "You" : t.sender?.displayName || t.sender?.username || "";
+  const text = t.isDeleted ? "Message deleted" : t.content || (t.type === "image" ? "Photo" : t.type === "file" ? "File" : "media");
   return { name, text };
 }
 

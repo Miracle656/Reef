@@ -9,10 +9,45 @@ import { AppShell } from "@/components/app-shell";
 import { RightSidebar } from "@/components/right-sidebar";
 import { CoinIcon } from "@/components/market-select";
 import { FollowButton } from "@/components/follow-button";
+import { EditProfileButton } from "@/components/edit-profile";
 import { PostCard } from "@/components/post-card";
+import { RichText } from "@/components/rich-text";
 import { Avatar, Button, Card, Spinner } from "@/components/ui";
+import { toast } from "@/components/toaster";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
+
+/** Native share sheet where available (mobile), clipboard everywhere else.
+    The shared link unfurls into the per-profile reef card (opengraph-image). */
+function ShareProfileButton({ handle }: { handle: string }) {
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const url = `${window.location.origin}/u/${handle}`;
+        try {
+          if (navigator.share) await navigator.share({ title: `@${handle}.reef on ReeF`, url });
+          else {
+            await navigator.clipboard.writeText(url);
+            toast("Profile link copied ✓");
+          }
+        } catch {
+          /* user dismissed the share sheet */
+        }
+      }}
+      title="Share profile"
+      aria-label="Share profile"
+      className="grid h-9 w-9 place-items-center rounded-full border border-[color:var(--glass-border)] bg-surface text-ink-soft shadow-[var(--shadow-glass)] hover:text-accent"
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="6" cy="12" r="2.6" />
+        <circle cx="17.5" cy="5.5" r="2.6" />
+        <circle cx="17.5" cy="18.5" r="2.6" />
+        <path d="M8.4 10.8l6.8-4M8.4 13.2l6.8 4" />
+      </svg>
+    </button>
+  );
+}
 
 export default function ProfilePage() {
   const params = useParams<{ handle: string }>();
@@ -74,7 +109,9 @@ export default function ProfilePage() {
           <span className="rounded-full ring-4 ring-[color:var(--background)]">
             <Avatar name={p.handle} src={p.avatarBlobId ? walrus.urlFor(umbraConfig, p.avatarBlobId) : null} size={96} />
           </span>
-          <div className="mb-2">
+          <div className="mb-2 flex items-center gap-2">
+            <ShareProfileButton handle={p.handle} />
+            <EditProfileButton profile={p} />
             <FollowButton target={p.owner} />
           </div>
         </div>
@@ -87,7 +124,11 @@ export default function ProfilePage() {
           @{p.handle}
           {p.suinsName ? <span className="text-accent"> · {p.suinsName}</span> : null}
         </div>
-        {p.bio ? <p className="mt-3 max-w-[480px] text-[15px] leading-[1.5] text-[#26262c]">{p.bio}</p> : null}
+        {p.bio ? (
+          <p className="mt-3 max-w-[480px] text-[15px] leading-[1.5] text-[#26262c]">
+            <RichText text={p.bio} />
+          </p>
+        ) : null}
         <div className="mt-3.5 flex gap-5 text-[14.5px]">
           <span><b className="font-bold">{p.followingCount}</b> <span className="text-ink-faint">Following</span></span>
           <span><b className="font-bold">{p.followersCount}</b> <span className="text-ink-faint">Followers</span></span>

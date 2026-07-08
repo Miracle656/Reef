@@ -12,7 +12,10 @@
   "dependencies": {
     "@mysten/dapp-kit": "^1.1.1",
     "@mysten/enoki": "^1.1.1",
+    "@mysten/seal": "1.2.1",
     "@mysten/sui": "^2.19.0",
+    "@mysten/sui-groups": "0.0.1",
+    "@mysten/sui-stack-messaging": "0.0.2",
     "@tanstack/react-query": "^5.90.5",
     "@trpc/client": "^11.0.0",
     "@umbra/core": "workspace:*",

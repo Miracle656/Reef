@@ -19,10 +19,29 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { walrus } from "@umbra/core";
+import { canonicalStatusBytes, canonicalStatusDeleteBytes, walrus } from "@umbra/core";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { useSocialAccount } from "@/lib/account";
 import { umbraConfig } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
+import { useEnokiSignPersonalMessage, useGasless } from "@/lib/gasless";
+import { markMsgsSeen } from "@/lib/msg-seen";
+import { getDelegateKeypair } from "./messaging-identity";
+import { createReefMessagingClient } from "./messaging-client";
+import { messagingEnv, isMessagingConfigured } from "./sui-config";
+import { setMessagingRuntime } from "./runtime";
+import { markAccepted, requestPeerOf } from "./requests";
+import {
+  getChatLockState,
+  lockChatLockNow,
+  setChatLocked as storeChatLocked,
+  setRelockMinutes as storeRelockMinutes,
+  setupChatLock,
+  unlockChatLock,
+  type ChatLockState,
+} from "./chat-lock";
+import { applyControl, applyVote, markViewedOnce } from "./control";
+import { CONTROL_TYPES } from "./types";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
 
 // ── state ──────────────────────────────────────────────────────────────────────
@@ -68,6 +87,7 @@ type Action =
   | { t: "ONLINE"; ids: string[] }
   | { t: "PIN"; chatId: string; messageId: string; isPinned: boolean }
   | { t: "POLL"; chatId: string; messageId: string; poll: NonNullable<Message["poll"]> }
+  | { t: "POLL_VOTE"; chatId: string; pollId: string; userId: string; optionIndex: number; meId: string }
   | { t: "VIEWONCE"; chatId: string; messageId: string }
   | { t: "ADD_CHATS"; chats: Chat[] }
   | { t: "CHOSEN_SET"; game: ChosenState }
@@ -214,6 +234,18 @@ function reducer(state: State, a: Action): State {
           [a.chatId]: (state.messages[a.chatId] ?? []).map((m) => (m.id === a.messageId ? { ...m, poll: a.poll } : m)),
         },
       };
+    case "POLL_VOTE":
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [a.chatId]: (state.messages[a.chatId] ?? []).map((m) => {
+            if (m.id !== a.pollId || !m.poll) return m;
+            const poll = applyVote(m.poll, a.userId, a.optionIndex);
+            return { ...m, poll: { ...poll, myVotes: poll.voters?.[a.meId] ?? [] } };
+          }),
+        },
+      };
     case "VIEWONCE":
       return {
         ...state,
@@ -305,11 +337,13 @@ interface MessagingContext {
   createPoll: (chatId: string, question: string, options: string[], allowMultiple: boolean) => Promise<void>;
   votePoll: (messageId: string, optionIndex: number) => Promise<void>;
   markViewOnce: (message: Message) => Promise<void>;
-  vaultStatus: () => Promise<{ hasPasscode: boolean; unlocked: boolean }>;
-  vaultSetup: (passcode: string, currentPasscode?: string) => Promise<void>;
-  unlockVault: (passcode: string) => Promise<boolean>;
-  lockVault: () => void;
-  setChatVaulted: (chatId: string, vaulted: boolean) => Promise<void>;
+  // chat lock (client-side passcode; auto-relocks after chatLock.relockMinutes)
+  chatLock: ChatLockState;
+  chatLockSetup: (passcode: string, currentPasscode?: string) => Promise<void>;
+  chatLockUnlock: (passcode: string) => Promise<boolean>;
+  chatLockNow: () => void;
+  setChatLocked: (chatId: string, locked: boolean) => void;
+  setChatLockRelock: (minutes: number) => void;
   // stories
   listStatus: () => Promise<StatusGroup[]>;
   postStatus: (input: StatusInput) => Promise<void>;
@@ -330,11 +364,50 @@ const Ctx = createContext<MessagingContext | null>(null);
 
 export function MessagingProvider({ children }: { children: ReactNode }) {
   const me = useMe();
+  const account = useSocialAccount();
+  const sponsorExecute = useGasless();
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  // Build the on-chain messaging runtime and inject it into the SuiMessaging
+  // adapter. Two identities work together:
+  //  - the user's zkLogin address is the on-chain group admin (its txs are
+  //    Enoki-sponsored via `sponsorExecute`), which can grant the delegate;
+  //  - a per-device Ed25519 *delegate* keypair signs all relayer/message ops
+  //    (the relayer needs a real keypair signature — zkLogin can't auth).
+  // No-op on the mock adapter.
+  useEffect(() => {
+    if (!me || !account || !isMessagingConfigured()) {
+      setMessagingRuntime(null);
+      return;
+    }
+    const delegate = getDelegateKeypair(account.address);
+    const client = createReefMessagingClient(delegate);
+    const graphqlClient = new SuiGraphQLClient({ url: messagingEnv.graphqlUrl, network: messagingEnv.network });
+    setMessagingRuntime({
+      client,
+      signer: delegate,
+      delegateAddress: delegate.toSuiAddress(),
+      graphqlClient,
+      me,
+      sponsorExecute,
+    });
+    return () => setMessagingRuntime(null);
+  }, [me, account, sponsorExecute]);
   const activeRef = useRef<string | null>(null);
   activeRef.current = state.activeChatId;
   const meRef = useRef<Me | null>(null);
   meRef.current = me;
+  const chatsRef = useRef<Chat[]>([]);
+  chatsRef.current = state.chats;
+  const messagesRef = useRef<State["messages"]>({});
+  messagesRef.current = state.messages;
+  /** Which loaded chat holds this message (pin/save/vote act on the open chat). */
+  const findChatOf = useCallback((messageId: string): string | null => {
+    for (const [chatId, list] of Object.entries(messagesRef.current)) {
+      if (list.some((m) => m.id === messageId)) return chatId;
+    }
+    return null;
+  }, []);
 
   const refreshChats = useCallback(async () => {
     const chats = await messaging.listChats();
@@ -345,17 +418,38 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!me) return;
     messaging.setCurrentUser(me);
+    markMsgsSeen(me.id); // on /messages now — quiet the navbar badge
     void refreshChats();
+    // Re-discover periodically so chats someone else just started with us
+    // surface without a manual refresh (GraphQL membership indexing lags).
+    const id = setInterval(() => void refreshChats(), 15000);
+    return () => clearInterval(id);
   }, [me, refreshChats]);
 
   // live events
   useEffect(() => {
     const unsub = messaging.subscribe((e) => {
       switch (e.type) {
-        case "message":
-          dispatch({ t: "ADD_MESSAGE", message: e.message, isOwn: e.isOwn, mentionsMe: e.mentionsMe, activeChatId: activeRef.current });
-          if (!e.isOwn && activeRef.current === e.message.chatId) void messaging.markRead(e.message.chatId);
+        case "message": {
+          const m = e.message;
+          // Control messages mutate their target instead of rendering.
+          if (CONTROL_TYPES.has(m.type)) {
+            if (m.type === "reaction" && m.targetId) {
+              dispatch({ t: "REACTION", chatId: m.chatId, messageId: m.targetId, userId: m.senderId, emoji: m.content, add: !m.remove });
+            } else if (m.type === "pin" && m.targetId) {
+              dispatch({ t: "PIN", chatId: m.chatId, messageId: m.targetId, isPinned: Boolean(m.pinned) });
+            } else if (m.type === "poll-vote" && m.targetId && m.optionIndex != null) {
+              dispatch({ t: "POLL_VOTE", chatId: m.chatId, pollId: m.targetId, userId: m.senderId, optionIndex: m.optionIndex, meId: meRef.current?.id ?? "" });
+            }
+            break;
+          }
+          dispatch({ t: "ADD_MESSAGE", message: m, isOwn: e.isOwn, mentionsMe: e.mentionsMe, activeChatId: activeRef.current });
+          if (!e.isOwn && activeRef.current === m.chatId) void messaging.markRead(m.chatId);
+          // This provider only lives on /messages — the user is watching, so
+          // arrivals shouldn't light the navbar badge.
+          if (meRef.current) markMsgsSeen(meRef.current.id);
           break;
+        }
         case "chat_created":
           dispatch({ t: "ADD_CHAT", chat: e.chat });
           break;
@@ -411,8 +505,23 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       dispatch({ t: "SET_ACTIVE", chatId });
       if (!chatId) return;
       dispatch({ t: "CLEAR_UNREAD", chatId });
+      if (meRef.current) markMsgsSeen(meRef.current.id);
       void messaging.markRead(chatId);
-      messaging.listMessages(chatId).then(({ messages }) => dispatch({ t: "SET_MESSAGES", chatId, messages }));
+      // Instant open: render the locally-cached thread now; the network fetch
+      // that follows replaces it with fresh data.
+      const meId = meRef.current?.id ?? "";
+      const cached = messaging.peekMessages?.(chatId) ?? [];
+      if (cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: applyControl(cached, meId) });
+      messaging
+        .listMessages(chatId)
+        .then(({ messages }) => {
+          // Don't wipe a cache-rendered thread on a transient empty response
+          // (deletion isn't modeled on-chain yet, so empty-after-cached ≈ glitch).
+          if (messages.length || !cached.length) dispatch({ t: "SET_MESSAGES", chatId, messages: applyControl(messages, meId) });
+        })
+        .catch(() => {
+          /* keep the cached render — the poll retries */
+        });
     },
     [],
   );
@@ -443,9 +552,20 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       sender: { id: meNow.id, username: meNow.username, displayName: meNow.displayName, avatarUrl: meNow.avatarUrl },
     };
     dispatch({ t: "ADD_MESSAGE", message: optimistic, isOwn: true, mentionsMe: false, activeChatId: activeRef.current });
+    // Replying to a DM accepts it — it leaves the Requests pile for good.
+    const chat = chatsRef.current.find((c) => c.id === input.chatId);
+    const peer = chat ? requestPeerOf(chat, meNow.id) : undefined;
+    if (peer) markAccepted(meNow.id, peer);
     try {
       const saved = await messaging.sendMessage({ ...input, clientId });
       dispatch({ t: "RECONCILE", chatId: input.chatId, clientId, message: { ...saved, sender: optimistic.sender } });
+      // Content-free "something new" ping so recipients' navbar badges light
+      // up even when they're not on /messages. Best-effort.
+      const to = (chat?.participants ?? [])
+        .map((p) => p.id)
+        .filter((id) => id.startsWith("0x") && id.toLowerCase() !== meNow.id.toLowerCase())
+        .slice(0, 50);
+      if (to.length) void trpc.messagePing.mutate({ chatId: input.chatId, to }).catch(() => {});
     } catch {
       dispatch({ t: "MARK_FAILED", chatId: input.chatId, clientId });
     }
@@ -453,6 +573,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
   const startDirect = useCallback(
     async (userId: string) => {
+      if (meRef.current) markAccepted(meRef.current.id, userId); // I initiated it
       const chat = await messaging.createDirect(userId);
       dispatch({ t: "ADD_CHAT", chat });
       openChat(chat.id);
@@ -487,9 +608,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   const deleteMessage = useCallback((messageId: string) => messaging.deleteMessage(messageId), []);
   const toggleReaction = useCallback(async (message: Message, emoji: string) => {
     const meId = meRef.current?.id;
+    if (!meId) return;
     const mine = (message.reactions ?? []).some((r) => r.userId === meId && r.emoji === emoji);
-    if (mine) await messaging.removeReaction(message.id, emoji);
-    else await messaging.addReaction(message.id, emoji);
+    // Optimistic; the reaction travels as a hidden control message.
+    dispatch({ t: "REACTION", chatId: message.chatId, messageId: message.id, userId: meId, emoji, add: !mine });
+    await messaging
+      .sendMessage({ chatId: message.chatId, type: "reaction", content: emoji, targetId: message.id, remove: mine })
+      .catch(() => dispatch({ t: "REACTION", chatId: message.chatId, messageId: message.id, userId: meId, emoji, add: mine }));
   }, []);
   const forwardMessage = useCallback(async (targetChatId: string, message: Message) => {
     await messaging.sendMessage({
@@ -535,49 +660,185 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     await messaging.setDisappearing(chatId, seconds);
     dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, disappearingSeconds: seconds } });
   }, []);
-  const pinMessage = useCallback((messageId: string, pinned: boolean) => messaging.pinMessage(messageId, pinned), []);
-  const listPinned = useCallback((chatId: string) => messaging.listPinned(chatId), []);
-  const saveMessage = useCallback((messageId: string) => messaging.saveMessage(messageId), []);
-  const unsaveMessage = useCallback((messageId: string) => messaging.unsaveMessage(messageId), []);
-  const listSaved = useCallback(() => messaging.listSaved(), []);
+  const pinMessage = useCallback(
+    async (messageId: string, pinned: boolean) => {
+      const chatId = findChatOf(messageId);
+      if (!chatId) return;
+      dispatch({ t: "PIN", chatId, messageId, isPinned: pinned });
+      await messaging.sendMessage({ chatId, type: "pin", content: "", targetId: messageId, pinned }).catch(() => {});
+    },
+    [findChatOf],
+  );
+  const listPinned = useCallback(
+    (chatId: string) => Promise.resolve((messagesRef.current[chatId] ?? []).filter((m) => m.isPinned && !m.isDeleted)),
+    [],
+  );
+  // Saved messages are personal bookmarks — they live on this device only
+  // (the chat is E2E encrypted; there's no server-side home for them).
+  const savedKey = useCallback(() => `reef:msg-saved:v1:${(meRef.current?.id ?? "").toLowerCase()}`, []);
+  const readSaved = useCallback((): Message[] => {
+    try {
+      return JSON.parse(window.localStorage.getItem(savedKey()) ?? "[]") as Message[];
+    } catch {
+      return [];
+    }
+  }, [savedKey]);
+  const saveMessage = useCallback(
+    async (messageId: string) => {
+      const chatId = findChatOf(messageId);
+      const msg = chatId ? messagesRef.current[chatId]?.find((m) => m.id === messageId) : undefined;
+      if (!msg) return;
+      const cur = readSaved().filter((m) => m.id !== messageId);
+      try {
+        window.localStorage.setItem(savedKey(), JSON.stringify([{ ...msg, pending: false }, ...cur].slice(0, 200)));
+      } catch {
+        /* quota */
+      }
+    },
+    [findChatOf, readSaved, savedKey],
+  );
+  const unsaveMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        window.localStorage.setItem(savedKey(), JSON.stringify(readSaved().filter((m) => m.id !== messageId)));
+      } catch {
+        /* quota */
+      }
+    },
+    [readSaved, savedKey],
+  );
+  const listSaved = useCallback(() => Promise.resolve(readSaved()), [readSaved]);
   const createPoll = useCallback(async (chatId: string, question: string, options: string[], allowMultiple: boolean) => {
     const msg = await messaging.createPoll(chatId, question, options, allowMultiple);
     dispatch({ t: "ADD_MESSAGE", message: msg, isOwn: true, mentionsMe: false, activeChatId: activeRef.current });
   }, []);
-  const votePoll = useCallback((messageId: string, optionIndex: number) => messaging.votePoll(messageId, optionIndex), []);
+  const votePoll = useCallback(
+    async (messageId: string, optionIndex: number) => {
+      const meId = meRef.current?.id;
+      const chatId = findChatOf(messageId);
+      if (!meId || !chatId) return;
+      dispatch({ t: "POLL_VOTE", chatId, pollId: messageId, userId: meId, optionIndex, meId });
+      await messaging.sendMessage({ chatId, type: "poll-vote", content: "", targetId: messageId, optionIndex }).catch(() => {});
+    },
+    [findChatOf],
+  );
   const markViewOnce = useCallback(async (message: Message) => {
-    await messaging.markViewOnce(message.id);
+    if (meRef.current) markViewedOnce(meRef.current.id, message.id); // survives re-fetch
     dispatch({ t: "VIEWONCE", chatId: message.chatId, messageId: message.id });
   }, []);
-  const vaultStatus = useCallback(() => messaging.vaultStatus(), []);
-  const vaultSetup = useCallback((passcode: string, currentPasscode?: string) => messaging.vaultSetup(passcode, currentPasscode), []);
-  const unlockVault = useCallback(async (passcode: string) => {
-    const ok = await messaging.vaultUnlock(passcode);
-    if (ok) {
-      const vault = await messaging.listVaultChats();
-      dispatch({ t: "ADD_CHATS", chats: vault });
+  // chat lock — passcode + auto-relock, entirely on this device (see chat-lock.ts).
+  // lockEpoch forces re-derivation of the state after setup/unlock/lock/expiry.
+  const [lockEpoch, bumpLock] = useReducer((x: number) => x + 1, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const chatLock = useMemo(() => getChatLockState(me?.id), [me?.id, lockEpoch]);
+  useEffect(() => {
+    // when the unlock window closes, re-render so locked chats vanish again
+    if (chatLock.msLeft == null) return;
+    const t = setTimeout(() => bumpLock(), chatLock.msLeft + 250);
+    return () => clearTimeout(t);
+  }, [chatLock.msLeft]);
+  useEffect(() => {
+    // relocking closes a locked chat that's still open on screen
+    if (!chatLock.unlocked && state.activeChatId && chatLock.lockedIds.includes(state.activeChatId)) {
+      openChat(null);
     }
+  }, [chatLock.unlocked, chatLock.lockedIds, state.activeChatId, openChat]);
+  const chatLockSetup = useCallback(async (passcode: string, currentPasscode?: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) throw new Error("Sign in first");
+    await setupChatLock(meId, passcode, currentPasscode);
+    bumpLock();
+  }, []);
+  const chatLockUnlock = useCallback(async (passcode: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) return false;
+    const ok = await unlockChatLock(meId, passcode);
+    if (ok) bumpLock();
     return ok;
   }, []);
-  const lockVault = useCallback(() => {
-    messaging.lockVault();
-    void refreshChats();
-  }, [refreshChats]);
-  const setChatVaulted = useCallback(async (chatId: string, vaulted: boolean) => {
-    await messaging.setChatVaulted(chatId, vaulted);
-    if (vaulted) {
-      dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, vaulted: true } });
-      await refreshChats();
-    } else {
-      dispatch({ t: "UPDATE_CHAT", chat: { id: chatId, vaulted: false } });
-    }
-  }, [refreshChats]);
+  const chatLockNow = useCallback(() => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    lockChatLockNow(meId);
+    bumpLock();
+  }, []);
+  const setChatLocked = useCallback((chatId: string, locked: boolean) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    storeChatLocked(meId, chatId, locked);
+    bumpLock();
+  }, []);
+  const setChatLockRelock = useCallback((minutes: number) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    storeRelockMinutes(meId, minutes);
+    bumpLock();
+  }, []);
 
-  // stories
-  const listStatus = useCallback(() => messaging.listStatus(), []);
-  const postStatus = useCallback((input: StatusInput) => messaging.postStatus(input), []);
-  const viewStatus = useCallback((statusId: string) => messaging.viewStatus(statusId), []);
-  const deleteStatus = useCallback((statusId: string) => messaging.deleteStatus(statusId), []);
+  // stories — indexer-hosted (24h ephemeral), signed with the zkLogin key so
+  // nobody can post or delete as you. Unlike chat media, story images are
+  // public Walrus blobs (a story is a broadcast, not an E2E message).
+  const signMsg = useEnokiSignPersonalMessage();
+  const listStatus = useCallback(async (): Promise<StatusGroup[]> => {
+    const groups = await trpc.statusList.query({ viewer: meRef.current?.id });
+    return groups.map((g) => ({
+      user: {
+        id: g.user.address,
+        username: g.user.handle ?? `${g.user.address.slice(0, 6)}…${g.user.address.slice(-4)}`,
+        displayName: g.user.displayName ?? g.user.handle ?? undefined,
+        avatarUrl: g.user.avatarBlobId ? walrus.urlFor(umbraConfig, g.user.avatarBlobId) : undefined,
+      },
+      items: g.items.map((s) => ({
+        id: s.id,
+        userId: s.owner,
+        type: s.type,
+        content: s.content,
+        mediaUrl: s.mediaBlobId ? walrus.urlFor(umbraConfig, s.mediaBlobId) : undefined,
+        bg: s.bg ?? undefined,
+        createdAt: new Date(s.createdAtMs).toISOString(),
+        viewedBy: s.viewedBy,
+      })),
+      hasUnseen: g.hasUnseen,
+    }));
+  }, []);
+  const postStatus = useCallback(
+    async (input: StatusInput) => {
+      const meId = meRef.current?.id;
+      if (!meId) throw new Error("Sign in first");
+      let mediaBlobId: string | null = null;
+      if (input.file) {
+        const bytes = new Uint8Array(await input.file.arrayBuffer());
+        mediaBlobId = (await walrus.upload(umbraConfig, bytes)).blobId;
+      }
+      const message = {
+        owner: meId,
+        type: input.type,
+        content: input.content,
+        mediaBlobId,
+        bg: input.bg ?? null,
+        timestamp: Date.now(),
+      };
+      const { signature } = await signMsg(canonicalStatusBytes(message));
+      const r = await trpc.statusPost.mutate({ message, signature });
+      if (!r.ok) throw new Error("Story didn't go through — try again");
+    },
+    [signMsg],
+  );
+  const viewStatus = useCallback(async (statusId: string) => {
+    const meId = meRef.current?.id;
+    if (!meId) return;
+    await trpc.statusView.mutate({ statusId, viewer: meId }).catch(() => {});
+  }, []);
+  const deleteStatus = useCallback(
+    async (statusId: string) => {
+      const meId = meRef.current?.id;
+      if (!meId) return;
+      const message = { owner: meId, statusId, timestamp: Date.now() };
+      const { signature } = await signMsg(canonicalStatusDeleteBytes(message));
+      await trpc.statusDelete.mutate({ message, signature });
+    },
+    [signMsg],
+  );
 
   // chosen game (events drive state via the subscription)
   const chosen = useMemo(
@@ -634,11 +895,12 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     createPoll,
     votePoll,
     markViewOnce,
-    vaultStatus,
-    vaultSetup,
-    unlockVault,
-    lockVault,
-    setChatVaulted,
+    chatLock,
+    chatLockSetup,
+    chatLockUnlock,
+    chatLockNow,
+    setChatLocked,
+    setChatLockRelock,
     listStatus,
     postStatus,
     viewStatus,

@@ -5,12 +5,16 @@
  */
 
 import { MockMessaging } from "./mock-adapter";
+import { SuiMessaging } from "./sui-adapter";
+import { isMessagingConfigured } from "./sui-config";
 import type { Messaging } from "./messaging";
-// import { SuiMessaging } from "./sui-adapter"; // ← onchain: use this instead
 
-/** The single messaging backend instance the app talks to. */
-export const messaging: Messaging = new MockMessaging();
-// export const messaging: Messaging = new SuiMessaging();
+/**
+ * The single messaging backend the app talks to. Uses the on-chain Sui adapter
+ * when a relayer + Seal servers are configured (see `isMessagingConfigured`);
+ * otherwise falls back to the localStorage mock so the UI still runs.
+ */
+export const messaging: Messaging = isMessagingConfigured() ? new SuiMessaging() : new MockMessaging();
 
 export * from "./messaging";
 export * from "./types";

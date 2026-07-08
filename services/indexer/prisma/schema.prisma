@@ -93,3 +93,19 @@ model Reaction {
   @@id([postId, reactor, kind])
   @@index([postId, kind, value])
 }
+
+/// Stories / status — 24h ephemeral broadcast posts. Signature-verified on
+/// write (the owner signs a canonical status message); pruned opportunistically.
+model Status {
+  id          String   @id @default(cuid())
+  owner       String
+  type        String // "text" | "image"
+  content     String   @default("")
+  mediaBlobId String? // public Walrus blob (unlike chat media, stories aren't E2E)
+  bg          String?
+  createdAtMs BigInt
+  viewedBy    String[] @default([])
+
+  @@index([owner, createdAtMs])
+  @@index([createdAtMs])
+}

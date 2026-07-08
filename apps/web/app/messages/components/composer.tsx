@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMessaging } from "../lib/provider";
 import type { Message, Participant } from "../lib/types";
 import { PollComposer } from "./poll-composer";
-import { ImageIcon, PaperclipIcon, PlusIcon, SendIcon, XIcon } from "./icons";
+import { EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, PaperclipIcon, PlusIcon, PollIcon, SendIcon, XIcon } from "./icons";
 
 export function Composer({
   chatId,
@@ -206,7 +206,7 @@ export function Composer({
 
       {asideOn ? (
         <div className="border-b border-[color:var(--glass-border)] px-3 py-2">
-          <div className="mb-1 text-[11px] font-semibold text-accent-ink">🔒 Aside — only these members can read it:</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-accent-ink"><LockIcon className="h-3.5 w-3.5" /> Aside — only these members can read it:</div>
           <div className="flex flex-wrap gap-1.5">
             {otherMembers.map((p) => {
               const on = asideAudience.has(p.id);
@@ -255,10 +255,10 @@ export function Composer({
               <div className="fixed inset-0 z-10" onClick={() => setAttachOpen(false)} />
               <div className="absolute bottom-12 left-0 z-20 w-48 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-surface p-1.5 shadow-[var(--shadow-glass-lg)]">
                 <button onClick={() => imgRef.current?.click()} className={attachItem}><ImageIcon className="h-4 w-4 text-ink-soft" /> Photo</button>
-                <button onClick={() => viewOnceRef.current?.click()} className={attachItem}>👁 View-once photo</button>
+                <button onClick={() => viewOnceRef.current?.click()} className={attachItem}><EyeIcon className="h-4 w-4 text-ink-soft" /> View-once photo</button>
                 <button onClick={() => fileRef.current?.click()} className={attachItem}><PaperclipIcon className="h-4 w-4 text-ink-soft" /> File</button>
-                <button onClick={() => { setAttachOpen(false); setPollOpen(true); }} className={attachItem}>📊 Poll</button>
-                <button onClick={shareLocation} className={attachItem}>📍 Location</button>
+                <button onClick={() => { setAttachOpen(false); setPollOpen(true); }} className={attachItem}><PollIcon className="h-4 w-4 text-ink-soft" /> Poll</button>
+                <button onClick={shareLocation} className={attachItem}><MapPinIcon className="h-4 w-4 text-ink-soft" /> Location</button>
               </div>
             </>
           ) : null}
@@ -276,7 +276,7 @@ export function Composer({
             title="Whisper — blurred until tapped"
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${whisper ? "bg-accent/15 text-accent-ink" : "text-ink-soft hover:bg-surface-muted"}`}
           >
-            👁
+            <EyeIcon className="h-5 w-5" />
           </button>
         ) : null}
 
@@ -289,7 +289,7 @@ export function Composer({
             title="Aside — private message to selected members"
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${asideOn ? "bg-accent/15 text-accent-ink" : "text-ink-soft hover:bg-surface-muted"}`}
           >
-            🔒
+            <LockIcon className="h-5 w-5" />
           </button>
         ) : null}
 
@@ -317,7 +317,7 @@ export function Composer({
             aria-label={recording ? "Stop recording" : "Record voice"}
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-full shadow-[var(--shadow-glass)] disabled:opacity-40 ${recording ? "animate-pulse bg-danger text-white" : "bg-accent text-on-accent"}`}
           >
-            {recording ? <span className="h-3.5 w-3.5 rounded-[3px] bg-white" /> : <span className="text-lg leading-none">🎤</span>}
+            {recording ? <span className="h-3.5 w-3.5 rounded-[3px] bg-white" /> : <MicIcon className="h-5 w-5" />}
           </button>
         ) : (
           <button type="button" onClick={() => void submit()} disabled={!text.trim() || busy} aria-label={editing ? "Save" : "Send"} className="lift grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-glass)] disabled:opacity-40">

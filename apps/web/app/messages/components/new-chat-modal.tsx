@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { Avatar, Button, Spinner } from "@/components/ui";
 import { useMessaging } from "../lib/provider";
 import type { Participant } from "../lib/types";
-import { SearchIcon, XIcon } from "./icons";
+import { CheckIcon, SearchIcon, XIcon } from "./icons";
+import { toast } from "@/components/toaster";
 
 export function NewChatModal({ mode, onClose }: { mode: "direct" | "group"; onClose: () => void }) {
   const { searchUsers, startDirect, createGroup } = useMessaging();
@@ -41,9 +42,16 @@ export function NewChatModal({ mode, onClose }: { mode: "direct" | "group"; onCl
 
   const choose = async (u: Participant) => {
     if (mode === "direct") {
+      if (busy) return;
       setBusy(true);
-      await startDirect(u.id);
-      onClose();
+      try {
+        await startDirect(u.id);
+        onClose();
+      } catch (e) {
+        console.error("[new-chat] startDirect failed:", e);
+        toast(e instanceof Error ? e.message : "Couldn't start chat");
+        setBusy(false);
+      }
     } else {
       setPicked((prev) => (pickedIds.has(u.id) ? prev.filter((p) => p.id !== u.id) : [...prev, u]));
     }
@@ -52,16 +60,30 @@ export function NewChatModal({ mode, onClose }: { mode: "direct" | "group"; onCl
   const submitGroup = async () => {
     if (!groupName.trim() || picked.length === 0) return;
     setBusy(true);
-    await createGroup({ name: groupName.trim(), participantIds: picked.map((p) => p.id) });
-    onClose();
+    try {
+      await createGroup({ name: groupName.trim(), participantIds: picked.map((p) => p.id) });
+      onClose();
+    } catch (e) {
+      console.error("[new-chat] createGroup failed:", e);
+      toast(e instanceof Error ? e.message : "Couldn't create group");
+      setBusy(false);
+    }
   };
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-ink/40 p-4 pt-16 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-[color:var(--glass-border)] bg-surface p-5 shadow-[var(--shadow-glass-lg)]"
+        className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-[color:var(--glass-border)] bg-surface p-5 shadow-[var(--shadow-glass-lg)]"
         onClick={(e) => e.stopPropagation()}
       >
+        {busy && mode === "direct" ? (
+          <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-surface/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2">
+              <Spinner />
+              <p className="text-sm font-medium text-ink-soft">Starting chat…</p>
+            </div>
+          </div>
+        ) : null}
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">{mode === "direct" ? "New message" : "New group"}</h2>
           <button onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-ink-soft hover:bg-surface-muted">
@@ -122,7 +144,7 @@ export function NewChatModal({ mode, onClose }: { mode: "direct" | "group"; onCl
                   <span className="block truncate text-[14.5px] font-semibold">{u.displayName || u.username}</span>
                   <span className="block truncate font-mono text-[12px] text-ink-faint">@{u.username}</span>
                 </span>
-                {mode === "group" && pickedIds.has(u.id) ? <span className="text-accent">✓</span> : null}
+                {mode === "group" && pickedIds.has(u.id) ? <CheckIcon className="h-4 w-4 text-accent" /> : null}
               </button>
             ))
           )}
