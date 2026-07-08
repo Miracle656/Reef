@@ -26,6 +26,8 @@ export default function RootLayout() {
             <Stack.Screen name="u/[handle]" options={{ headerShown: false }} />
             <Stack.Screen name="p/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="messages/[chatId]" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="compose" options={{ presentation: 'modal', headerShown: false }} />
           </Stack>
           <FloatingTabBar />

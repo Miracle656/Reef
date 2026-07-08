@@ -235,3 +235,22 @@ export const PAIRS = [
   { key: 'DEEP_DBUSDC', base: 'DEEP', quote: 'USDC' },
   { key: 'USDT_DBUSDC', base: 'USDT', quote: 'USDC' },
 ] as const;
+
+export type MockNotifType = 'follow' | 'like' | 'repost' | 'reply' | 'mention';
+
+export type MockNotification = {
+  id: string;
+  type: MockNotifType;
+  actor: MockAuthor;
+  postId?: string;
+  targetIsReply?: boolean;
+  createdAtMs: number;
+};
+
+export const MOCK_NOTIFICATIONS: MockNotification[] = [
+  { id: 'n1', type: 'follow', actor: MOCK_AUTHORS['web3ng']!, createdAtMs: Date.now() - 1_800_000 },
+  { id: 'n2', type: 'like', actor: MOCK_AUTHORS['suibuilder']!, postId: '1', createdAtMs: Date.now() - 3_600_000 },
+  { id: 'n3', type: 'reply', actor: MOCK_AUTHORS['amakacodes']!, postId: '1', targetIsReply: false, createdAtMs: Date.now() - 7_200_000 },
+  { id: 'n4', type: 'mention', actor: MOCK_AUTHORS['lagosbuild']!, postId: '3', createdAtMs: Date.now() - 86_400_000 },
+  { id: 'n5', type: 'repost', actor: MOCK_AUTHORS['web3ng']!, postId: '5', createdAtMs: Date.now() - 172_800_000 },
+];
