@@ -3,10 +3,12 @@ import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-nati
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Avatar, Button, Card, Input, Textarea, useTheme } from '@/components/ui';
+import { useTopInset } from '@/components/screen';
 
 export default function OnboardingScreen() {
   const t = useTheme();
   const router = useRouter();
+  const top = useTopInset();
 
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -37,7 +39,10 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={{ backgroundColor: t.background }}
+      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: top + 20 }}
+    >
       <Pressable onPress={() => router.back()} style={styles.backBtn}>
         <Text style={{ color: t.inkSoft, fontSize: 16 }}>← Back</Text>
       </Pressable>
@@ -111,7 +116,6 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 100 },
   backBtn: { marginBottom: 16 },
   title: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginBottom: 24 },
   card: { padding: 20, gap: 4 },

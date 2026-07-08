@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/components/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { ChatList } from '@/components/messages/chat-list';
@@ -9,7 +8,6 @@ import { NewChatModal } from '@/components/messages/new-chat-modal';
 
 export default function MessagesTab() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { openChat } = useMessaging();
   const [newChat, setNewChat] = useState<null | 'direct' | 'group'>(null);
@@ -20,7 +18,7 @@ export default function MessagesTab() {
   };
 
   return (
-    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: t.background }}>
+    <View style={{ flex: 1, backgroundColor: t.background }}>
       <ChatList
         onOpen={open}
         onNew={() => setNewChat('direct')}

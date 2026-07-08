@@ -2,14 +2,16 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ComposeForm } from '@/components/compose-form';
 import { useTheme } from '@/components/ui';
+import { useTopInset } from '@/components/screen';
 
 export default function ComposeModal() {
   const t = useTheme();
   const router = useRouter();
+  const top = useTopInset();
 
   return (
     <View style={[styles.container, { backgroundColor: t.background }]}>
-      <View style={[styles.header, { borderBottomColor: t.border }]}>
+      <View style={[styles.header, { borderBottomColor: t.border, paddingTop: top + 16 }]}>
         <Pressable onPress={() => router.back()}>
           <Text style={{ color: t.inkSoft, fontSize: 16 }}>Cancel</Text>
         </Pressable>
@@ -30,7 +32,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },

@@ -1,23 +1,22 @@
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/components/ui';
 import { PostCard } from '@/components/post-card';
 import { ComposeBox } from '@/components/compose-form';
 import { BackIcon } from '@/components/messages/icons';
 import { MOCK_POSTS } from '@/lib/mock';
+import { Screen } from '@/components/screen';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const post = MOCK_POSTS.find((p) => p.id === id) ?? null;
   const replies = MOCK_POSTS.filter((p) => p.replyTo === id);
 
   return (
-    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: t.background }}>
+    <Screen style={{ backgroundColor: t.background }}>
       {/* header */}
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Pressable onPress={() => router.back()} style={styles.back} hitSlop={8}>
@@ -48,7 +47,7 @@ export default function PostDetailScreen() {
           </View>
         </ScrollView>
       )}
-    </View>
+    </Screen>
   );
 }
 

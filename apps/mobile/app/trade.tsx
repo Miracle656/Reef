@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Button, Input, useTheme } from '@/components/ui';
 import { PAIRS, MOCK_BOOKS, MOCK_PREDICTIONS, type MockPrediction } from '@/lib/mock';
+import { useTopInset } from '@/components/screen';
 
 const fmtPrice = (p: number) =>
   p === 0 ? '—' : p < 1 ? p.toPrecision(4) : p.toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -10,13 +10,13 @@ const fmtSize = (s: number) => s.toLocaleString(undefined, { maximumFractionDigi
 
 export default function TradeTab() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const top = useTopInset();
   const [mode, setMode] = useState<'trade' | 'predict'>('trade');
 
   return (
     <ScrollView
       style={{ backgroundColor: t.background }}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + 16 }]}
+      contentContainerStyle={[styles.container, { paddingTop: top + 16 }]}
     >
       {/* Mode toggle */}
       <View style={styles.header}>
