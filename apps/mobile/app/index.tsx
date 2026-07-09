@@ -60,10 +60,7 @@ export default function Home() {
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
-        <View className="flex-row items-center" style={{ gap: 9 }}>
-          <Image source={require("../assets/reef-logo.png")} style={{ width: 30, height: 30, resizeMode: "contain" }} />
-          <Text style={{ fontFamily: "Expose-Black", letterSpacing: -0.7 }} className="text-2xl text-ink">ReeF</Text>
-        </View>
+        <Image source={require("../assets/reef-wordmark.png")} style={{ width: 81, height: 23, resizeMode: "contain" }} />
         <View className="flex-row items-center" style={{ gap: 16 }}>
           <Pressable onPress={() => router.push("/notifications" as never)} hitSlop={8}>
             <Ionicons name="notifications-outline" size={22} color={palette.light.ink} />

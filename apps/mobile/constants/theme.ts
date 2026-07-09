@@ -1,15 +1,16 @@
 import { Platform } from 'react-native';
 
+// Light palette matches the app-wide design tokens (warm cream, not cool gray).
 export const LightColors = {
-  background: '#f5f6f9',
+  background: '#F4F2ED',
   surface: '#ffffff',
   surfaceGlass: 'rgba(255, 255, 255, 0.85)',
-  surfaceMuted: '#eceef2',
-  ink: '#16161a',
+  surfaceMuted: '#ECE9E1',
+  ink: '#15151A',
   inkSoft: '#565660',
   inkFaint: '#9a9aa6',
-  border: 'rgba(22, 22, 26, 0.08)',
-  borderStrong: 'rgba(22, 22, 26, 0.14)',
+  border: 'rgba(21, 21, 26, 0.08)',
+  borderStrong: 'rgba(21, 21, 26, 0.14)',
   accent: '#0a84ff',
   accentInk: '#0a4ea3',
   danger: '#e2554a',

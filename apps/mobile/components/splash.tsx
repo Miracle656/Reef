@@ -66,21 +66,17 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
       </Svg>
 
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Animated.Text
+        <Animated.Image
+          source={require("../assets/reef-wordmark.png")}
           style={{
-            fontFamily: "Expose-Black",
-            fontSize: WORD,
-            lineHeight: WORD * 1.04,
-            color: "#fff",
+            width: WORD * 2.9,
+            height: (WORD * 2.9) / 3.52,
+            resizeMode: "contain",
+            tintColor: "#fff",
             opacity: wordOp,
             transform: [{ scale }],
-            textShadowColor: "rgba(4,38,63,0.45)",
-            textShadowOffset: { width: 0, height: 8 },
-            textShadowRadius: 30,
           }}
-        >
-          ReeF
-        </Animated.Text>
+        />
         <Animated.Text
           style={{ fontFamily: "Expose-Bold", marginTop: 6, letterSpacing: 4, fontSize: 12, color: "rgba(255,255,255,0.85)", opacity: subOp }}
         >

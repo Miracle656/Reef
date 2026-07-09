@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { MONO } from '@/components/ui';
 import { Avatar, Spinner, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { chatAvatar, chatName, previewOf } from '@/lib/messaging/display';
@@ -72,6 +74,12 @@ export function ChatList({
           {chats.map((c) => (
             <ChatRow key={c.id} chat={c} meId={me?.id} onPress={() => onOpen(c.id)} />
           ))}
+          <View style={styles.lockNote}>
+            <Ionicons name="lock-closed-outline" size={24} color={t.inkFaint} />
+            <Text style={[styles.lockText, { color: t.inkFaint }]}>
+              End-to-end encrypted DMs{'\n'}via Sui Messaging SDK · demo preview — on-chain port next
+            </Text>
+          </View>
         </ScrollView>
       )}
     </View>
@@ -95,7 +103,7 @@ function ChatRow({ chat, meId, onPress }: { chat: Chat; meId?: string; onPress: 
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.rowTop}>
-          <Text numberOfLines={1} style={[styles.name, { color: t.ink, fontWeight: unread ? '800' : '600' }]}>
+          <Text numberOfLines={1} style={[styles.name, { color: t.ink, fontFamily: unread ? 'Expose-Black' : 'Expose-Bold' }]}>
             {chatName(chat, meId)}
           </Text>
           <Text style={[styles.time, { color: t.inkFaint }]}>{timeAgo(chat.lastMessageAt)}</Text>
@@ -118,7 +126,7 @@ function ChatRow({ chat, meId, onPress }: { chat: Chat; meId?: string; onPress: 
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  title: { flex: 1, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  title: { flex: 1, fontSize: 24, fontFamily: 'Expose-Black', letterSpacing: -0.5 },
   headerBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   fab: {},
   searchWrap: { paddingHorizontal: 16, paddingBottom: 8 },
@@ -130,11 +138,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 10 },
   muteBadge: { position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { flex: 1, fontSize: 15 },
-  time: { fontSize: 11, fontVariant: ['tabular-nums'] },
+  name: { flex: 1, fontSize: 14.5 },
+  time: { fontSize: 10.5, fontFamily: MONO },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  preview: { flex: 1, fontSize: 13 },
+  preview: { flex: 1, fontSize: 13.5 },
   mention: { fontSize: 12, fontWeight: '700' },
   unread: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   unreadText: { fontSize: 11, fontWeight: '700' },
+  lockNote: { alignItems: 'center', gap: 9, paddingHorizontal: 24, paddingVertical: 36 },
+  lockText: { fontFamily: MONO, fontSize: 11, lineHeight: 18, textAlign: 'center' },
 });

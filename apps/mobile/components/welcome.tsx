@@ -35,14 +35,12 @@ export function Welcome({
         Sui-native · walletless
       </Text>
 
-      <View style={{ alignItems: "center", gap: 18 }}>
+      <View style={{ alignItems: "center", gap: 22 }}>
+        {/* the web wordmark, tinted white for the gradient */}
         <Image
-          source={require("../assets/reef-logo.png")}
-          style={{ width: 170, height: 200, resizeMode: "contain" }}
+          source={require("../assets/reef-wordmark.png")}
+          style={{ width: 264, height: 75, resizeMode: "contain", tintColor: "#ffffff" }}
         />
-        <Text style={{ fontFamily: "Expose-Black", fontSize: 76, letterSpacing: -3, color: "#fff", lineHeight: 76, textShadowColor: "rgba(0,0,0,.25)", textShadowOffset: { width: 0, height: 10 }, textShadowRadius: 40 }}>
-          ReeF
-        </Text>
         <Text style={{ fontFamily: MONO, fontSize: 12, letterSpacing: 1.9, textTransform: "uppercase", color: "rgba(255,255,255,.9)" }}>
           The beach party is on
         </Text>
