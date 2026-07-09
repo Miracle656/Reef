@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet } from 'react-native';
-import { Avatar, Spinner, useTheme } from '@/components/ui';
+import { Avatar, Spinner, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { timeShort } from '@/lib/messaging/format';
 import type { Message } from '@/lib/messaging/types';

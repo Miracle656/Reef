@@ -1,39 +1,64 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import 'react-native-reanimated';
+import "@/lib/crypto-polyfill";
+import "../global.css";
+import React, { useState } from "react";
+import { Text, TextInput } from "react-native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+import { Ionicons } from "@expo/vector-icons";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { palette } from "@umbra/ui";
+import { AuthProvider } from "@/lib/auth";
+import { MessagingProvider } from "@/lib/messaging/provider";
+import { Splash } from "@/components/splash";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { FloatingTabBar } from '@/components/floating-tab-bar';
-import { MessagingProvider } from '@/lib/messaging/provider';
+const queryClient = new QueryClient();
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+// Make Expose the app-wide default font. We merge fontFamily into the *input*
+// props before calling the original render (the safe, standard pattern), so even
+// NativeWind-styled <Text> gets it; any explicit fontFamily a component sets
+// (e.g. "Expose-Bold") still wins because it comes last in the style array.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function patchDefaultFont() {
+  try {
+    for (const Comp of [Text, TextInput] as any[]) {
+      if (typeof Comp.render !== "function" || Comp.__reef) continue;
+      const orig = Comp.render;
+      Comp.__reef = true;
+      Comp.render = function (props: any, ref: any) {
+        return orig.call(this, { ...props, style: [{ fontFamily: "Expose" }, props?.style] }, ref);
+      };
+    }
+  } catch {
+    // best-effort; never let the font hook crash the app
+  }
+}
+patchDefaultFont();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const [loaded] = useFonts({
+    Expose: require("../assets/fonts/Expose-Regular.otf"),
+    "Expose-Medium": require("../assets/fonts/Expose-Medium.otf"),
+    "Expose-Bold": require("../assets/fonts/Expose-Bold.otf"),
+    "Expose-Black": require("../assets/fonts/Expose-Black.otf"),
+    // Preload the icon font — lazy auto-load fails silently under our Metro
+    // package-exports config, leaving blank glyphs.
+    ...Ionicons.font,
+  });
+  const [splashGone, setSplashGone] = useState(false);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <MessagingProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="trade" options={{ headerShown: false }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-            <Stack.Screen name="u/[handle]" options={{ headerShown: false }} />
-            <Stack.Screen name="p/[id]" options={{ headerShown: false }} />
-            <Stack.Screen name="messages/[chatId]" options={{ headerShown: false }} />
-            <Stack.Screen name="notifications" options={{ headerShown: false }} />
-            <Stack.Screen name="settings" options={{ headerShown: false }} />
-            <Stack.Screen name="compose" options={{ presentation: 'modal', headerShown: false }} />
-          </Stack>
-          <FloatingTabBar />
-          <StatusBar style="auto" />
-        </MessagingProvider>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MessagingProvider>
+            <StatusBar style={splashGone ? "dark" : "light"} />
+            {loaded ? <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.light.background } }} /> : null}
+            {!splashGone ? <Splash ready={loaded} onDone={() => setSplashGone(true)} /> : null}
+          </MessagingProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

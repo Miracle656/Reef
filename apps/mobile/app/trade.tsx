@@ -1,325 +1,235 @@
-import { useState } from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
-import { Card, Button, Input, useTheme } from '@/components/ui';
-import { PAIRS, MOCK_BOOKS, MOCK_PREDICTIONS, type MockPrediction } from '@/lib/mock';
-import { useTopInset } from '@/components/screen';
+import { useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { palette } from "@umbra/ui";
+import { Button } from "@/components/ui";
+import { MarketSelect, CoinIcon } from "@/components/market-select";
+import { PredictFeed } from "@/components/predict-feed";
+import { BottomNav } from "@/components/bottom-nav";
+import { PAIRS, fetchOrderBook } from "@/lib/deepbook";
 
-const fmtPrice = (p: number) =>
-  p === 0 ? '—' : p < 1 ? p.toPrecision(4) : p.toLocaleString(undefined, { maximumFractionDigits: 4 });
-const fmtSize = (s: number) => s.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const black = { fontFamily: "Expose-Black" } as const;
+const bold = { fontFamily: "Expose-Bold" } as const;
 
-export default function TradeTab() {
-  const t = useTheme();
-  const top = useTopInset();
-  const [mode, setMode] = useState<'trade' | 'predict'>('trade');
+const fmtNum = (n: number) =>
+  n === 0 ? "0" : n < 1 ? Number(n.toPrecision(4)).toString() : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 
-  return (
-    <ScrollView
-      style={{ backgroundColor: t.background }}
-      contentContainerStyle={[styles.container, { paddingTop: top + 16 }]}
+export default function TradeScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [mode, setMode] = useState<"trade" | "predict">("trade");
+
+  const nav = (floating: boolean) => (
+    <View
+      pointerEvents="box-none"
+      style={floating ? { position: "absolute", top: insets.top + 6, left: 0, right: 0, zIndex: 20 } : undefined}
+      className="flex-row items-center justify-between px-4 pb-2 pt-1"
     >
-      {/* Mode toggle */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: t.ink }]}>
-          {mode === 'trade' ? 'Trade' : 'Predict'}
-        </Text>
-        <View style={[styles.toggleWrap, { backgroundColor: t.surfaceMuted }]}>
-          {(['trade', 'predict'] as const).map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => setMode(m)}
-              style={[styles.toggleBtn, mode === m && { backgroundColor: t.ink }]}
-            >
-              <Text
-                style={[
-                  styles.toggleLabel,
-                  { color: mode === m ? t.onInk : t.inkSoft },
-                ]}
-              >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {mode === 'trade' ? <Terminal /> : <PredictFeed />}
-    </ScrollView>
-  );
-}
-
-function Terminal() {
-  const t = useTheme();
-  const [pairKey, setPairKey] = useState<string>(PAIRS[0].key);
-  const pair = PAIRS.find((p) => p.key === pairKey) ?? PAIRS[0];
-  const book = MOCK_BOOKS[pairKey] ?? MOCK_BOOKS[PAIRS[0].key]!;
-  const { asks, bids, mid } = book;
-  const spread = bids[0] && asks[0] ? asks[0].price - bids[0].price : 0;
-  const maxSize = Math.max(1, ...asks.map((l) => l.size), ...bids.map((l) => l.size));
-
-  return (
-    <View style={{ gap: 16, marginTop: 16 }}>
-      {/* Pair selector + mid */}
-      <Card style={styles.midCard}>
-        <View style={styles.pairRow}>
-          {PAIRS.map((p) => (
-            <Pressable
-              key={p.key}
-              onPress={() => setPairKey(p.key)}
-              style={[
-                styles.pairChip,
-                { borderColor: t.border, backgroundColor: pairKey === p.key ? t.ink : t.surfaceGlass },
-              ]}
-            >
-              <Text style={{ color: pairKey === p.key ? t.onInk : t.ink, fontSize: 13, fontWeight: '600' }}>
-                {p.base}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.midRight}>
-          <Text style={{ color: t.inkSoft, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Mid price
-          </Text>
-          <Text style={{ color: t.ink, fontSize: 22, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
-            {fmtPrice(mid)}{' '}
-            <Text style={{ fontSize: 14, color: t.inkSoft }}>{pair.quote}</Text>
-          </Text>
-        </View>
-      </Card>
-
-      {/* Order book */}
-      <Card style={{ padding: 16 }}>
-        <View style={styles.bookHeader}>
-          <Text style={{ color: t.inkFaint, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' }}>
-            Price ({pair.quote})
-          </Text>
-          <Text style={{ color: t.inkFaint, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' }}>
-            Size ({pair.base})
-          </Text>
-        </View>
-        {/* Asks reversed */}
-        {[...asks].reverse().map((l, i) => (
-          <BookRow key={`a${i}`} price={l.price} size={l.size} side="ask" max={maxSize} />
-        ))}
-        {/* Mid line */}
-        <View style={[styles.midRow, { backgroundColor: t.surfaceMuted }]}>
-          <Text style={{ color: t.ink, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
-            {fmtPrice(mid)}
-          </Text>
-          {spread > 0 ? (
-            <Text style={{ color: t.inkSoft, fontSize: 12 }}>spread {fmtPrice(spread)}</Text>
-          ) : null}
-        </View>
-        {/* Bids */}
-        {bids.map((l, i) => (
-          <BookRow key={`b${i}`} price={l.price} size={l.size} side="bid" max={maxSize} />
-        ))}
-      </Card>
-
-      {/* Trade panel */}
-      <TradePanel pair={pair} mid={mid} />
-    </View>
-  );
-}
-
-function BookRow({ price, size, side, max }: { price: number; size: number; side: 'ask' | 'bid'; max: number }) {
-  const t = useTheme();
-  const color = side === 'ask' ? t.danger : t.accent;
-  const pct = (size / max) * 100;
-  return (
-    <View style={styles.bookRowWrap}>
-      <View style={[styles.bookRowBar, { width: `${pct}%` as any, backgroundColor: color, opacity: 0.15 }]} />
-      <Text style={[styles.bookPrice, { color }]}>{fmtPrice(price)}</Text>
-      <Text style={[styles.bookSize, { color: t.inkSoft }]}>{fmtSize(size)}</Text>
-    </View>
-  );
-}
-
-function TradePanel({ pair, mid }: { pair: { base: string; quote: string }; mid: number }) {
-  const t = useTheme();
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
-  const [type, setType] = useState<'limit' | 'market'>('limit');
-  const [price, setPrice] = useState(String(Number(mid.toPrecision(4))));
-  const [amount, setAmount] = useState('');
-
-  return (
-    <Card style={{ padding: 16, gap: 12 }}>
-      {/* Buy / Sell toggle */}
-      <View style={[styles.toggleWrap, { backgroundColor: t.surfaceMuted }]}>
-        {(['buy', 'sell'] as const).map((s) => (
-          <Pressable
-            key={s}
-            onPress={() => setSide(s)}
-            style={[
-              styles.toggleBtn,
-              side === s && { backgroundColor: s === 'buy' ? t.accent : t.danger },
-            ]}
-          >
+      <Pressable onPress={() => router.back()} hitSlop={10}>
+        <Text className={`text-2xl ${floating ? "text-white" : "text-ink"}`}>‹</Text>
+      </Pressable>
+      <View className={`flex-row gap-1 rounded-full p-1 ${floating ? "bg-black/40" : "bg-surface-muted"}`}>
+        {(["trade", "predict"] as const).map((m) => (
+          <Pressable key={m} onPress={() => setMode(m)} className={`rounded-full px-4 py-1.5 ${mode === m ? (floating ? "bg-white" : "bg-ink") : ""}`}>
             <Text
-              style={[
-                styles.toggleLabel,
-                { color: side === s ? '#fff' : t.inkSoft },
-              ]}
+              className={`text-sm font-semibold capitalize ${
+                mode === m ? (floating ? "text-black" : "text-on-ink") : floating ? "text-white/70" : "text-ink-soft"
+              }`}
             >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
+              {m}
             </Text>
           </Pressable>
         ))}
       </View>
-
-      {/* Limit / Market */}
-      <View style={{ flexDirection: 'row', gap: 16 }}>
-        {(['limit', 'market'] as const).map((tp) => (
-          <Pressable key={tp} onPress={() => setType(tp)}>
-            <Text
-              style={{
-                color: type === tp ? t.ink : t.inkFaint,
-                fontWeight: type === tp ? '600' : '400',
-                fontSize: 14,
-                textTransform: 'capitalize',
-              }}
-            >
-              {tp}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {type === 'limit' ? (
-        <View>
-          <Text style={{ color: t.inkSoft, fontSize: 12, marginBottom: 4 }}>
-            Price ({pair.quote})
-          </Text>
-          <Input
-            value={price}
-            onChangeText={setPrice}
-            keyboardType="decimal-pad"
-          />
-        </View>
-      ) : null}
-
-      <View>
-        <Text style={{ color: t.inkSoft, fontSize: 12, marginBottom: 4 }}>
-          Amount ({pair.base})
-        </Text>
-        <Input
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="decimal-pad"
-          placeholder="0"
-        />
-      </View>
-
-      <Button
-        variant={side === 'buy' ? 'accent' : 'danger'}
-        onPress={() =>
-          Alert.alert(
-            'Coming soon',
-            'Order placement needs a linked funded wallet + BalanceManager — wiring next.'
-          )
-        }
-      >
-        {side === 'buy' ? 'Buy' : 'Sell'} {pair.base}
-      </Button>
-      <Text style={{ color: t.inkFaint, fontSize: 12, textAlign: 'center' }}>
-        Trading needs your linked funded wallet — wiring next.
-      </Text>
-    </Card>
-  );
-}
-
-function PredictFeed() {
-  const t = useTheme();
-  return (
-    <View style={{ gap: 12, marginTop: 16 }}>
-      {MOCK_PREDICTIONS.map((p) => (
-        <PredictCard key={p.id} prediction={p} />
-      ))}
+      <View style={{ width: 16 }} />
     </View>
   );
-}
 
-function PredictCard({ prediction: p }: { prediction: MockPrediction }) {
-  const t = useTheme();
-  const [voted, setVoted] = useState<'yes' | 'no' | null>(null);
-  const daysLeft = Math.ceil((p.endsAt - Date.now()) / (24 * 3600 * 1000));
-
-  function vote(v: 'yes' | 'no') {
-    setVoted(v);
-    Alert.alert('Coming soon', 'Prediction market oracle wiring is next.');
+  if (mode === "predict") {
+    return (
+      <View className="flex-1 bg-black">
+        <PredictFeed />
+        {nav(true)}
+        <BottomNav />
+      </View>
+    );
   }
 
   return (
-    <Card style={{ padding: 16, gap: 10 }}>
-      <View style={styles.predictMeta}>
-        <Text style={{ color: t.accent, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' }}>
-          {p.category}
-        </Text>
-        <Text style={{ color: t.inkFaint, fontSize: 11 }}>{daysLeft}d left</Text>
-      </View>
-      <Text style={{ color: t.ink, fontSize: 15, fontWeight: '600', lineHeight: 22 }}>{p.question}</Text>
-
-      {/* Probability bar */}
-      <View style={[styles.probBar, { backgroundColor: t.surfaceMuted }]}>
-        <View
-          style={[styles.probFill, { width: `${p.yesProb * 100}%` as any, backgroundColor: t.accent }]}
-        />
-      </View>
-      <View style={styles.probLabels}>
-        <Text style={{ color: t.accent, fontSize: 13, fontWeight: '600' }}>
-          Yes {Math.round(p.yesProb * 100)}%
-        </Text>
-        <Text style={{ color: t.danger, fontSize: 13, fontWeight: '600' }}>
-          No {Math.round((1 - p.yesProb) * 100)}%
-        </Text>
-      </View>
-
-      <Text style={{ color: t.inkFaint, fontSize: 12 }}>
-        Vol: ${(p.volume / 1000).toFixed(1)}k
-      </Text>
-
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button
-          variant={voted === 'yes' ? 'accent' : 'outline'}
-          size="sm"
-          style={{ flex: 1 } as any}
-          onPress={() => vote('yes')}
-        >
-          ▲ Yes
-        </Button>
-        <Button
-          variant={voted === 'no' ? 'danger' : 'outline'}
-          size="sm"
-          style={{ flex: 1 } as any}
-          onPress={() => vote('no')}
-        >
-          ▼ No
-        </Button>
-      </View>
-    </Card>
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+      {nav(false)}
+      <Swap />
+      <BottomNav />
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 120 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 22, fontWeight: '700' },
-  toggleWrap: { flexDirection: 'row', borderRadius: 100, padding: 4 },
-  toggleBtn: { borderRadius: 100, paddingHorizontal: 16, paddingVertical: 6 },
-  toggleLabel: { fontSize: 13, fontWeight: '600' },
-  midCard: { padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 },
-  pairRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  pairChip: { borderRadius: 100, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 6 },
-  midRight: { alignItems: 'flex-end' },
-  bookHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  bookRowWrap: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 4, position: 'relative' },
-  bookRowBar: { position: 'absolute', right: 0, top: 0, bottom: 0, borderRadius: 4 },
-  bookPrice: { fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'], zIndex: 1 },
-  bookSize: { fontSize: 13, fontVariant: ['tabular-nums'], zIndex: 1 },
-  midRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginVertical: 2 },
-  predictMeta: { flexDirection: 'row', justifyContent: 'space-between' },
-  probBar: { height: 6, borderRadius: 100, overflow: 'hidden' },
-  probFill: { height: '100%', borderRadius: 100 },
-  probLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-});
+/** Apply a keypad press to a numeric string. */
+function applyKey(cur: string, key: string): string {
+  if (key === "⌫") {
+    const next = cur.slice(0, -1);
+    return next === "" ? "0" : next;
+  }
+  if (key === ".") return cur.includes(".") ? cur : `${cur}.`;
+  if (cur === "0") return key; // replace leading zero
+  return `${cur}${key}`;
+}
+
+function Swap() {
+  const router = useRouter();
+  const [pairKey, setPairKey] = useState(PAIRS[0]!.key);
+  const pair = PAIRS.find((p) => p.key === pairKey) ?? PAIRS[0]!;
+  const openDetail = () => router.push(`/asset/${pairKey}` as never);
+
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [amount, setAmount] = useState("0");
+  const [limitPrice, setLimitPrice] = useState("0");
+  const [editing, setEditing] = useState<"amount" | "price" | null>(null);
+
+  const book = useQuery({
+    queryKey: ["orderbook", pairKey],
+    queryFn: () => fetchOrderBook(pairKey),
+    refetchInterval: 6000,
+  });
+  const mid = book.data?.mid ?? 0;
+  const price = orderType === "limit" && Number(limitPrice) > 0 ? Number(limitPrice) : mid;
+
+  // buy = pay quote, receive base; sell = pay base, receive quote.
+  const payToken = side === "buy" ? pair.quote : pair.base;
+  const recvToken = side === "buy" ? pair.base : pair.quote;
+  const amt = Number(amount) || 0;
+  const recv = price > 0 ? (side === "buy" ? amt / price : amt * price) : 0;
+  const rate = side === "buy" ? (price > 0 ? 1 / price : 0) : price;
+
+  const onKey = (k: string) => {
+    if (editing === "amount") setAmount((c) => applyKey(c, k));
+    else if (editing === "price") setLimitPrice((c) => applyKey(c, k));
+  };
+
+  return (
+    <View className="flex-1">
+      <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 130, gap: 12 }} keyboardShouldPersistTaps="handled">
+        {/* market selector */}
+        <View className="items-center pt-1">
+          <MarketSelect value={pairKey} onChange={setPairKey} />
+        </View>
+
+        {/* Market / Limit */}
+        <View className="flex-row rounded-full bg-surface-muted p-1">
+          {(["market", "limit"] as const).map((t) => (
+            <Pressable
+              key={t}
+              onPress={() => setOrderType(t)}
+              style={orderType === t ? { backgroundColor: palette.light.surface, shadowColor: "#16161A", shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 } : undefined}
+              className="flex-1 items-center rounded-full py-2.5"
+            >
+              <Text style={bold} className={`text-base capitalize ${orderType === t ? "text-accent" : "text-ink-faint"}`}>
+                {t}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Pay card */}
+        <View className="rounded-3xl bg-surface-muted p-4">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2">
+              <CoinIcon symbol={payToken} size={32} />
+              <Text style={bold} className="text-lg text-ink">{payToken}</Text>
+            </View>
+            <View className="flex-row gap-1.5">
+              {["50%", "75%", "Max"].map((c) => (
+                <View key={c} className="rounded-full bg-surface px-3 py-1">
+                  <Text className="text-xs font-semibold text-ink-soft">{c}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <Pressable onPress={() => setEditing("amount")} className="items-center py-3">
+            <Text style={black} className={`text-5xl ${editing === "amount" ? "text-accent" : "text-ink"}`}>
+              {amount}
+            </Text>
+            <Text className="mt-1 text-sm text-ink-faint">≈ {fmtNum(recv)} {recvToken}</Text>
+          </Pressable>
+          <Text className="text-center text-xs text-ink-faint">Balance 0 {payToken}</Text>
+        </View>
+
+        {/* swap direction */}
+        <View className="items-center" style={{ marginVertical: -8, zIndex: 5 }}>
+          <Pressable
+            onPress={() => setSide((s) => (s === "buy" ? "sell" : "buy"))}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: palette.light.surface, borderWidth: 1, borderColor: palette.light.border }}
+            className="items-center justify-center shadow-sm"
+          >
+            <Ionicons name="arrow-down" size={20} color={palette.light.accent} />
+          </Pressable>
+        </View>
+
+        {/* Receive card → tap the token to open its detail page */}
+        <Pressable onPress={openDetail} className="flex-row items-center justify-between rounded-3xl bg-surface-muted p-4">
+          <View className="flex-row items-center gap-2">
+            <CoinIcon symbol={recvToken} size={32} />
+            <Text style={bold} className="text-lg text-ink">{recvToken}</Text>
+            <Text className="text-ink-faint">›</Text>
+          </View>
+          <Text style={bold} className="text-2xl text-ink">{fmtNum(recv)}</Text>
+        </Pressable>
+
+        {/* limit price OR market rate (tap rate to open chart + detail) */}
+        {orderType === "limit" ? (
+          <Pressable onPress={() => setEditing("price")} className="flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 py-3">
+            <Text className="text-sm text-ink-soft">Limit price ({pair.quote})</Text>
+            <Text style={bold} className={`text-base ${editing === "price" ? "text-accent" : "text-ink"}`}>{limitPrice}</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={openDetail} className="flex-row items-center justify-between rounded-2xl bg-surface-muted px-4 py-3">
+            <Text className="text-sm text-ink-soft">
+              1 {payToken} ≈ <Text style={bold} className="text-ink">{fmtNum(rate)}</Text> {recvToken}
+            </Text>
+            <Text className="text-ink-faint">›</Text>
+          </Pressable>
+        )}
+
+        <Button label="Continue" variant="accent" disabled onPress={() => {}} />
+        <Text className="text-center text-xs text-ink-faint">
+          Order placement needs a linked funded wallet + BalanceManager — wiring next (same as web).
+        </Text>
+      </ScrollView>
+
+      {/* in-app keypad sheet */}
+      <Keypad visible={editing !== null} onKey={onKey} onDone={() => setEditing(null)} />
+    </View>
+  );
+}
+
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
+
+function Keypad({ visible, onKey, onDone }: { visible: boolean; onKey: (k: string) => void; onDone: () => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDone}>
+      <Pressable className="flex-1" onPress={onDone} />
+      <View style={{ paddingBottom: Math.max(insets.bottom, 12) }} className="rounded-t-3xl border-t border-border bg-surface px-4 pt-3">
+        <View className="mb-1 flex-row items-center justify-between">
+          <View />
+          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: palette.light.border }} />
+          <Pressable onPress={onDone} className="rounded-full bg-accent px-4 py-1.5">
+            <Text style={bold} className="text-sm text-on-accent">Done</Text>
+          </Pressable>
+        </View>
+        <View className="flex-row flex-wrap">
+          {KEYS.map((k) => (
+            <Pressable key={k} onPress={() => onKey(k)} style={{ width: "33.33%" }} className="items-center justify-center py-4">
+              <Text style={black} className="text-2xl text-ink">{k}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, TextInput } from 'react-native';
-import { Avatar, Button, Spinner, useTheme } from '@/components/ui';
+import { Avatar, Button, Spinner, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import type { Participant } from '@/lib/messaging/types';
 import { SearchIcon, XIcon } from './icons';

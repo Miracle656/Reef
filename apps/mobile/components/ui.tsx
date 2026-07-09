@@ -1,274 +1,122 @@
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ActivityIndicator,
-  StyleSheet,
-  type ViewStyle,
-  type TextStyle,
-  type PressableProps,
-  type TextInputProps,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View, type TextInputProps } from "react-native";
+import { palette } from "@umbra/ui";
+import { RemoteImage } from "./remote-image";
 
-export function useTheme() {
-  const scheme = useColorScheme();
-  return Colors[scheme ?? 'light'];
-}
+/** Monospace accents (handles, timestamps, numbers) — the design uses Space
+ *  Mono; the platform mono is the closest zero-dependency match. */
+export const MONO = Platform.select({ ios: "Menlo", default: "monospace" });
 
-// ---- Button ----------------------------------------------------------------
+/** Soft "liquid" surface — rounded, gentle shadow, hairline border (no hard brutalist edge). */
+export const card = {
+  borderRadius: 20,
+  backgroundColor: palette.light.surface,
+  borderWidth: 1,
+  borderColor: palette.light.border,
+  shadowColor: "#16161A",
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.07,
+  shadowRadius: 18,
+  elevation: 3,
+} as const;
 
-type ButtonVariant = 'primary' | 'accent' | 'outline' | 'ghost' | 'danger';
-type ButtonSize = 'sm' | 'md' | 'lg';
+// Back-compat alias (older imports used `neoShadow`).
+export const neoShadow = card;
 
-interface ButtonProps extends PressableProps {
+type ButtonVariant = "primary" | "accent" | "outline" | "danger";
+
+const bg: Record<ButtonVariant, string> = {
+  primary: "bg-ink",
+  accent: "bg-accent",
+  outline: "bg-surface",
+  danger: "bg-danger",
+};
+const fg: Record<ButtonVariant, string> = {
+  primary: "text-on-ink",
+  accent: "text-on-accent",
+  outline: "text-ink",
+  danger: "text-white",
+};
+
+export function Button({
+  label,
+  onPress,
+  variant = "primary",
+  disabled,
+  loading,
+}: {
+  label: string;
+  onPress: () => void;
   variant?: ButtonVariant;
-  size?: ButtonSize;
-  children: React.ReactNode;
-}
-
-/** True when children are pure text (string/number, or an array of them) so
- *  they must be wrapped in <Text> rather than dropped into a <View>. */
-function isText(children: React.ReactNode): boolean {
-  if (typeof children === 'string' || typeof children === 'number') return true;
-  if (Array.isArray(children)) return children.every((c) => typeof c === 'string' || typeof c === 'number');
-  return false;
-}
-
-export function Button({ variant = 'primary', size = 'md', children, disabled, style, ...props }: ButtonProps) {
-  const t = useTheme();
-
-  const variantStyle: ViewStyle = (() => {
-    switch (variant) {
-      case 'accent': return { backgroundColor: t.accent };
-      case 'outline': return { backgroundColor: 'transparent', borderWidth: 1, borderColor: t.border };
-      case 'danger': return { backgroundColor: t.danger };
-      case 'ghost': return { backgroundColor: 'transparent' };
-      default: return { backgroundColor: t.ink };
-    }
-  })();
-
-  const textColor: string = (() => {
-    switch (variant) {
-      case 'accent': return t.onAccent;
-      case 'outline': return t.ink;
-      case 'danger': return '#ffffff';
-      case 'ghost': return t.ink;
-      default: return t.onInk;
-    }
-  })();
-
-  const sizeStyle: ViewStyle = (() => {
-    switch (size) {
-      case 'sm': return { height: 36, paddingHorizontal: 16 };
-      case 'lg': return { height: 56, paddingHorizontal: 28 };
-      default: return { height: 44, paddingHorizontal: 20 };
-    }
-  })();
-
-  const fontSize = size === 'sm' ? 14 : size === 'lg' ? 16 : 15;
-
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const soft = variant === "accent" || variant === "danger";
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.btn,
-        variantStyle,
-        sizeStyle,
-        pressed && styles.pressed,
-        disabled && styles.disabled,
-        style as ViewStyle,
-      ]}
-      disabled={disabled}
-      {...props}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => ({
+        // rounding/border/bg live in className (NativeWind applies those reliably);
+        // only interaction + shadow stay inline.
+        opacity: disabled ? 0.5 : pressed ? 0.92 : 1,
+        transform: [{ scale: pressed ? 0.98 : 1 }],
+        ...(soft
+          ? {
+              shadowColor: variant === "danger" ? palette.light.danger : palette.light.accent,
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 4,
+            }
+          : {}),
+      })}
+      className={`h-12 flex-row items-center justify-center gap-2 rounded-full px-5 ${bg[variant]} ${variant === "outline" ? "border border-border" : ""}`}
     >
-      {isText(children) ? (
-        <Text style={{ color: textColor, fontSize, fontWeight: '600' }}>{children}</Text>
-      ) : (
-        <View style={styles.btnInner}>{children}</View>
-      )}
+      {loading ? <ActivityIndicator color={variant === "outline" ? palette.light.ink : "#fff"} /> : null}
+      <Text style={{ fontFamily: "Expose-Bold" }} className={`text-base ${fg[variant]}`}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-// ---- Card ------------------------------------------------------------------
-
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  const t = useTheme();
+export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <View
-      style={[
-        {
-          backgroundColor: t.surface,
-          borderRadius: 22,
-          borderWidth: 1,
-          borderColor: t.border,
-          shadowColor: t.ink,
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 3,
-        },
-        style,
-      ]}
-    >
+    <View style={card} className={`p-4 ${className}`}>
       {children}
     </View>
   );
 }
 
-// ---- Input / Textarea ------------------------------------------------------
-
-export function Input({ style, ...props }: TextInputProps) {
-  const t = useTheme();
+export function Field(props: TextInputProps) {
   return (
     <TextInput
-      style={[
-        {
-          height: 44,
-          backgroundColor: t.surfaceGlass,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: t.border,
-          paddingHorizontal: 16,
-          fontSize: 15,
-          color: t.ink,
-        },
-        style,
-      ]}
-      placeholderTextColor={t.inkFaint}
+      placeholderTextColor={palette.light.inkFaint}
       {...props}
+      style={[{ borderWidth: 1, borderColor: palette.light.border, borderRadius: 14, backgroundColor: palette.light.surface }, props.style]}
+      className="px-3.5 py-3 text-ink"
     />
   );
 }
 
-export function Textarea({ style, ...props }: TextInputProps) {
-  const t = useTheme();
-  return (
-    <TextInput
-      multiline
-      textAlignVertical="top"
-      style={[
-        {
-          backgroundColor: t.surfaceGlass,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: t.border,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          fontSize: 15,
-          color: t.ink,
-          minHeight: 80,
-        },
-        style,
-      ]}
-      placeholderTextColor={t.inkFaint}
-      {...props}
-    />
-  );
-}
-
-// ---- Avatar ----------------------------------------------------------------
-
-export function Avatar({ src, name, size = 44 }: { src?: string | null; name: string; size?: number }) {
-  const t = useTheme();
-  const initials = name.replace(/^@/, '').slice(0, 2).toUpperCase();
+export function Avatar({ uri, name, size = 44 }: { uri?: string | null; name: string; size?: number }) {
+  const initials = name.replace(/^@/, "").slice(0, 2).toUpperCase();
   return (
     <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: t.surfaceMuted,
-        borderWidth: 1,
-        borderColor: t.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-      }}
+      style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: "#fff" }}
+      className="items-center justify-center overflow-hidden bg-surface-muted shadow-sm"
     >
-      {src ? (
-        <Image source={{ uri: src }} style={{ width: size, height: size }} contentFit="cover" />
+      {uri ? (
+        <RemoteImage uri={uri} style={{ width: size, height: size }} />
       ) : (
-        <Text style={{ color: t.ink, fontSize: size * 0.36, fontWeight: '700' }}>{initials}</Text>
+        <Text className="font-bold text-ink" style={{ fontSize: size * 0.34, fontFamily: "Expose-Bold" }}>
+          {initials}
+        </Text>
       )}
     </View>
   );
 }
 
-// ---- Spinner ---------------------------------------------------------------
-
-export function Spinner({ color }: { color?: string }) {
-  const t = useTheme();
-  return <ActivityIndicator color={color ?? t.accent} />;
-}
-
-// ---- Badge -----------------------------------------------------------------
-
-export function Badge({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  const t = useTheme();
-  return (
-    <View
-      style={[
-        {
-          backgroundColor: t.surfaceGlass,
-          borderRadius: 100,
-          borderWidth: 1,
-          borderColor: t.border,
-          paddingHorizontal: 12,
-          paddingVertical: 4,
-          alignSelf: 'flex-start',
-        },
-        style,
-      ]}
-    >
-      {typeof children === 'string' ? (
-        <Text style={{ color: t.ink, fontSize: 12, fontWeight: '500' }}>{children}</Text>
-      ) : (
-        children
-      )}
-    </View>
-  );
-}
-
-// ---- Shared styles ---------------------------------------------------------
-
-const styles = StyleSheet.create({
-  btn: {
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  btnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.5 },
-});
-
-// ---- Typed text helpers ----------------------------------------------------
-
-export function Heading({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  const t = useTheme();
-  return (
-    <Text style={[{ color: t.ink, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 }, style]}>
-      {children}
-    </Text>
-  );
-}
-
-export function Body({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  const t = useTheme();
-  return <Text style={[{ color: t.ink, fontSize: 15, lineHeight: 22 }, style]}>{children}</Text>;
-}
-
-export function Caption({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
-  const t = useTheme();
-  return <Text style={[{ color: t.inkSoft, fontSize: 13 }, style]}>{children}</Text>;
+export function Spinner() {
+  return <ActivityIndicator color={palette.light.accent} />;
 }

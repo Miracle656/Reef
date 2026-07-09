@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useTheme } from '@/components/ui';
+import { useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import type { Message, Participant } from '@/lib/messaging/types';
 import { PollComposer } from './poll-composer';

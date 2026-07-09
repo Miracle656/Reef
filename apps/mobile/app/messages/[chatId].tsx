@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/components/ui';
+import { useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { ChatThread } from '@/components/messages/chat-thread';
 import { Screen } from '@/components/screen';

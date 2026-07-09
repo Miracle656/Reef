@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { Avatar, useTheme } from '@/components/ui';
+import { Avatar, useTheme } from '@/components/messages/ui';
 import { timeShort } from '@/lib/messaging/format';
 import type { Message } from '@/lib/messaging/types';
 import { PollView } from './poll-view';

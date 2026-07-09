@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet } from 'react-native';
-import { Avatar, Button, useTheme } from '@/components/ui';
+import { Avatar, Button, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { chatAvatar, chatName, peerOf } from '@/lib/messaging/display';
 import type { Chat } from '@/lib/messaging/types';

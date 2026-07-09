@@ -1,5 +1,5 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '@/components/ui';
+import { useTheme } from '@/components/messages/ui';
 import type { Message, PollState } from '@/lib/messaging/types';
 
 export function PollView({ message, mine, onVote }: { message: Message; mine: boolean; onVote: (idx: number) => void }) {

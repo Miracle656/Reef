@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/components/ui';
+import { useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { timeShort } from '@/lib/messaging/format';
 import type { Message } from '@/lib/messaging/types';

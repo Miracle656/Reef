@@ -1,74 +1,117 @@
-import { useEffect } from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTheme, Avatar } from '@/components/ui';
-import { Screen } from '@/components/screen';
-import { BackIcon } from '@/components/messages/icons';
-import { MOCK_NOTIFICATIONS, type MockNotification } from '@/lib/mock';
-import { markNotificationsSeen } from '@/lib/notifications';
-import { timeAgo } from '@/lib/utils';
+import { useEffect } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { palette } from "@umbra/ui";
+import { imgUrl } from "@/lib/config";
+import { markNotificationsSeen, useNotifications, type Notification } from "@/lib/notifications";
+import { Avatar, MONO, Spinner } from "@/components/ui";
+import { timeAgo } from "@/components/post-card";
 
-function verbFor(n: MockNotification): string {
-  const target = n.targetIsReply ? 'comment' : 'post';
+function verbFor(n: Notification): string {
+  const target = n.targetIsReply ? "comment" : "post";
   switch (n.type) {
-    case 'follow': return 'followed you';
-    case 'like': return `liked your ${target}`;
-    case 'repost': return `reposted your ${target}`;
-    case 'reply': return `replied to your ${target}`;
-    case 'mention': return 'mentioned you';
+    case "follow": return "followed you";
+    case "like": return `liked your ${target}`;
+    case "repost": return `reposted your ${target}`;
+    case "reply": return `replied to your ${target}`;
+    case "mention": return "mentioned you";
   }
 }
 
-export default function NotificationsScreen() {
-  const t = useTheme();
+const badgeFor: Record<Notification["type"], { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  follow: { icon: "person", color: palette.light.accent },
+  like: { icon: "heart", color: "#EF4444" },
+  repost: { icon: "repeat", color: "#10B981" },
+  reply: { icon: "chatbubble", color: "#8B5CF6" },
+  mention: { icon: "at", color: "#0EA5E9" },
+};
+
+export default function Notifications() {
   const router = useRouter();
+  const notifs = useNotifications();
 
   useEffect(() => {
     markNotificationsSeen();
   }, []);
 
   return (
-    <Screen style={{ backgroundColor: t.background }}>
-      <View style={[styles.header, { borderBottomColor: t.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.back} hitSlop={8}>
-          <BackIcon size={22} color={t.ink} />
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+      <View className="flex-row items-center gap-2 border-b border-border px-4 pb-2 pt-1">
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Ionicons name="chevron-back" size={26} color={palette.light.ink} />
         </Pressable>
-        <Text style={[styles.title, { color: t.ink }]}>Notifications</Text>
+        <Text style={{ fontFamily: "Expose-Black" }} className="text-2xl text-ink">Notifications</Text>
       </View>
 
-      {!MOCK_NOTIFICATIONS.length ? (
-        <View style={styles.empty}>
-          <Text style={{ color: t.inkSoft, fontSize: 15, textAlign: 'center' }}>
-            No notifications yet — when someone follows, likes, or replies to you, it shows up here.
+      {notifs.isLoading ? (
+        <View className="flex-1 items-center justify-center"><Spinner /></View>
+      ) : !notifs.data?.length ? (
+        <View className="flex-1 items-center justify-center px-10">
+          <Ionicons name="notifications-off-outline" size={36} color={palette.light.inkFaint} />
+          <Text className="mt-3 text-center text-ink-soft">
+            Nothing yet — when someone follows, likes or replies to you, it shows up here.
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-          {MOCK_NOTIFICATIONS.map((n) => (
-            <Pressable
-              key={n.id}
-              onPress={() => n.postId && router.push(`/p/${n.postId}` as never)}
-              style={[styles.row, { borderBottomColor: t.border }]}
-            >
-              <Avatar name={n.actor.displayName} src={n.actor.avatar} size={40} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.ink, fontSize: 14 }}>
-                  <Text style={{ fontWeight: '700' }}>{n.actor.displayName}</Text> {verbFor(n)}
-                </Text>
-                <Text style={{ color: t.inkFaint, fontSize: 12, marginTop: 2 }}>{timeAgo(n.createdAtMs)}</Text>
-              </View>
-            </Pressable>
-          ))}
+        <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
+          {notifs.data.map((n, i) => {
+            const badge = badgeFor[n.type];
+            const name = n.actor.displayName || n.actor.handle || `${n.actor.address.slice(0, 8)}…`;
+            const go = () => {
+              if (n.type === "follow") {
+                if (n.actor.handle) router.push(`/u/${n.actor.handle}` as never);
+              } else if (n.postId) {
+                router.push(`/p/${n.postId}` as never);
+              }
+            };
+            return (
+              <Pressable
+                key={`${n.type}-${n.createdAtMs}-${i}`}
+                onPress={go}
+                className="flex-row gap-3 border-b border-border px-4 py-3.5 active:bg-surface-muted"
+              >
+                <View>
+                  <Avatar
+                    name={n.actor.handle ?? "?"}
+                    uri={n.actor.avatarBlobId ? imgUrl(n.actor.avatarBlobId) : null}
+                    size={42}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: -2,
+                      right: -2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: badge.color,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: 2,
+                      borderColor: palette.light.background,
+                    }}
+                  >
+                    <Ionicons name={badge.icon} size={9} color="#fff" />
+                  </View>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-ink" style={{ fontSize: 14, lineHeight: 20 }}>
+                    <Text style={{ fontFamily: "Expose-Bold" }}>{name}</Text> {verbFor(n)}
+                  </Text>
+                  {n.preview ? (
+                    <Text numberOfLines={2} className="mt-0.5 text-sm text-ink-soft">{n.preview}</Text>
+                  ) : null}
+                  <Text style={{ fontFamily: MONO, fontSize: 11 }} className="mt-1 text-ink-faint">
+                    {timeAgo(n.createdAtMs)}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       )}
-    </Screen>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1 },
-  back: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 19, fontWeight: '800' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-});

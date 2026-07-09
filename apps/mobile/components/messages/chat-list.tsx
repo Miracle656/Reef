@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
-import { Avatar, Spinner, useTheme } from '@/components/ui';
+import { Avatar, Spinner, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { chatAvatar, chatName, previewOf } from '@/lib/messaging/display';
 import { timeAgo } from '@/lib/messaging/format';

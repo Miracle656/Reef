@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, TextInput } from 'react-native';
-import { Button, useTheme } from '@/components/ui';
+import { Button, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { PlusIcon, XIcon } from './icons';
 

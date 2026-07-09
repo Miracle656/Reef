@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Avatar, Button, useTheme } from '@/components/ui';
+import { Avatar, Button, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import type { StatusGroup } from '@/lib/messaging/types';
 import { PlusIcon, XIcon } from './icons';

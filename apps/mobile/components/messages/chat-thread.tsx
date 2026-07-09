@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { Avatar, useTheme } from '@/components/ui';
+import { Avatar, useTheme } from '@/components/messages/ui';
 import { useMessaging } from '@/lib/messaging/provider';
 import { chatAvatar, chatName, peerOf } from '@/lib/messaging/display';
 import { dayLabel } from '@/lib/messaging/format';

@@ -1,5 +1,5 @@
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
-import { useTheme } from '@/components/ui';
+import { useTheme } from '@/components/messages/ui';
 import type { Message } from '@/lib/messaging/types';
 import { useMessaging } from '@/lib/messaging/provider';
 import { EditIcon, ForwardIcon, ReplyIcon, TrashIcon, PinIcon } from './icons';
