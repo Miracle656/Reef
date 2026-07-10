@@ -21,7 +21,16 @@ export type MessageType =
   | "voice"
   | "location"
   | "poll"
-  | "system";
+  | "system"
+  // control messages — ride the same encrypted transport but are applied to
+  // other messages (reactions, pins, poll votes) instead of being rendered.
+  // Wire-compatible with web senders.
+  | "reaction"
+  | "pin"
+  | "poll-vote";
+
+/** Message types that mutate other messages rather than render as bubbles. */
+export const CONTROL_TYPES: ReadonlySet<string> = new Set(["reaction", "pin", "poll-vote"]);
 
 export type MessageStatus = "sent" | "delivered" | "read";
 
@@ -73,6 +82,12 @@ export interface Message {
 
   // mentions
   mentionIds?: string[];
+
+  // control-message payload (type reaction / pin / poll-vote)
+  targetId?: string;
+  remove?: boolean;
+  pinned?: boolean;
+  optionIndex?: number;
 
   // optimistic-send bookkeeping (client only)
   pending?: boolean;

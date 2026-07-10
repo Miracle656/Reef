@@ -1,0 +1,1276 @@
+/**
+ * ── ON-CHAIN MESSAGING ADAPTER (Sui Stack Messaging, mobile) ─────────────────
+ *
+ * Port of web app/messages/lib/sui-adapter.ts to the mobile `Messaging`
+ * interface. Implements:
+ *   - groups/DMs        on-chain (createAndShareGroup, Enoki-sponsored)
+ *   - message transport relayer (sendMessage/getMessages), signed by the
+ *                       per-device delegate keypair
+ *   - discovery         Sui GraphQL MemberAdded/Removed events
+ *   - identity          the user's zkLogin address (via runtime.me)
+ *   - stories           signed indexer statuses (zkLogin-signed, public blobs)
+ *   - vault             device-local (passcode hash + vaulted set in KV)
+ *
+ * The React-only bits (delegate signer, gasless sponsor) are injected by
+ * `provider.tsx` through `runtime.ts` — this file stays hook-free.
+ *
+ * Differences vs web v1: reactions/pins ride control envelopes and fold into
+ * events here (web folds them in the provider); chat media uploads are plain
+ * public Walrus blobs for now (web E2E-encrypts them — port media-crypto +
+ * a decrypting bubble next).
+ */
+
+import { TESTNET_SUI_STACK_MESSAGING_PACKAGE_CONFIG, messagingPermissionTypes } from "@mysten/sui-stack-messaging";
+import { TESTNET_SUI_GROUPS_PACKAGE_CONFIG, permissionTypes } from "@mysten/sui-groups";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
+import { canonicalStatusBytes, canonicalStatusDeleteBytes, walrus } from "@umbra/core";
+import { requireRuntime, getMessagingRuntime, type MessagingRuntime } from "./runtime";
+import { CONTROL_TYPES } from "./types";
+import type { Chat, ChosenState, Me, Message, MessageType, Participant, StatusGroup } from "./types";
+import type {
+  ChosenConfig,
+  CreateGroupInput,
+  GroupPatch,
+  LocalFile,
+  Messaging,
+  MessagingEvent,
+  MessagingEventHandler,
+  SendMessageInput,
+  StatusInput,
+  UploadResult,
+} from "./messaging";
+import { kv } from "./kv";
+import { trpc } from "@/lib/trpc";
+import { imgUrl, umbraConfig, NETWORK } from "@/lib/config";
+import { enokiFlow } from "@/lib/enoki";
+
+// ── message envelope (ReeF's rich model, E2EE inside the SDK `text`) ──────────
+
+interface Envelope {
+  v: 1;
+  type: MessageType;
+  content: string;
+  /** Sender's social (zkLogin) address — delegates rotate, authorship must
+   *  ride inside the encrypted payload. */
+  from?: string;
+  replyToId?: string;
+  mentionIds?: string[];
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  isForwarded?: boolean;
+  isWhisper?: boolean;
+  viewOnce?: boolean;
+  /** control payload (type reaction / pin / poll-vote) */
+  targetId?: string;
+  remove?: boolean;
+  pinned?: boolean;
+  optionIndex?: number;
+  /** poll creation (type "poll") */
+  pollOptions?: string[];
+  allowMultiple?: boolean;
+  clientId?: string;
+}
+
+function encodeEnvelope(input: SendMessageInput, from: string): string {
+  const env: Envelope = {
+    v: 1,
+    from,
+    type: input.type ?? "text",
+    content: input.content,
+    replyToId: input.replyToId,
+    mentionIds: input.mentionIds,
+    fileUrl: input.fileUrl,
+    fileName: input.fileName,
+    fileSize: input.fileSize,
+    mimeType: input.mimeType,
+    isForwarded: input.isForwarded,
+    isWhisper: input.isWhisper,
+    viewOnce: input.viewOnce,
+    targetId: input.targetId,
+    remove: input.remove,
+    pinned: input.pinned,
+    optionIndex: input.optionIndex,
+    pollOptions: input.pollOptions,
+    allowMultiple: input.allowMultiple,
+    clientId: input.clientId,
+  };
+  return JSON.stringify(env);
+}
+
+/** Fresh PollState for a just-materialized poll message (votes fold in later). */
+function pollFrom(id: string, question: string, options: string[] | undefined, allowMultiple: boolean | undefined): Message["poll"] {
+  return {
+    id,
+    question,
+    allowMultiple: Boolean(allowMultiple),
+    options: (options ?? []).map((text) => ({ text, votes: 0 })),
+    totalVoters: 0,
+    myVotes: [],
+  };
+}
+
+function decodeEnvelope(text: string): Partial<Envelope> {
+  try {
+    const p = JSON.parse(text) as Envelope;
+    if (p && typeof p === "object" && p.v === 1) return p;
+  } catch {
+    /* plain text (non-ReeF sender) */
+  }
+  return { type: "text", content: text };
+}
+
+// SDK DecryptedMessage → ReeF Message
+interface DecodedSdkMessage {
+  messageId: string;
+  groupId: string;
+  order: number;
+  text: string;
+  senderAddress: string;
+  createdAt: number;
+  isEdited: boolean;
+  isDeleted: boolean;
+}
+
+function toMessage(chatId: string, dm: DecodedSdkMessage): Message {
+  const env = decodeEnvelope(dm.text);
+  return {
+    id: dm.messageId,
+    chatId,
+    // Envelope authorship beats the delegate address the relayer reports.
+    senderId: env.from ?? dm.senderAddress,
+    type: env.type ?? "text",
+    content: dm.isDeleted ? "" : env.content ?? dm.text,
+    replyToId: env.replyToId,
+    mentionIds: env.mentionIds,
+    fileUrl: env.fileUrl,
+    fileName: env.fileName,
+    fileSize: env.fileSize,
+    mimeType: env.mimeType,
+    isForwarded: env.isForwarded,
+    isWhisper: env.isWhisper,
+    viewOnce: env.viewOnce,
+    targetId: env.targetId,
+    remove: env.remove,
+    pinned: env.pinned,
+    optionIndex: env.optionIndex,
+    poll: env.type === "poll" ? pollFrom(dm.messageId, env.content ?? "", env.pollOptions, env.allowMultiple) : undefined,
+    isDeleted: dm.isDeleted,
+    isEdited: dm.isEdited,
+    status: "delivered",
+    clientId: env.clientId,
+    // SDK createdAt is unix SECONDS; JS Date wants ms.
+    createdAt: new Date(dm.createdAt < 1e12 ? dm.createdAt * 1000 : dm.createdAt).toISOString(),
+  };
+}
+
+// ── local group store (groupId ↔ uuid ↔ participants) ─────────────────────────
+// The SDK has no listGroups; we cache what we create/discover. Chat.id === uuid.
+
+interface StoredGroup {
+  uuid: string;
+  groupId: string;
+  name: string;
+  type: "direct" | "group";
+  participantIds: string[];
+  /** Resolved ReeF profiles for the human participants (handle/avatar). */
+  resolved?: Participant[];
+  createdAt: number;
+  /** Cached preview of the latest message — lets the chat list render instantly. */
+  lastMsg?: { text: string; senderId: string; type: MessageType; at: string };
+}
+
+function storeKey(me: string): string {
+  return `reef:msg-groups:v6:${me.toLowerCase()}`;
+}
+
+function readStore(me: string): StoredGroup[] {
+  try {
+    return JSON.parse(kv.getItem(storeKey(me)) ?? "[]") as StoredGroup[];
+  } catch {
+    return [];
+  }
+}
+
+function writeStore(me: string, groups: StoredGroup[]): void {
+  kv.setItem(storeKey(me), JSON.stringify(groups));
+}
+
+function upsertGroup(me: string, g: StoredGroup): void {
+  const all = readStore(me);
+  const i = all.findIndex((x) => x.uuid === g.uuid);
+  if (i >= 0) all[i] = { ...all[i], ...g };
+  else all.push(g);
+  writeStore(me, all);
+}
+
+function rememberLastMsg(me: string, uuid: string, m: Message): void {
+  if (CONTROL_TYPES.has(m.type)) return; // reactions/pins/votes aren't previews
+  const g = readStore(me).find((x) => x.uuid === uuid);
+  if (!g) return;
+  if (g.lastMsg && g.lastMsg.at >= m.createdAt) return;
+  upsertGroup(me, { ...g, lastMsg: { text: m.content, senderId: m.senderId, type: m.type, at: m.createdAt } });
+}
+
+// ── per-chat message cache (instant thread open; the network fills the delta) ──
+
+const MSG_CACHE_MAX = 50;
+
+function msgCacheKey(me: string, uuid: string): string {
+  return `reef:msg-cache:v2:${me.toLowerCase()}:${uuid}`;
+}
+
+function readMsgCache(me: string, uuid: string): Message[] {
+  try {
+    return JSON.parse(kv.getItem(msgCacheKey(me, uuid)) ?? "[]") as Message[];
+  } catch {
+    return [];
+  }
+}
+
+function writeMsgCache(me: string, uuid: string, msgs: Message[]): void {
+  kv.setItem(msgCacheKey(me, uuid), JSON.stringify(msgs.slice(-MSG_CACHE_MAX)));
+}
+
+function appendMsgCache(me: string, uuid: string, incoming: Message[]): void {
+  if (!incoming.length) return;
+  const cur = readMsgCache(me, uuid);
+  const seen = new Set(cur.map((m) => m.id));
+  const merged = [...cur, ...incoming.filter((m) => !seen.has(m.id))].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
+  writeMsgCache(me, uuid, merged);
+}
+
+// ── delegate membership (the relayer authorizes the delegate, not zkLogin) ────
+
+function grantsKey(me: string): string {
+  return `reef:msg-delegate-grants:v6:${me.toLowerCase()}`;
+}
+function readGrants(me: string): Set<string> {
+  try {
+    return new Set(JSON.parse(kv.getItem(grantsKey(me)) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function markGranted(me: string, groupId: string): void {
+  const s = readGrants(me);
+  s.add(groupId);
+  kv.setItem(grantsKey(me), JSON.stringify([...s]));
+}
+
+// Groups our delegate can't join (e.g. orphaned groups where we lack
+// PermissionsAdmin) — hidden from the list so they don't clutter.
+function skipKey(me: string): string {
+  return `reef:msg-skip:v6:${me.toLowerCase()}`;
+}
+function readSkip(me: string): Set<string> {
+  try {
+    return new Set(JSON.parse(kv.getItem(skipKey(me)) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function markSkip(me: string, groupId: string): void {
+  const s = readSkip(me);
+  s.add(groupId);
+  kv.setItem(skipKey(me), JSON.stringify([...s]));
+}
+function unmarkSkip(me: string, groupId: string): void {
+  const s = readSkip(me);
+  if (!s.delete(groupId)) return;
+  kv.setItem(skipKey(me), JSON.stringify([...s]));
+}
+
+// ── the vault (device-local: passcode hash + vaulted chat uuids) ──────────────
+
+function vaultPassKey(me: string): string {
+  return `reef:msg-vault-pass:v1:${me.toLowerCase()}`;
+}
+function vaultSetKey(me: string): string {
+  return `reef:msg-vaulted:v1:${me.toLowerCase()}`;
+}
+function hashPass(passcode: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(`reef-vault#${passcode}`)));
+}
+function readVaulted(me: string): Set<string> {
+  try {
+    return new Set(JSON.parse(kv.getItem(vaultSetKey(me)) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+const MSG_PERMS = messagingPermissionTypes(TESTNET_SUI_STACK_MESSAGING_PACKAGE_CONFIG.originalPackageId);
+const GRP_PERMS = permissionTypes(TESTNET_SUI_GROUPS_PACKAGE_CONFIG.originalPackageId);
+
+/** Does the group object already exist on-chain (and am I in it)? Reads only. */
+async function groupExists(rt: MessagingRuntime, groupId: string): Promise<boolean> {
+  try {
+    return await rt.client.groups.view.isMember({ groupId, member: rt.me.id });
+  } catch {
+    return false; // object not found → doesn't exist yet
+  }
+}
+
+/**
+ * Grant `member` only the permissions they DON'T already hold — re-granting an
+ * existing permission aborts on-chain, so skip already-held ones.
+ */
+async function grantMissing(rt: MessagingRuntime, groupId: string, member: string, perms: string[]): Promise<void> {
+  const missing: string[] = [];
+  for (const p of perms) {
+    try {
+      if (!(await rt.client.groups.view.hasPermission({ groupId, member, permissionType: p }))) missing.push(p);
+    } catch {
+      missing.push(p);
+    }
+  }
+  if (missing.length === 0) return;
+  const tx = rt.client.groups.tx.grantPermissions({ groupId, member, permissionTypes: missing });
+  try {
+    await rt.sponsorExecute(tx);
+  } catch (e) {
+    // Tolerate redundant grants (stale reads); rethrow real failures.
+    for (const p of missing) {
+      const has = await rt.client.groups.view.hasPermission({ groupId, member, permissionType: p }).catch(() => false);
+      if (!has) throw e;
+    }
+    console.warn("[reef-msg] grant was redundant (perms already present) — continuing");
+  }
+}
+
+/** Ensure my delegate holds Reader+Sender on a group (idempotent). */
+async function ensureDelegateMembership(rt: MessagingRuntime, groupId: string): Promise<void> {
+  if (readGrants(rt.me.id).has(groupId)) return;
+  await grantMissing(rt, groupId, rt.delegateAddress, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender]);
+  markGranted(rt.me.id, groupId);
+}
+
+/** Map a relayer sender address (a *delegate* keypair) back to a social identity. */
+function resolveSenderId(rt: MessagingRuntime, group: StoredGroup | undefined, sender: string): string {
+  const s = sender.toLowerCase();
+  if (s === rt.me.id.toLowerCase()) return rt.me.id;
+  if (group?.participantIds.some((p) => p.toLowerCase() === s)) return sender;
+  if (s === rt.delegateAddress.toLowerCase()) return rt.me.id;
+  if (group && group.type === "direct") {
+    const other = group.participantIds.find((p) => p.toLowerCase() !== rt.me.id.toLowerCase());
+    if (other) return other;
+  }
+  return sender;
+}
+
+// ── deterministic DM uuid (both parties derive the same one) ──────────────────
+
+function fnv1a32(input: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function hash128Hex(input: string): string {
+  return [0, 1, 2, 3].map((s) => fnv1a32(`${input}|${s}`).toString(16).padStart(8, "0")).join("");
+}
+
+/** RFC-4122 v8 UUID, deterministic on the sorted address pair. */
+function deriveDirectUuid(a: string, b: string): string {
+  const [x, y] = [a.toLowerCase(), b.toLowerCase()].sort();
+  const hex = hash128Hex(`reef-dm-v6#${x}#${y}`);
+  const u = hex.slice(0, 12) + "8" + hex.slice(13, 16) + "a" + hex.slice(17, 32);
+  return [u.slice(0, 8), u.slice(8, 12), u.slice(12, 16), u.slice(16, 20), u.slice(20, 32)].join("-");
+}
+
+function shortId(addr: string): string {
+  return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+}
+
+function participantFromAddress(addr: string): Participant {
+  return { id: addr, username: shortId(addr) };
+}
+
+function meUser(me: Me): Participant {
+  return { id: me.id, username: me.username, displayName: me.displayName, avatarUrl: me.avatarUrl };
+}
+
+/** The ChatUser for a message sender (resolved profile → handle/avatar in bubbles). */
+function senderUserFor(g: StoredGroup, me: Me, senderId: string): Participant {
+  if (senderId.toLowerCase() === me.id.toLowerCase()) return meUser(me);
+  return g.resolved?.find((p) => p.id.toLowerCase() === senderId.toLowerCase()) ?? participantFromAddress(senderId);
+}
+
+function chatFromStored(g: StoredGroup, me: Me): Chat {
+  const participants: Participant[] = g.resolved?.length
+    ? g.resolved.map((p) => (p.id.toLowerCase() === me.id.toLowerCase() ? meUser(me) : p))
+    : g.participantIds.map((p) => (p.toLowerCase() === me.id.toLowerCase() ? meUser(me) : participantFromAddress(p)));
+  const last = g.lastMsg;
+  return {
+    id: g.uuid,
+    type: g.type,
+    name: g.type === "group" ? g.name || undefined : undefined,
+    participants,
+    createdBy: g.participantIds[0],
+    lastMessageAt: last?.at ?? new Date(g.createdAt).toISOString(),
+    lastMessage: last
+      ? {
+          id: `preview-${g.uuid}`,
+          chatId: g.uuid,
+          senderId: last.senderId,
+          type: last.type,
+          content: last.text,
+          status: "delivered",
+          createdAt: last.at,
+          sender: senderUserFor(g, me, last.senderId),
+        }
+      : undefined,
+  };
+}
+
+/** The non-me participant of a DM (its counterparty), lowercased. */
+function directPeerId(c: Chat, meId: string): string | undefined {
+  return c.participants.find((p) => p.id.toLowerCase() !== meId.toLowerCase())?.id.toLowerCase();
+}
+
+/** Collapse multiple DM groups with the SAME person into one chat. */
+function dedupeDirects(chats: Chat[], meId: string): Chat[] {
+  const rank = (c: Chat): string => `${c.lastMessage ? 1 : 0}:${c.lastMessageAt ?? ""}`;
+  const bestByPeer = new Map<string, Chat>();
+  const out: Chat[] = [];
+  for (const c of chats) {
+    const peer = c.type === "direct" ? directPeerId(c, meId) : undefined;
+    if (!peer) {
+      out.push(c);
+      continue;
+    }
+    const prev = bestByPeer.get(peer);
+    if (!prev || rank(c) > rank(prev)) bestByPeer.set(peer, c);
+  }
+  return [...out, ...bestByPeer.values()];
+}
+
+// ── profile resolution (address → ReeF handle/avatar) ─────────────────────────
+
+const profileCache = new Map<string, Participant | null>();
+
+async function resolveProfile(address: string): Promise<Participant | null> {
+  const key = address.toLowerCase();
+  if (profileCache.has(key)) return profileCache.get(key)!;
+  let user: Participant | null = null;
+  try {
+    const p = await trpc.profileByAddress.query({ address });
+    if (p) {
+      user = {
+        id: p.owner,
+        username: p.handle,
+        displayName: p.displayName ?? undefined,
+        avatarUrl: p.avatarBlobId ? imgUrl(p.avatarBlobId) : undefined,
+      };
+    }
+  } catch {
+    /* indexer unreachable / not found */
+  }
+  profileCache.set(key, user);
+  return user;
+}
+
+/** Resolve a group's *human* participants and detect DM vs group. */
+async function enrichGroup(
+  rt: MessagingRuntime,
+  g: StoredGroup,
+  me: Me,
+): Promise<{ participants: Participant[]; type: "direct" | "group" } | null> {
+  const candidates = new Set<string>(g.participantIds.map((a) => a.toLowerCase()));
+  if (candidates.size <= 1) {
+    try {
+      const res = await rt.client.groups.view.getMembers({ groupId: g.groupId, exhaustive: true });
+      for (const m of res.members) candidates.add(m.address.toLowerCase());
+    } catch {
+      return null;
+    }
+  }
+  const meLc = me.id.toLowerCase();
+  const humans: Participant[] = [meUser(me)];
+  const seen = new Set([meLc]);
+  for (const addr of candidates) {
+    if (seen.has(addr)) continue;
+    seen.add(addr);
+    const u = await resolveProfile(addr);
+    if (u) humans.push(u);
+  }
+  const peers = humans.length - 1;
+  const type: "direct" | "group" = g.name ? "group" : peers === 1 ? "direct" : peers > 1 ? "group" : g.type;
+  return { participants: humans, type };
+}
+
+// ── GraphQL discovery (MemberAdded / MemberRemoved for my address) ────────────
+
+const DISCOVER_QUERY = `
+  query DiscoverGroups($eventType: String!, $cursor: String) {
+    events(filter: { type: $eventType }, first: 50, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes { contents { json } }
+    }
+  }
+`;
+
+async function discoverGroupIds(): Promise<string[]> {
+  const rt = getMessagingRuntime();
+  if (!rt) return [];
+  const me = rt.me.id.toLowerCase();
+  const addedType = rt.client.groups.bcs.MemberAdded.name;
+  const removedType = rt.client.groups.bcs.MemberRemoved.name;
+
+  async function pageAll(eventType: string): Promise<string[]> {
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const res: unknown = await rt!.graphqlClient.query({
+        query: DISCOVER_QUERY as never,
+        variables: { eventType, cursor },
+      });
+      const data = (res as { data?: { events?: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: Array<{ contents: { json: { group_id: string; member: string } } | null }> } } }).data;
+      const events = data?.events;
+      if (!events) break;
+      for (const n of events.nodes) {
+        const j = n.contents?.json;
+        if (j && j.member.toLowerCase() === me) ids.push(j.group_id);
+      }
+      if (!events.pageInfo.hasNextPage || !events.pageInfo.endCursor) break;
+      cursor = events.pageInfo.endCursor;
+    }
+    return ids;
+  }
+
+  const [added, removed] = await Promise.all([pageAll(addedType), pageAll(removedType)]);
+  const net = new Map<string, number>();
+  for (const g of added) net.set(g, (net.get(g) ?? 0) + 1);
+  for (const g of removed) net.set(g, (net.get(g) ?? 0) - 1);
+  return [...net.entries()].filter(([, c]) => c > 0).map(([g]) => g);
+}
+
+// ── the adapter ───────────────────────────────────────────────────────────────
+
+const TODO = (m: string): never => {
+  throw new Error(`SuiMessaging.${m}() not implemented yet (on-chain port in progress)`);
+};
+
+export class SuiMessaging implements Messaging {
+  #me: Me | null = null;
+  #poll: ReturnType<typeof setInterval> | null = null;
+  #lastOrder = new Map<string, number>();
+  #pollFails = new Map<string, number>();
+  #typingPoll: ReturnType<typeof setInterval> | null = null;
+  #typingKnown = new Map<string, Map<string, string>>(); // chatId → address → shown name
+  #typingLastPing = new Map<string, number>();
+  #handler: MessagingEventHandler | null = null;
+  #refreshing = false;
+  #vaultUnlocked = false;
+
+  setCurrentUser(me: Me): void {
+    this.#me = me;
+  }
+
+  private me(): Me {
+    return this.#me ?? requireRuntime().me;
+  }
+
+  // ── chats ──────────────────────────────────────────────────────────────────
+  // listChats() serves the last known inbox from the KV store instantly; the
+  // heavy on-chain work (discovery, joining, profile resolution) runs in the
+  // background and emits `chat_updated` only when something changed.
+  async listChats(): Promise<Chat[]> {
+    const me = this.me();
+    void this.#refreshChats();
+    return this.#chatsFromStore(me);
+  }
+
+  #chatsFromStore(me: Me): Chat[] {
+    const skip = readSkip(me.id);
+    const vaulted = readVaulted(me.id);
+    const chats = readStore(me.id)
+      .filter((g) => !skip.has(g.groupId))
+      .filter((g) => this.#vaultUnlocked || !vaulted.has(g.uuid))
+      .map((g) => {
+        const c = chatFromStored(g, me);
+        if (vaulted.has(g.uuid)) c.vaulted = true;
+        return c;
+      });
+    return dedupeDirects(chats, me.id).sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+  }
+
+  async #refreshChats(): Promise<void> {
+    if (this.#refreshing) return;
+    this.#refreshing = true;
+    try {
+      const me = this.me();
+      const rt = getMessagingRuntime();
+      const snapshot = () => JSON.stringify(readStore(me.id)) + [...readSkip(me.id)].join(",");
+      const before = snapshot();
+
+      let discovered: string[] = [];
+      try {
+        discovered = await discoverGroupIds();
+      } catch (e) {
+        console.warn("[messaging] discovery failed:", e);
+      }
+
+      const storedByGroup = new Map(readStore(me.id).map((g) => [g.groupId, g]));
+      const candidates = [...new Set([...discovered, ...storedByGroup.keys()])].filter(
+        (id) => !readSkip(me.id).has(id),
+      );
+
+      if (rt && candidates.length) {
+        const needMeta = candidates.filter((id) => !storedByGroup.has(id));
+        let meta: Record<string, { uuid: string; name?: string }> = {};
+        if (needMeta.length) {
+          try {
+            meta = await rt.client.messaging.view.groupsMetadata({ groupIds: needMeta, refresh: true });
+          } catch (e) {
+            console.warn("[messaging] groupsMetadata failed:", e);
+          }
+        }
+        for (const id of candidates) {
+          if (!readGrants(me.id).has(id)) {
+            try {
+              await ensureDelegateMembership(rt, id);
+            } catch (err) {
+              console.warn("[reef-msg] can't join group", id, "→ skipping:", err instanceof Error ? err.message : err);
+              markSkip(me.id, id);
+              continue;
+            }
+          }
+          if (!storedByGroup.has(id)) {
+            const m = meta[id];
+            if (m?.uuid) {
+              upsertGroup(me.id, { uuid: m.uuid, groupId: id, name: m.name ?? "", type: "group", participantIds: [me.id], createdAt: Date.now() });
+            }
+          }
+        }
+      }
+
+      if (rt) {
+        const skip = readSkip(me.id);
+        const visible = readStore(me.id).filter((g) => !skip.has(g.groupId));
+        await Promise.all(
+          visible.map(async (g) => {
+            try {
+              const enriched = await enrichGroup(rt, g, me);
+              if (enriched) {
+                g = { ...g, resolved: enriched.participants, participantIds: enriched.participants.map((p) => p.id), type: enriched.type };
+                upsertGroup(me.id, g);
+              }
+            } catch {
+              /* keep existing store values */
+            }
+            if (!g.lastMsg) {
+              try {
+                const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, limit: 1 });
+                const raw = res.messages as DecodedSdkMessage[];
+                if (raw.length) {
+                  const latest = raw.reduce((a, b) => (a.order >= b.order ? a : b));
+                  const m = toMessage(g.uuid, latest);
+                  m.senderId = resolveSenderId(rt, g, m.senderId);
+                  rememberLastMsg(me.id, g.uuid, m);
+                }
+              } catch {
+                /* not synced yet — the poll fills it in */
+              }
+            }
+          }),
+        );
+      }
+
+      if (snapshot() !== before) this.#handler?.({ type: "chat_updated", chatId: "" });
+    } catch (e) {
+      console.warn("[reef-msg] background chats refresh failed:", e);
+    } finally {
+      this.#refreshing = false;
+    }
+  }
+
+  async getChat(chatId: string): Promise<Chat | null> {
+    const me = this.me();
+    const g = readStore(me.id).find((x) => x.uuid === chatId);
+    return g ? chatFromStored(g, me) : null;
+  }
+
+  async createDirect(participantId: string): Promise<Chat> {
+    const me = this.me();
+    const rt = requireRuntime();
+    const uuid = deriveDirectUuid(me.id, participantId);
+    const groupId = rt.client.messaging.derive.groupId({ uuid });
+
+    // 1. create + share the group if it doesn't exist yet (idempotent on retry).
+    if (!(await groupExists(rt, groupId))) {
+      try {
+        await rt.sponsorExecute(rt.client.messaging.tx.createAndShareGroup({ uuid, name: "" }));
+      } catch (e) {
+        console.warn("[reef-msg] createAndShareGroup (may already exist):", e);
+      }
+    }
+    // 2. grant the other party Reader+Sender+PermissionsAdmin so THEY can later
+    //    grant their own delegate (the two-way join).
+    await grantMissing(rt, groupId, participantId, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender, GRP_PERMS.PermissionsAdmin, GRP_PERMS.ExtensionPermissionsAdmin]);
+    // 3. add MY delegate so the relayer authorizes my sends/reads.
+    await ensureDelegateMembership(rt, groupId);
+
+    unmarkSkip(me.id, groupId);
+    const peer = await resolveProfile(participantId);
+    upsertGroup(me.id, {
+      uuid,
+      groupId,
+      name: "",
+      type: "direct",
+      participantIds: [me.id, participantId],
+      resolved: [meUser(me), peer ?? participantFromAddress(participantId)],
+      createdAt: Date.now(),
+    });
+    return (await this.getChat(uuid))!;
+  }
+
+  async createGroup(input: CreateGroupInput): Promise<Chat> {
+    const me = this.me();
+    const uuid = crypto.randomUUID();
+    const rt = requireRuntime();
+    const groupId = rt.client.messaging.derive.groupId({ uuid });
+
+    if (!(await groupExists(rt, groupId))) {
+      try {
+        await rt.sponsorExecute(rt.client.messaging.tx.createAndShareGroup({ uuid, name: input.name }));
+      } catch (e) {
+        console.warn("[reef-msg] createAndShareGroup (may already exist):", e);
+      }
+    }
+    for (const member of input.participantIds) {
+      await grantMissing(rt, groupId, member, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender, GRP_PERMS.PermissionsAdmin, GRP_PERMS.ExtensionPermissionsAdmin]);
+    }
+    await ensureDelegateMembership(rt, groupId);
+
+    unmarkSkip(me.id, groupId);
+    const resolved = [meUser(me), ...(await Promise.all(input.participantIds.map(async (a) => (await resolveProfile(a)) ?? participantFromAddress(a))))];
+    upsertGroup(me.id, { uuid, groupId, name: input.name, type: "group", participantIds: [me.id, ...input.participantIds], resolved, createdAt: Date.now() });
+    return (await this.getChat(uuid))!;
+  }
+
+  async markRead(_chatId: string): Promise<void> {
+    /* read receipts not modeled on-chain — no-op */
+  }
+
+  // ── messages ─────────────────────────────────────────────────────────────────
+  async listMessages(chatId: string, cursor?: string | null): Promise<{ messages: Message[]; nextCursor: string | null }> {
+    const rt = requireRuntime();
+    const g = readStore(this.me().id).find((x) => x.uuid === chatId);
+    if (g) {
+      try {
+        await ensureDelegateMembership(rt, g.groupId);
+      } catch (e) {
+        console.warn("[messaging] ensureDelegateMembership failed:", e);
+      }
+    }
+    const beforeOrder = cursor ? Number(cursor) : undefined;
+    // The relayer syncs membership from chain with a lag; retry through the
+    // brief "not a member" window right after a grant.
+    let res: Awaited<ReturnType<typeof rt.client.messaging.getMessages>> | null = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: chatId }, limit: 50, beforeOrder });
+        break;
+      } catch (e) {
+        const notMember = e instanceof Error && /not a member/i.test(e.message);
+        if (!notMember || attempt === 3) throw e;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    if (!res) return { messages: [], nextCursor: null };
+    const raw = res.messages as DecodedSdkMessage[];
+    const all = raw
+      .map((dm) => {
+        const m = toMessage(chatId, dm);
+        if (g) {
+          m.senderId = resolveSenderId(rt, g, m.senderId);
+          m.sender = senderUserFor(g, this.me(), m.senderId);
+        }
+        return m;
+      })
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    // Fold control messages (reactions/pins) into their targets; render the rest.
+    const msgs = all.filter((m) => !CONTROL_TYPES.has(m.type));
+    for (const c of all) {
+      if (!c.targetId) continue;
+      const target = msgs.find((m) => m.id === c.targetId);
+      if (!target) continue;
+      if (c.type === "reaction") {
+        const reactions = target.reactions ?? [];
+        if (c.remove) {
+          target.reactions = reactions.filter((r) => !(r.userId === c.senderId && r.emoji === c.content));
+        } else if (!reactions.some((r) => r.userId === c.senderId && r.emoji === c.content)) {
+          target.reactions = [...reactions, { messageId: target.id, userId: c.senderId, emoji: c.content }];
+        }
+      } else if (c.type === "pin") {
+        target.isPinned = Boolean(c.pinned);
+      }
+    }
+    if (raw.length) {
+      const maxOrder = Math.max(...raw.map((m) => m.order));
+      this.#lastOrder.set(chatId, Math.max(this.#lastOrder.get(chatId) ?? -1, maxOrder));
+    }
+    if (!cursor && msgs.length) {
+      writeMsgCache(this.me().id, chatId, msgs);
+      const lastVisible = msgs[msgs.length - 1];
+      if (lastVisible) rememberLastMsg(this.me().id, chatId, lastVisible);
+    }
+    const minOrder = raw.length ? Math.min(...raw.map((m) => m.order)) : 0;
+    return { messages: msgs, nextCursor: res.hasNext ? String(minOrder) : null };
+  }
+
+  /** Cached messages for instant thread open (sync; the network call follows). */
+  peekMessages(chatId: string): Message[] {
+    return readMsgCache(this.me().id, chatId);
+  }
+
+  async sendMessage(input: SendMessageInput): Promise<Message> {
+    const rt = requireRuntime();
+    const text = encodeEnvelope(input, this.me().id);
+    // Retry through the brief "not a member" window right after joining.
+    let messageId = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        ({ messageId } = await rt.client.messaging.sendMessage({ signer: rt.signer, groupRef: { uuid: input.chatId }, text }));
+        break;
+      } catch (e) {
+        const notMember = e instanceof Error && /not a member/i.test(e.message);
+        if (!notMember || attempt === 4) throw e;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    const sent: Message = {
+      id: messageId,
+      chatId: input.chatId,
+      senderId: this.me().id,
+      type: input.type ?? "text",
+      content: input.content,
+      replyToId: input.replyToId,
+      mentionIds: input.mentionIds,
+      fileUrl: input.fileUrl,
+      fileName: input.fileName,
+      fileSize: input.fileSize,
+      mimeType: input.mimeType,
+      isForwarded: input.isForwarded,
+      isWhisper: input.isWhisper,
+      viewOnce: input.viewOnce,
+      targetId: input.targetId,
+      remove: input.remove,
+      pinned: input.pinned,
+      optionIndex: input.optionIndex,
+      poll: input.type === "poll" ? pollFrom(messageId, input.content, input.pollOptions, input.allowMultiple) : undefined,
+      status: "sent",
+      clientId: input.clientId,
+      createdAt: new Date().toISOString(),
+    };
+    if (!CONTROL_TYPES.has(sent.type)) {
+      appendMsgCache(this.me().id, input.chatId, [sent]);
+      rememberLastMsg(this.me().id, input.chatId, sent);
+    }
+    return sent;
+  }
+
+  async editMessage(messageId: string, content: string): Promise<void> {
+    void messageId;
+    void content;
+    TODO("editMessage");
+  }
+
+  async deleteMessage(messageId: string): Promise<void> {
+    void messageId;
+    TODO("deleteMessage");
+  }
+
+  async searchMessages(chatId: string, query: string): Promise<Message[]> {
+    const { messages } = await this.listMessages(chatId);
+    const q = query.toLowerCase();
+    return messages.filter((m) => m.content.toLowerCase().includes(q));
+  }
+
+  // ── reactions / pins (control envelopes over the same E2EE transport) ────────
+  #chatOf(messageId: string): string | null {
+    const me = this.me();
+    for (const g of readStore(me.id)) {
+      if (readMsgCache(me.id, g.uuid).some((m) => m.id === messageId)) return g.uuid;
+    }
+    return null;
+  }
+
+  async addReaction(messageId: string, emoji: string): Promise<void> {
+    const chatId = this.#chatOf(messageId);
+    if (!chatId) return;
+    await this.sendMessage({ chatId, type: "reaction", content: emoji, targetId: messageId });
+    this.#handler?.({ type: "reaction_added", chatId, messageId, userId: this.me().id, emoji });
+  }
+
+  async removeReaction(messageId: string, emoji: string): Promise<void> {
+    const chatId = this.#chatOf(messageId);
+    if (!chatId) return;
+    await this.sendMessage({ chatId, type: "reaction", content: emoji, targetId: messageId, remove: true });
+    this.#handler?.({ type: "reaction_removed", chatId, messageId, userId: this.me().id, emoji });
+  }
+
+  async pinMessage(messageId: string, pinned: boolean): Promise<void> {
+    const chatId = this.#chatOf(messageId);
+    if (!chatId) return;
+    await this.sendMessage({ chatId, type: "pin", content: "", targetId: messageId, pinned });
+    this.#handler?.({ type: "message_pinned", chatId, messageId, isPinned: pinned });
+  }
+
+  async listPinned(chatId: string): Promise<Message[]> {
+    const { messages } = await this.listMessages(chatId);
+    return messages.filter((m) => m.isPinned);
+  }
+
+  // ── real-time (polling for v1) ───────────────────────────────────────────────
+  subscribe(handler: MessagingEventHandler): () => void {
+    this.#handler = handler;
+    const tick = async () => {
+      const rt = getMessagingRuntime();
+      if (!rt) return;
+      const me = this.me();
+      const granted = readGrants(me.id);
+      for (const g of readStore(me.id)) {
+        if (!granted.has(g.groupId)) continue;
+        try {
+          const after = this.#lastOrder.get(g.uuid) ?? -1;
+          const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, afterOrder: after < 0 ? undefined : after, limit: 50 });
+          this.#pollFails.delete(g.uuid);
+          const fresh: Message[] = [];
+          for (const raw of res.messages as DecodedSdkMessage[]) {
+            if (raw.order <= (this.#lastOrder.get(g.uuid) ?? -1)) continue;
+            this.#lastOrder.set(g.uuid, raw.order);
+            const msg = toMessage(g.uuid, raw);
+            msg.senderId = resolveSenderId(rt, g, msg.senderId);
+            msg.sender = senderUserFor(g, me, msg.senderId);
+            const isOwn = msg.senderId.toLowerCase() === me.id.toLowerCase();
+            // Control messages fold into events the provider already handles.
+            if (CONTROL_TYPES.has(msg.type)) {
+              if (msg.type === "reaction" && msg.targetId) {
+                handler({
+                  type: msg.remove ? "reaction_removed" : "reaction_added",
+                  chatId: g.uuid,
+                  messageId: msg.targetId,
+                  userId: msg.senderId,
+                  emoji: msg.content,
+                });
+              } else if (msg.type === "pin" && msg.targetId) {
+                handler({ type: "message_pinned", chatId: g.uuid, messageId: msg.targetId, isPinned: Boolean(msg.pinned) });
+              }
+              continue;
+            }
+            fresh.push(msg);
+            const mentionsMe = (msg.mentionIds ?? []).some((id) => id.toLowerCase() === me.id.toLowerCase());
+            const ev: MessagingEvent = { type: "message", message: msg, isOwn, mentionsMe };
+            handler(ev);
+          }
+          if (fresh.length) {
+            appendMsgCache(me.id, g.uuid, fresh);
+            const lastVisible = fresh[fresh.length - 1];
+            if (lastVisible) rememberLastMsg(me.id, g.uuid, lastVisible);
+          }
+        } catch (err) {
+          const notMember = err instanceof Error && /(not a member|forbidden|403)/i.test(err.message);
+          if (notMember) {
+            const n = (this.#pollFails.get(g.uuid) ?? 0) + 1;
+            this.#pollFails.set(g.uuid, n);
+            if (n === 1) console.warn("[reef-msg] awaiting relayer membership sync for", g.uuid);
+            if (n >= 15) {
+              console.warn("[reef-msg] giving up on", g.uuid, "(relayer never synced membership) — hiding");
+              markSkip(me.id, g.groupId);
+              this.#pollFails.delete(g.uuid);
+            }
+          } else {
+            console.warn("[reef-msg] poll getMessages failed for", g.uuid, "→", err instanceof Error ? err.message : err);
+          }
+        }
+      }
+    };
+    // Typing presence: a separate, faster loop (one batched request).
+    const typingTick = async () => {
+      const me = this.me();
+      const granted = readGrants(me.id);
+      const uuids = readStore(me.id)
+        .filter((g) => granted.has(g.groupId))
+        .map((g) => g.uuid)
+        .slice(0, 50);
+      if (!uuids.length) return;
+      let who: Record<string, { address: string; name: string }[]> = {};
+      try {
+        who = await trpc.typingWho.query({ chatIds: uuids, exclude: me.id });
+      } catch {
+        return; // presence is best-effort
+      }
+      for (const chatId of uuids) {
+        const now = new Map((who[chatId] ?? []).map((u) => [u.address, u.name || u.address]));
+        const before = this.#typingKnown.get(chatId) ?? new Map<string, string>();
+        for (const [addr, name] of now) {
+          if (!before.has(addr)) handler({ type: "typing", chatId, userId: addr, username: name, isTyping: true });
+        }
+        for (const [addr, name] of before) {
+          if (!now.has(addr)) handler({ type: "typing", chatId, userId: addr, username: name, isTyping: false });
+        }
+        if (now.size) this.#typingKnown.set(chatId, now);
+        else this.#typingKnown.delete(chatId);
+      }
+    };
+    this.#typingPoll = setInterval(() => void typingTick(), 2000);
+
+    this.#poll = setInterval(() => void tick(), 3500);
+    void tick();
+    return () => {
+      if (this.#poll) clearInterval(this.#poll);
+      this.#poll = null;
+      if (this.#typingPoll) clearInterval(this.#typingPoll);
+      this.#typingPoll = null;
+      this.#handler = null;
+    };
+  }
+
+  // ── people ─────────────────────────────────────────────────────────────────
+  async searchUsers(query: string): Promise<Participant[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const me = this.me();
+    const out: Participant[] = [];
+    if (q.startsWith("0x") && q.length >= 42) out.push(participantFromAddress(q));
+    try {
+      const rows = await trpc.searchProfiles.query({ q: q.replace(/^@/, ""), limit: 12 });
+      for (const p of rows) {
+        if (p.owner.toLowerCase() === me.id.toLowerCase()) continue;
+        if (out.some((u) => u.id.toLowerCase() === p.owner.toLowerCase())) continue;
+        out.push({
+          id: p.owner,
+          username: p.handle,
+          displayName: p.displayName ?? undefined,
+          avatarUrl: p.avatarBlobId ? imgUrl(p.avatarBlobId) : undefined,
+        });
+      }
+    } catch (e) {
+      console.warn("[messaging] searchProfiles failed:", e);
+    }
+    return out;
+  }
+
+  // ── media (plain public Walrus blob for now — E2E media port next) ───────────
+  async uploadMedia(file: LocalFile): Promise<UploadResult> {
+    const res = await fetch(file.uri);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const { blobId } = await walrus.upload(umbraConfig, bytes);
+    return { url: imgUrl(blobId), name: file.name, size: file.size || bytes.length, mimeType: file.mimeType };
+  }
+
+  // ── stories (signed indexer statuses — zkLogin-signed, public blobs) ─────────
+  async #signMsg(bytes: Uint8Array): Promise<string> {
+    const keypair = await enokiFlow.getKeypair({ network: NETWORK });
+    const { signature } = await keypair.signPersonalMessage(bytes);
+    return signature;
+  }
+
+  async listStatus(): Promise<StatusGroup[]> {
+    const groups = await trpc.statusList.query({ viewer: this.#me?.id });
+    return groups.map((g) => ({
+      user: {
+        id: g.user.address,
+        username: g.user.handle ?? shortId(g.user.address),
+        displayName: g.user.displayName ?? g.user.handle ?? undefined,
+        avatarUrl: g.user.avatarBlobId ? imgUrl(g.user.avatarBlobId) : undefined,
+      },
+      items: g.items.map((s) => ({
+        id: s.id,
+        userId: s.owner,
+        type: s.type,
+        content: s.content,
+        mediaUrl: s.mediaBlobId ? imgUrl(s.mediaBlobId) : undefined,
+        bg: s.bg ?? undefined,
+        createdAt: new Date(s.createdAtMs).toISOString(),
+        viewedBy: s.viewedBy,
+      })),
+      hasUnseen: g.hasUnseen,
+    }));
+  }
+
+  async postStatus(input: StatusInput): Promise<void> {
+    const meId = this.me().id;
+    let mediaBlobId: string | null = null;
+    if (input.mediaUrl) {
+      // uploadMedia already put the image on Walrus — extract its blob id back
+      // out of the aggregator URL; otherwise upload whatever local uri we got.
+      const fromUrl = input.mediaUrl.match(/\/blobs\/([^/?#]+)/)?.[1];
+      if (fromUrl) {
+        mediaBlobId = fromUrl;
+      } else {
+        const res = await fetch(input.mediaUrl);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        mediaBlobId = (await walrus.upload(umbraConfig, bytes)).blobId;
+      }
+    }
+    const message = {
+      owner: meId,
+      type: input.type,
+      content: input.content,
+      mediaBlobId,
+      bg: input.bg ?? null,
+      timestamp: Date.now(),
+    };
+    const signature = await this.#signMsg(canonicalStatusBytes(message));
+    const r = await trpc.statusPost.mutate({ message, signature });
+    if (!r.ok) throw new Error("Story didn't go through — try again");
+  }
+
+  async viewStatus(statusId: string): Promise<void> {
+    const meId = this.#me?.id;
+    if (!meId) return;
+    await trpc.statusView.mutate({ statusId, viewer: meId }).catch(() => {});
+  }
+
+  async deleteStatus(statusId: string): Promise<void> {
+    const meId = this.#me?.id;
+    if (!meId) return;
+    const message = { owner: meId, statusId, timestamp: Date.now() };
+    const signature = await this.#signMsg(canonicalStatusDeleteBytes(message));
+    await trpc.statusDelete.mutate({ message, signature });
+  }
+
+  // ── typing (indexer-relayed presence, same as web) ───────────────────────────
+  setTyping(chatId: string, isTyping: boolean): void {
+    const me = this.me();
+    if (isTyping) {
+      const last = this.#typingLastPing.get(chatId) ?? 0;
+      if (Date.now() - last < 1500) return;
+      this.#typingLastPing.set(chatId, Date.now());
+    } else {
+      this.#typingLastPing.delete(chatId);
+    }
+    void trpc.typingPing
+      .mutate({ chatId, address: me.id, name: me.displayName || me.username || "", typing: isTyping })
+      .catch(() => {});
+  }
+
+  // ── the vault (device-local) ─────────────────────────────────────────────────
+  async vaultStatus(): Promise<{ hasPasscode: boolean; unlocked: boolean }> {
+    const hasPasscode = Boolean(kv.getItem(vaultPassKey(this.me().id)));
+    return { hasPasscode, unlocked: this.#vaultUnlocked };
+  }
+
+  async vaultSetup(passcode: string, currentPasscode?: string): Promise<void> {
+    const me = this.me();
+    const existing = kv.getItem(vaultPassKey(me.id));
+    if (existing && existing !== hashPass(currentPasscode ?? "")) {
+      throw new Error("Current passcode is wrong");
+    }
+    kv.setItem(vaultPassKey(me.id), hashPass(passcode));
+    this.#vaultUnlocked = true;
+  }
+
+  async vaultUnlock(passcode: string): Promise<boolean> {
+    const ok = kv.getItem(vaultPassKey(this.me().id)) === hashPass(passcode);
+    if (ok) this.#vaultUnlocked = true;
+    return ok;
+  }
+
+  lockVault(): void {
+    this.#vaultUnlocked = false;
+  }
+
+  async listVaultChats(): Promise<Chat[]> {
+    if (!this.#vaultUnlocked) return [];
+    const me = this.me();
+    const vaulted = readVaulted(me.id);
+    return readStore(me.id)
+      .filter((g) => vaulted.has(g.uuid))
+      .map((g) => ({ ...chatFromStored(g, me), vaulted: true }));
+  }
+
+  async setChatVaulted(chatId: string, vaulted: boolean): Promise<void> {
+    const me = this.me();
+    const s = readVaulted(me.id);
+    if (vaulted) s.add(chatId);
+    else s.delete(chatId);
+    kv.setItem(vaultSetKey(me.id), JSON.stringify([...s]));
+  }
+
+  // ── SECONDARY: safe no-ops so the UI doesn't crash (not yet persisted) ────────
+  async setDisappearing(_chatId: string, _seconds: number): Promise<void> {}
+  async saveMessage(_messageId: string): Promise<void> {}
+  async unsaveMessage(_messageId: string): Promise<void> {}
+  async listSaved(): Promise<Message[]> { return []; }
+  async votePoll(_messageId: string, _optionIndex: number): Promise<void> {}
+  async markViewOnce(_messageId: string): Promise<void> {}
+  async setChatSettings(_chatId: string, _settings: { muted?: boolean; archived?: boolean }): Promise<void> {}
+  async blockUser(_userId: string): Promise<void> {}
+  async unblockUser(_userId: string): Promise<void> {}
+  async listBlocked(): Promise<Participant[]> { return []; }
+  async reportUser(_userId: string, _reason: string, _chatId?: string): Promise<void> {}
+
+  // ── UNSUPPORTED yet ───────────────────────────────────────────────────────────
+  async createPoll(chatId: string, question: string, options: string[], allowMultiple: boolean): Promise<Message> {
+    return this.sendMessage({ chatId, type: "poll", content: question, pollOptions: options, allowMultiple });
+  }
+  async chosenStart(_c: string, _cfg: ChosenConfig): Promise<void> { TODO("chosenStart"); }
+  async chosenJoin(_c: string): Promise<void> { TODO("chosenJoin"); }
+  async chosenLeave(_c: string): Promise<void> { TODO("chosenLeave"); }
+  async chosenTap(_c: string): Promise<void> { TODO("chosenTap"); }
+  async chosenPick(_c: string, _n: number): Promise<void> { TODO("chosenPick"); }
+  async chosenNext(_c: string): Promise<void> { TODO("chosenNext"); }
+  async chosenEnd(_c: string): Promise<void> { TODO("chosenEnd"); }
+  async chosenSync(_c: string): Promise<void> { TODO("chosenSync"); }
+
+  // ── group management ─────────────────────────────────────────────────────────
+  async updateGroup(chatId: string, patch: GroupPatch): Promise<Chat> {
+    const me = this.me();
+    const g = readStore(me.id).find((x) => x.uuid === chatId);
+    if (!g) throw new Error("chat not found");
+    if (patch.name !== undefined) {
+      const rt = requireRuntime();
+      const tx = rt.client.messaging.tx.setGroupName({ groupId: g.groupId, name: patch.name });
+      await rt.sponsorExecute(tx);
+      upsertGroup(me.id, { ...g, name: patch.name });
+    }
+    return (await this.getChat(chatId))!;
+  }
+
+  async addParticipants(chatId: string, userIds: string[]): Promise<Chat> {
+    const me = this.me();
+    const g = readStore(me.id).find((x) => x.uuid === chatId);
+    if (!g) throw new Error("chat not found");
+    const rt = requireRuntime();
+    for (const member of userIds) {
+      const tx = rt.client.groups.tx.grantPermissions({ groupId: g.groupId, member, permissionTypes: [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender] });
+      await rt.sponsorExecute(tx);
+    }
+    upsertGroup(me.id, { ...g, participantIds: [...new Set([...g.participantIds, ...userIds])] });
+    return (await this.getChat(chatId))!;
+  }
+
+  async removeParticipant(chatId: string, userId: string): Promise<Chat> {
+    void userId;
+    return (await this.getChat(chatId)) ?? TODO("removeParticipant");
+  }
+
+  async setAdmin(chatId: string, _userId: string, _admin: boolean): Promise<Chat> {
+    return (await this.getChat(chatId)) ?? TODO("setAdmin");
+  }
+
+  async leaveGroup(chatId: string): Promise<void> {
+    const me = this.me();
+    const g = readStore(me.id).find((x) => x.uuid === chatId);
+    if (!g) return;
+    const rt = requireRuntime();
+    const tx = rt.client.messaging.tx.leave({ groupId: g.groupId });
+    await rt.sponsorExecute(tx);
+    writeStore(me.id, readStore(me.id).filter((x) => x.uuid !== chatId));
+  }
+}
+
+// Referenced only for the ChosenState import used in types re-exports.
+export type { ChosenState };

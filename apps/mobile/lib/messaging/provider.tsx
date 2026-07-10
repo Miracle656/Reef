@@ -2,8 +2,10 @@
  * MessagingProvider — the app-side state layer for the messages tab.
  *
  * Holds chat/message state, subscribes to the adapter's event bus, and exposes
- * bound actions via `useMessaging()`. Ported from web; identity is a hardcoded
- * mock `Me` here (frontend-only) instead of the zkLogin account + indexer.
+ * bound actions via `useMessaging()`. Identity derives from the zkLogin
+ * account + indexer profile (same as web); the on-chain runtime (delegate
+ * signer, messaging client, gasless sponsor) is built here and injected into
+ * the SuiMessaging adapter — a no-op when the mock adapter is active.
  */
 
 import {
@@ -16,6 +18,16 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
+import { useAuth } from "@/lib/auth";
+import { useGasless } from "@/lib/gasless";
+import { trpc } from "@/lib/trpc";
+import { imgUrl } from "@/lib/config";
+import { getDelegateKeypair } from "./messaging-identity";
+import { createReefMessagingClient } from "./messaging-client";
+import { messagingEnv, isMessagingConfigured } from "./sui-config";
+import { setMessagingRuntime } from "./runtime";
 import { messaging, type Chat, type ChosenConfig, type ChosenState, type CreateGroupInput, type GroupPatch, type LocalFile, type Me, type Message, type Participant, type SendMessageInput, type StatusGroup, type StatusInput, type UploadResult } from "./index";
 
 // ── state ──────────────────────────────────────────────────────────────────────
@@ -235,19 +247,26 @@ function reducer(state: State, a: Action): State {
 
 // ── identity ────────────────────────────────────────────────────────────────────
 
-/**
- * Frontend-only identity. On web this derives from the zkLogin account + indexer
- * profile; here it is a fixed mock user (matches `lagosbuild` from lib/mock) so
- * the messages UI is demoable without any auth/chain wiring.
- */
-const MOCK_ME: Me = {
-  id: "me_lagosbuild",
-  username: "lagosbuild",
-  displayName: "Lagos Build",
-};
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
+/** The acting user: zkLogin address + their ReeF profile from the indexer. */
 function useMe(): Me | null {
-  return MOCK_ME;
+  const { address } = useAuth();
+  const profile = useQuery({
+    queryKey: ["profile-by-addr", address],
+    queryFn: () => trpc.profileByAddress.query({ address: address! }),
+    enabled: Boolean(address),
+  });
+  const p = profile.data;
+  return useMemo(() => {
+    if (!address) return null;
+    return {
+      id: address,
+      username: p?.handle ?? short(address),
+      displayName: p?.displayName ?? p?.handle ?? undefined,
+      avatarUrl: p?.avatarBlobId ? imgUrl(p.avatarBlobId) : undefined,
+    };
+  }, [address, p?.handle, p?.displayName, p?.avatarBlobId]);
 }
 
 // ── context ────────────────────────────────────────────────────────────────────
@@ -316,11 +335,40 @@ const Ctx = createContext<MessagingContext | null>(null);
 
 export function MessagingProvider({ children }: { children: ReactNode }) {
   const me = useMe();
+  const gasless = useGasless();
   const [state, dispatch] = useReducer(reducer, initialState);
   const activeRef = useRef<string | null>(null);
   activeRef.current = state.activeChatId;
   const meRef = useRef<Me | null>(null);
   meRef.current = me;
+  const gaslessRef = useRef(gasless);
+  gaslessRef.current = gasless;
+
+  // Build the on-chain messaging runtime and inject it into the SuiMessaging
+  // adapter. Two identities work together:
+  //  - the user's zkLogin address is the on-chain group admin (its txs are
+  //    Enoki-sponsored via the gasless hook), which can grant the delegate;
+  //  - a per-device Ed25519 *delegate* keypair signs all relayer/message ops
+  //    (the relayer needs a real keypair signature — zkLogin can't auth).
+  // No-op on the mock adapter.
+  useEffect(() => {
+    if (!me || !isMessagingConfigured()) {
+      setMessagingRuntime(null);
+      return;
+    }
+    const delegate = getDelegateKeypair(me.id);
+    const client = createReefMessagingClient(delegate);
+    const graphqlClient = new SuiGraphQLClient({ url: messagingEnv.graphqlUrl, network: messagingEnv.network });
+    setMessagingRuntime({
+      client,
+      signer: delegate,
+      delegateAddress: delegate.toSuiAddress(),
+      graphqlClient,
+      me,
+      sponsorExecute: (tx) => gaslessRef.current(tx),
+    });
+    return () => setMessagingRuntime(null);
+  }, [me]);
 
   const refreshChats = useCallback(async () => {
     const chats = await messaging.listChats();
@@ -332,6 +380,10 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     if (!me) return;
     messaging.setCurrentUser(me);
     void refreshChats();
+    // Re-discover periodically so chats someone else just started with us
+    // surface without a manual refresh (GraphQL membership indexing lags).
+    const id = setInterval(() => void refreshChats(), 15000);
+    return () => clearInterval(id);
   }, [me, refreshChats]);
 
   // live events
