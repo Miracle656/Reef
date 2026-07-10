@@ -32,7 +32,7 @@ export function MessageActions({
   };
 
   const Item = ({ icon, label, danger, onPress }: { icon: React.ReactNode; label: string; danger?: boolean; onPress: () => void }) => (
-    <Pressable onPress={() => act(onPress)} style={({ pressed }) => [styles.item, pressed && { backgroundColor: t.surfaceMuted }]}>
+    <Pressable onPress={() => act(onPress)} style={styles.item} android_ripple={{ color: t.surfaceMuted }}>
       <View style={{ width: 20, alignItems: 'center' }}>{icon}</View>
       <Text style={[styles.itemTxt, { color: danger ? t.danger : t.ink }]}>{label}</Text>
     </Pressable>

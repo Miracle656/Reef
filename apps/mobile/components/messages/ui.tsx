@@ -73,14 +73,8 @@ export function Button({ variant = 'primary', size = 'md', children, disabled, s
 
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.btn,
-        variantStyle,
-        sizeStyle,
-        pressed && styles.pressed,
-        disabled && styles.disabled,
-        style as ViewStyle,
-      ]}
+      // static style — function-form style props get dropped under our NativeWind setup
+      style={[styles.btn, variantStyle, sizeStyle, disabled && styles.disabled, style as ViewStyle]}
       disabled={disabled}
       {...props}
     >

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, View } from "react-native";
+import { Animated, Dimensions, Image, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
-const WORD = Math.min(width * 0.26, 132);
+const WORD = Math.min(width * 0.42, 176); // wordmark width
+const MASCOT = Math.min(width * 0.38, 160);
 
 /**
- * Beach-party launch splash: an ocean→sunset gradient with a glowing sun, a few
- * bubbles, and a big "ReeF" wordmark that springs in. Fades out once the app is
- * ready (fonts loaded) and a minimum on-screen time has passed.
+ * Launch splash in the onboarding palette: the mint→teal→blue gradient from the
+ * design, soft bubbles, the walrus mascot springing in with the wordmark under
+ * it. Fades out once the app is ready (fonts loaded) and a minimum on-screen
+ * time has passed.
  */
 export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }) {
   const scale = useRef(new Animated.Value(0.8)).current;
@@ -43,34 +45,50 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
   }, [ready, minElapsed, force, fade, onDone]);
 
   return (
-    <Animated.View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#04263f", opacity: fade, zIndex: 999, elevation: 999 }}>
+    <Animated.View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#073a7d", opacity: fade, zIndex: 999, elevation: 999 }}>
       <Svg width="100%" height="100%" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
         <Defs>
-          <LinearGradient id="ocean" x1="0" y1="0" x2="0.35" y2="1">
-            <Stop offset="0" stopColor="#04263f" />
-            <Stop offset="0.42" stopColor="#0a84ff" />
-            <Stop offset="0.72" stopColor="#18c2c2" />
-            <Stop offset="1" stopColor="#ff8a5b" />
-          </LinearGradient>
-          <LinearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#fff3c4" />
-            <Stop offset="0.55" stopColor="#ffd166" />
-            <Stop offset="1" stopColor="#ff8a5b" />
+          <LinearGradient id="reef" x1="0.4" y1="0" x2="0.6" y2="1">
+            <Stop offset="0" stopColor="#7CFCD8" />
+            <Stop offset="0.3" stopColor="#18C2C2" />
+            <Stop offset="0.66" stopColor="#0A84FF" />
+            <Stop offset="1" stopColor="#073a7d" />
           </LinearGradient>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#ocean)" />
-        <Circle cx={width * 0.8} cy={height * 0.2} r={72} fill="url(#sun)" opacity={0.92} />
-        <Circle cx={width * 0.16} cy={height * 0.32} r={34} fill="#ffffff" opacity={0.1} />
-        <Circle cx={width * 0.28} cy={height * 0.7} r={20} fill="#ffffff" opacity={0.12} />
-        <Circle cx={width * 0.78} cy={height * 0.68} r={46} fill="#ffffff" opacity={0.08} />
+        <Rect width="100%" height="100%" fill="url(#reef)" />
+        <Circle cx={width * 0.06} cy={height * 0.24} r={120} fill="#ffffff" opacity={0.14} />
+        <Circle cx={width * 0.94} cy={height * 0.72} r={90} fill="#ffffff" opacity={0.1} />
+        <Circle cx={width * 0.24} cy={height * 0.78} r={26} fill="#ffffff" opacity={0.12} />
       </Svg>
+
+      {/* the reef bed from the web footer, anchored to the sea floor
+          (its top edge fades to transparent in the asset itself, so it
+          dissolves into the gradient with no seam) */}
+      <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center", overflow: "hidden" }}>
+        <Image
+          source={require("../assets/reef-bed.png")}
+          style={{ width: width * 1.5, height: width * 1.5 * (126 / 1080) }}
+          resizeMode="cover"
+        />
+      </View>
 
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Animated.Image
+          source={require("../assets/reef-logo.png")}
+          style={{
+            width: MASCOT,
+            height: MASCOT * 1.16,
+            resizeMode: "contain",
+            opacity: wordOp,
+            transform: [{ scale }],
+          }}
+        />
+        <Animated.Image
           source={require("../assets/reef-wordmark.png")}
           style={{
-            width: WORD * 2.9,
-            height: (WORD * 2.9) / 3.52,
+            width: WORD,
+            height: WORD / 3.52,
+            marginTop: 18,
             resizeMode: "contain",
             tintColor: "#fff",
             opacity: wordOp,
@@ -78,7 +96,7 @@ export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }
           }}
         />
         <Animated.Text
-          style={{ fontFamily: "Expose-Bold", marginTop: 6, letterSpacing: 4, fontSize: 12, color: "rgba(255,255,255,0.85)", opacity: subOp }}
+          style={{ fontFamily: "Expose-Bold", marginTop: 12, letterSpacing: 4, fontSize: 11, color: "rgba(255,255,255,0.9)", opacity: subOp }}
         >
           THE SOCIAL LAYER OF SUI
         </Animated.Text>

@@ -172,7 +172,7 @@ function HeaderMenu({ chat, onClose, onInfo, onSaved }: { chat: Chat; onClose: (
   const [disOpen, setDisOpen] = useState(false);
   const curDis = chat.disappearingSeconds ?? 0;
   const Item = ({ label, onPress, right }: { label: string; onPress: () => void; right?: string }) => (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: t.surfaceMuted }]}>
+    <Pressable onPress={onPress} style={styles.menuItem} android_ripple={{ color: t.surfaceMuted }}>
       <Text style={[styles.menuTxt, { color: t.ink }]}>{label}</Text>
       {right ? <Text style={{ color: t.inkFaint, fontSize: 11 }}>{right}</Text> : null}
     </Pressable>
@@ -193,7 +193,7 @@ function HeaderMenu({ chat, onClose, onInfo, onSaved }: { chat: Chat; onClose: (
               <Pressable
                 key={o.seconds}
                 onPress={() => { void setDisappearing(chat.id, o.seconds); onClose(); }}
-                style={({ pressed }) => [styles.menuSubItem, pressed && { backgroundColor: t.surfaceMuted }]}
+                style={styles.menuSubItem} android_ripple={{ color: t.surfaceMuted }}
               >
                 <Text style={{ color: o.seconds === curDis ? t.accentInk : t.inkSoft, fontSize: 13.5, fontWeight: o.seconds === curDis ? '600' : '400' }}>{o.label}</Text>
               </Pressable>

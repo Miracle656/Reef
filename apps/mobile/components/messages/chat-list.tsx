@@ -93,7 +93,9 @@ function ChatRow({ chat, meId, onPress }: { chat: Chat; meId?: string; onPress: 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: t.surfaceMuted }]}
+      // static style — function-form style props get dropped under our NativeWind setup
+      style={styles.row}
+      android_ripple={{ color: t.surfaceMuted }}
     >
       <View>
         <Avatar name={av.name} src={av.src} size={48} />

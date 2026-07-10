@@ -1,26 +1,16 @@
 import { Platform } from 'react-native';
+import { palette } from '@umbra/ui';
 
-// Light palette matches the app-wide design tokens (warm cream, not cool gray).
+// Light palette mirrors @umbra/ui palette.light — the same tokens NativeWind's
+// bg-background etc. resolve to — so messages/notifications match every other route.
 export const LightColors = {
-  background: '#F4F2ED',
-  surface: '#ffffff',
+  ...palette.light,
   surfaceGlass: 'rgba(255, 255, 255, 0.85)',
-  surfaceMuted: '#ECE9E1',
-  ink: '#15151A',
-  inkSoft: '#565660',
-  inkFaint: '#9a9aa6',
-  border: 'rgba(21, 21, 26, 0.08)',
-  borderStrong: 'rgba(21, 21, 26, 0.14)',
-  accent: '#0a84ff',
-  accentInk: '#0a4ea3',
-  danger: '#e2554a',
-  onAccent: '#ffffff',
-  onInk: '#f7f8fa',
-  tint: '#0a84ff',
-  tabIconDefault: '#9a9aa6',
-  tabIconSelected: '#0a84ff',
-  text: '#16161a',
-  icon: '#9a9aa6',
+  tint: palette.light.accent,
+  tabIconDefault: palette.light.inkFaint,
+  tabIconSelected: palette.light.accent,
+  text: palette.light.ink,
+  icon: palette.light.inkFaint,
 };
 
 export const DarkColors = {

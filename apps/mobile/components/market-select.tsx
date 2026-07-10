@@ -70,7 +70,7 @@ export function PairIcons({ base, quote, size = 24 }: { base: string; quote: str
   );
 }
 
-export function MarketSelect({ value, onChange }: { value: string; onChange: (key: string) => void }) {
+export function MarketSelect({ value, onChange, dark }: { value: string; onChange: (key: string) => void; dark?: boolean }) {
   const [open, setOpen] = useState(false);
   const cur = PAIRS.find((p) => p.key === value) ?? PAIRS[0]!;
 
@@ -78,14 +78,18 @@ export function MarketSelect({ value, onChange }: { value: string; onChange: (ke
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={{ borderWidth: 1, borderColor: palette.light.border, borderRadius: 999 }}
-        className="flex-row items-center gap-2.5 bg-surface px-3.5 py-2"
+        style={
+          dark
+            ? { backgroundColor: "rgba(234,231,223,.1)", borderRadius: 999 }
+            : { borderWidth: 1, borderColor: palette.light.border, borderRadius: 999 }
+        }
+        className={`flex-row items-center gap-2.5 px-3.5 py-2 ${dark ? "" : "bg-surface"}`}
       >
         <PairIcons base={cur.base} quote={cur.quote} />
-        <Text className="font-semibold text-ink">
-          {cur.base} <Text className="text-ink-faint">/</Text> {cur.quote}
+        <Text className="font-semibold" style={{ color: dark ? "#EAE7DF" : palette.light.ink }}>
+          {cur.base} <Text style={{ color: "#9A9AA6" }}>/</Text> {cur.quote}
         </Text>
-        <Text className="text-ink-soft"> ▾</Text>
+        <Text style={{ color: "#9A9AA6" }}> ▾</Text>
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
