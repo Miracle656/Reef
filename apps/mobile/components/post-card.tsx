@@ -1,15 +1,20 @@
 import { Pressable, Text, View } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { type Post } from "@umbra/core";
 import { palette } from "@umbra/ui";
 import { imgUrl } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 import { PAIRS, fetchMid, type Pair } from "@/lib/deepbook";
+import { getOracleState, toUsd } from "@/lib/predict";
+import { isOnlyEmoji } from "@/lib/emoji";
 import { Avatar, MONO } from "./ui";
 import { RemoteImage } from "./remote-image";
 import { CoinIcon } from "./market-select";
 import { ActionBar } from "./action-bar";
+import { RichText } from "./rich-text";
+import { QuoteCard } from "./quote-card";
+import { impliedUpProb } from "./predict-feed";
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
@@ -33,6 +38,13 @@ function detectPair(text: string): Pair | null {
   return null;
 }
 
+/** Extract a Predict market reference from post text: `/m/<oracleId>[?strike=<n>]`. */
+export function detectPredictMarket(text: string): { id: string; strike?: number } | null {
+  const m = text.match(/\/m\/([A-Za-z0-9_-]+)(?:\?strike=([0-9.]+))?/);
+  if (!m) return null;
+  return { id: m[1]!, strike: m[2] ? Number(m[2]) : undefined };
+}
+
 export function PostCard({ post }: { post: Post }) {
   const author = useQuery({
     queryKey: ["profile-by-addr", post.author],
@@ -41,6 +53,14 @@ export function PostCard({ post }: { post: Post }) {
   const a = author.data;
   const href = (a ? `/u/${a.handle}` : "/") as never;
   const pair = post.text ? detectPair(post.text) : null;
+  const market = post.text ? detectPredictMarket(post.text) : null;
+  // A /p/<id> reference makes this a quote post — embed the quoted card.
+  const quoteId = post.text?.match(/(?:https?:\/\/[^\s]+)?\/p\/(0x[0-9a-fA-F]+)/)?.[1] ?? null;
+  // Hide raw /m/<id> and /p/<id> links from the body — embed cards replace them.
+  let bodyText = post.text ?? "";
+  if (market) bodyText = bodyText.replace(/\/m\/[A-Za-z0-9_-]+(?:\?strike=[0-9.]+)?/, "");
+  if (quoteId) bodyText = bodyText.replace(/(?:https?:\/\/[^\s]+)?\/p\/0x[0-9a-fA-F]+/, "");
+  bodyText = bodyText.trim();
 
   return (
     <View className="flex-row border-b border-border" style={{ paddingHorizontal: 20, paddingVertical: 16, gap: 12 }}>
@@ -62,8 +82,10 @@ export function PostCard({ post }: { post: Post }) {
             @{a?.handle ?? short(post.author)} · {timeAgo(post.createdAtMs)}
           </Text>
         </View>
-        {post.text ? (
-          <Text style={{ marginTop: 5, fontSize: 14.5, lineHeight: 21, color: "#26262c" }}>{post.text}</Text>
+        {bodyText ? (
+          <Text style={{ marginTop: 5, fontSize: 14.5, lineHeight: isOnlyEmoji(bodyText) ? 44 : 21, color: "#26262c" }}>
+            <RichText text={bodyText} emojiSize={isOnlyEmoji(bodyText) ? 36 : 18} />
+          </Text>
         ) : null}
         {post.media.length > 0 ? (
           <View className="mt-2.5 flex-row" style={{ gap: 5, borderRadius: 14, overflow: "hidden" }}>
@@ -76,10 +98,70 @@ export function PostCard({ post }: { post: Post }) {
             ))}
           </View>
         ) : null}
+        {quoteId && quoteId !== post.id ? <QuoteCard id={quoteId} /> : null}
         {pair ? <TradeEmbed pair={pair} /> : null}
+        {market ? <PredictEmbed id={market.id} strike={market.strike} /> : null}
         <ActionBar post={post} />
       </View>
     </View>
+  );
+}
+
+const usd0 = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const usd2 = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** Inline prediction-market card — live oracle price + implied YES%, taps to /predict/[id]. */
+export function PredictEmbed({ id, strike }: { id: string; strike?: number }) {
+  const router = useRouter();
+  const q = useQuery({ queryKey: ["oracle", id], queryFn: () => getOracleState(id), refetchInterval: 20000 });
+  const st = q.data;
+  const asset = st?.oracle.underlying_asset ?? "BTC";
+  const forward = st?.latest_price ? toUsd(st.latest_price.forward) : null;
+  const expiry = st?.oracle.expiry;
+  const yes = strike != null && forward != null && expiry != null ? impliedUpProb(forward, strike, expiry - Date.now()) : null;
+
+  const open = () => {
+    const params = new URLSearchParams();
+    if (strike != null) params.set("strike", String(strike));
+    if (expiry != null) params.set("expiry", String(expiry));
+    const qs = params.toString();
+    router.push(`/predict/${id}${qs ? `?${qs}` : ""}` as never);
+  };
+
+  return (
+    <Pressable
+      onPress={open}
+      className="mt-2.5 flex-row items-center"
+      style={{
+        gap: 11,
+        borderWidth: 1,
+        borderColor: "rgba(21,21,26,.12)",
+        borderRadius: 16,
+        padding: 13,
+        backgroundColor: "#fff",
+      }}
+    >
+      <CoinIcon symbol={asset} size={38} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10.5, color: palette.light.inkFaint }}>Prediction market</Text>
+        <Text numberOfLines={1} style={{ fontFamily: "Expose-Bold", fontSize: 14 }} className="text-ink">
+          {strike != null ? `Will ${asset} be above ${usd0(strike)}?` : `${asset} price`}
+        </Text>
+        <Text numberOfLines={1} style={{ fontSize: 11.5, color: palette.light.inkSoft }}>
+          {forward != null ? `${asset} ${usd2(forward)}` : "Loading…"}
+          {expiry ? ` · expires ${new Date(expiry).toLocaleDateString()}` : ""}
+        </Text>
+      </View>
+      {yes != null ? (
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={{ fontFamily: "Expose-Bold", fontSize: 17, color: palette.light.accentInk }}>{Math.round(yes * 100)}%</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, color: palette.light.inkFaint }}>YES</Text>
+        </View>
+      ) : null}
+      <View style={{ backgroundColor: palette.light.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 }}>
+        <Text style={{ fontFamily: "Expose-Bold", fontSize: 12, color: "#fff" }}>Predict</Text>
+      </View>
+    </Pressable>
   );
 }
 

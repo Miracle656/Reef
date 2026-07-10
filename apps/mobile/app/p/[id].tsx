@@ -11,10 +11,13 @@ import { useAuth } from "@/lib/auth";
 import { useGasless } from "@/lib/gasless";
 import { trpc } from "@/lib/trpc";
 import { Avatar, MONO, Spinner } from "@/components/ui";
-import { PostCard } from "@/components/post-card";
+import { PostCard, PredictEmbed, detectPredictMarket } from "@/components/post-card";
 import { ActionBar } from "@/components/action-bar";
 import { RemoteImage } from "@/components/remote-image";
 import { BottomNav } from "@/components/bottom-nav";
+import { RichText } from "@/components/rich-text";
+import { QuoteCard } from "@/components/quote-card";
+import { isOnlyEmoji } from "@/lib/emoji";
 
 const bold = { fontFamily: "Expose-Bold" } as const;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -58,6 +61,13 @@ export default function PostDetail() {
 
   const a = author.data;
   const p = post.data;
+  // Same embed rules as the feed: /m/<id> → market card, /p/<id> → quote card.
+  const market = p?.text ? detectPredictMarket(p.text) : null;
+  const quoteId = p?.text?.match(/(?:https?:\/\/[^\s]+)?\/p\/(0x[0-9a-fA-F]+)/)?.[1] ?? null;
+  let bodyText = p?.text ?? "";
+  if (market) bodyText = bodyText.replace(/\/m\/[A-Za-z0-9_-]+(?:\?strike=[0-9.]+)?/, "");
+  if (quoteId) bodyText = bodyText.replace(/(?:https?:\/\/[^\s]+)?\/p\/0x[0-9a-fA-F]+/, "");
+  bodyText = bodyText.trim();
   const when = p
     ? `${new Date(p.createdAtMs).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · ${new Date(p.createdAtMs).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
     : "";
@@ -106,8 +116,10 @@ export default function PostDetail() {
                   </Pressable>
 
                   {/* body */}
-                  {p.text ? (
-                    <Text style={{ marginVertical: 14, fontSize: 18, lineHeight: 26 }} className="text-ink">{p.text}</Text>
+                  {bodyText ? (
+                    <Text style={{ marginVertical: 14, fontSize: 18, lineHeight: isOnlyEmoji(bodyText) ? 52 : 26 }} className="text-ink">
+                      <RichText text={bodyText} emojiSize={isOnlyEmoji(bodyText) ? 44 : 22} />
+                    </Text>
                   ) : (
                     <View style={{ height: 14 }} />
                   )}
@@ -122,6 +134,9 @@ export default function PostDetail() {
                       ))}
                     </View>
                   ) : null}
+
+                  {quoteId && quoteId !== p.id ? <View style={{ marginBottom: 12 }}><QuoteCard id={quoteId} /></View> : null}
+                  {market ? <View style={{ marginBottom: 12 }}><PredictEmbed id={market.id} strike={market.strike} /></View> : null}
 
                   {/* meta line */}
                   <Text
