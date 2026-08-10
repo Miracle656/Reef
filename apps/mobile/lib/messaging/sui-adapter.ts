@@ -460,7 +460,14 @@ function directPeerId(c: Chat, meId: string): string | undefined {
 
 /** Collapse multiple DM groups with the SAME person into one chat. */
 function dedupeDirects(chats: Chat[], meId: string): Chat[] {
-  const rank = (c: Chat): string => `${c.lastMessage ? 1 : 0}:${c.lastMessageAt ?? ""}`;
+  // The canonical DM (current-salt derived uuid) always beats residue from
+  // older salts — a dead old chat with a cached preview must never hide the
+  // live one. Among non-canonical candidates: has-a-message beats empty,
+  // newer beats older.
+  const rank = (c: Chat, peer: string): string => {
+    const canonical = c.id === deriveDirectUuid(meId, peer) ? 1 : 0;
+    return `${canonical}:${c.lastMessage ? 1 : 0}:${c.lastMessageAt ?? ""}`;
+  };
   const bestByPeer = new Map<string, Chat>();
   const out: Chat[] = [];
   for (const c of chats) {
@@ -470,7 +477,7 @@ function dedupeDirects(chats: Chat[], meId: string): Chat[] {
       continue;
     }
     const prev = bestByPeer.get(peer);
-    if (!prev || rank(c) > rank(prev)) bestByPeer.set(peer, c);
+    if (!prev || rank(c, peer) > rank(prev, peer)) bestByPeer.set(peer, c);
   }
   return [...out, ...bestByPeer.values()];
 }
