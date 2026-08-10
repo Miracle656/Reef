@@ -387,6 +387,26 @@ async function ensureDelegateMembership(rt: MessagingRuntime, groupId: string): 
 }
 
 /**
+ * Re-emit my delegate's membership events so a relayer that missed or lost
+ * them (its store is in-memory — a restart wipes it) re-learns we belong here:
+ * remove the delegate from the group, then grant it straight back. Both txs
+ * emit events the relayer consumes live. Requires my zkLogin to hold
+ * PermissionsAdmin on the group (granted to every DM/group participant).
+ */
+async function repairDelegateMembership(rt: MessagingRuntime, groupId: string): Promise<void> {
+  console.log("[reef-msg] repairing relayer membership for", groupId);
+  try {
+    await rt.sponsorExecute(rt.client.groups.tx.removeMember({ groupId, member: rt.delegateAddress }));
+  } catch (e) {
+    // Not fatal — the delegate may not be on-chain yet; the re-grant below
+    // still emits the MemberAdded the relayer needs.
+    console.warn("[reef-msg] repair: removeMember failed (continuing):", e instanceof Error ? e.message : e);
+  }
+  await grantMissing(rt, groupId, rt.delegateAddress, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender]);
+  console.log("[reef-msg] repair done for", groupId);
+}
+
+/**
  * Map a relayer sender address (always a *delegate* keypair) back to a social
  * identity so ownership + display are right:
  *  - my delegate      → me (so my messages render as mine)
@@ -630,6 +650,7 @@ export class SuiMessaging implements Messaging {
   // cycles hide a group. A transient RPC/network error must never markSkip
   // permanently (that's how the Aug 2026 RPC outage poisoned v6 skip lists).
   #joinFails = new Map<string, number>();
+  #repaired = new Set<string>(); // groups whose membership events we re-emitted this session
 
   setCurrentUser(me: Me): void {
     this.#me = me;
@@ -998,7 +1019,18 @@ export class SuiMessaging implements Messaging {
             const n = (this.#pollFails.get(g.uuid) ?? 0) + 1;
             this.#pollFails.set(g.uuid, n);
             if (n === 1) console.warn("[reef-msg] awaiting relayer membership sync for", g.uuid);
-            if (n >= 15) {
+            // ~17s of 403s with the delegate granted on-chain = the relayer
+            // missed/lost the membership events (in-memory store). Re-emit
+            // them once per session, then give the relayer time to catch up.
+            if (n === 5 && !this.#repaired.has(g.groupId)) {
+              this.#repaired.add(g.groupId);
+              this.#pollFails.set(g.uuid, 0);
+              try {
+                await repairDelegateMembership(rt, g.groupId);
+              } catch (e) {
+                console.warn("[reef-msg] repair failed for", g.groupId, "→", e instanceof Error ? e.message : e);
+              }
+            } else if (n >= 15) {
               console.warn("[reef-msg] giving up on", g.uuid, "(relayer never synced membership) — hiding");
               markSkip(me.id, g.groupId);
               this.#pollFails.delete(g.uuid);

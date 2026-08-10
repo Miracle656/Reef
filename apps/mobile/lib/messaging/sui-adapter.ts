@@ -352,6 +352,26 @@ async function ensureDelegateMembership(rt: MessagingRuntime, groupId: string): 
   markGranted(rt.me.id, groupId);
 }
 
+/**
+ * Re-emit my delegate's membership events so a relayer that missed or lost
+ * them (its store is in-memory — a restart wipes it) re-learns we belong here:
+ * remove the delegate from the group, then grant it straight back. Both txs
+ * emit events the relayer consumes live. Requires my zkLogin to hold
+ * PermissionsAdmin on the group (granted to every DM/group participant).
+ */
+async function repairDelegateMembership(rt: MessagingRuntime, groupId: string): Promise<void> {
+  console.log("[reef-msg] repairing relayer membership for", groupId);
+  try {
+    await rt.sponsorExecute(rt.client.groups.tx.removeMember({ groupId, member: rt.delegateAddress }));
+  } catch (e) {
+    // Not fatal — the delegate may not be on-chain yet; the re-grant below
+    // still emits the MemberAdded the relayer needs.
+    console.warn("[reef-msg] repair: removeMember failed (continuing):", e instanceof Error ? e.message : e);
+  }
+  await grantMissing(rt, groupId, rt.delegateAddress, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender]);
+  console.log("[reef-msg] repair done for", groupId);
+}
+
 /** Map a relayer sender address (a *delegate* keypair) back to a social identity. */
 function resolveSenderId(rt: MessagingRuntime, group: StoredGroup | undefined, sender: string): string {
   const s = sender.toLowerCase();
@@ -568,6 +588,7 @@ export class SuiMessaging implements Messaging {
   #pollFails = new Map<string, number>();
   #typingPoll: ReturnType<typeof setInterval> | null = null;
   #joinFails = new Map<string, number>(); // group → consecutive failed join cycles
+  #repaired = new Set<string>(); // groups whose membership events we re-emitted this session
   #typingKnown = new Map<string, Map<string, string>>(); // chatId → address → shown name
   #typingLastPing = new Map<string, number>();
   #handler: MessagingEventHandler | null = null;
@@ -1001,7 +1022,18 @@ export class SuiMessaging implements Messaging {
             const n = (this.#pollFails.get(g.uuid) ?? 0) + 1;
             this.#pollFails.set(g.uuid, n);
             if (n === 1) console.warn("[reef-msg] awaiting relayer membership sync for", g.uuid);
-            if (n >= 15) {
+            // ~17s of 403s with the delegate granted on-chain = the relayer
+            // missed/lost the membership events (in-memory store). Re-emit
+            // them once per session, then give the relayer time to catch up.
+            if (n === 5 && !this.#repaired.has(g.groupId)) {
+              this.#repaired.add(g.groupId);
+              this.#pollFails.set(g.uuid, 0);
+              try {
+                await repairDelegateMembership(rt, g.groupId);
+              } catch (e) {
+                console.warn("[reef-msg] repair failed for", g.groupId, "→", e instanceof Error ? e.message : e);
+              }
+            } else if (n >= 15) {
               console.warn("[reef-msg] giving up on", g.uuid, "(relayer never synced membership) — hiding");
               markSkip(me.id, g.groupId);
               this.#pollFails.delete(g.uuid);
