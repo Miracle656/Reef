@@ -6,9 +6,12 @@ import { isEnokiNetwork, registerEnokiWallets } from "@mysten/enoki";
 import { getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { enokiConfig } from "@/lib/enoki";
+import { umbraConfig } from "@/lib/config";
 
 const { networkConfig } = createNetworkConfig({
-  testnet: { url: getJsonRpcFullnodeUrl("testnet"), network: "testnet" },
+  // Don't use getJsonRpcFullnodeUrl("testnet") — Mysten deprecated JSON-RPC on
+  // the public fullnodes (Aug 2026); core config points at publicnode instead.
+  testnet: { url: umbraConfig.fullnodeUrl, network: "testnet" },
   mainnet: { url: getJsonRpcFullnodeUrl("mainnet"), network: "mainnet" },
 });
 
