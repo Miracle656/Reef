@@ -296,7 +296,9 @@ function unmarkGranted(me: string, groupId: string): void {
 // Groups our delegate can't join (e.g. orphaned groups where we lack
 // PermissionsAdmin) — hidden from the list so they don't clutter.
 function skipKey(me: string): string {
-  return `reef:msg-skip:v6:${me.toLowerCase()}`;
+  // v7: reset — v6 lists were poisoned by transient RPC errors during the
+  // Aug 2026 JSON-RPC deprecation (join failures wrongly marked permanent).
+  return `reef:msg-skip:v7:${me.toLowerCase()}`;
 }
 function readSkip(me: string): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -624,6 +626,10 @@ export class SuiMessaging implements Messaging {
   #typingLastPing = new Map<string, number>();
   #handler: MessagingEventHandler | null = null;
   #refreshing = false;
+  // Join failures per group, in-memory: only 3 consecutive failed refresh
+  // cycles hide a group. A transient RPC/network error must never markSkip
+  // permanently (that's how the Aug 2026 RPC outage poisoned v6 skip lists).
+  #joinFails = new Map<string, number>();
 
   setCurrentUser(me: Me): void {
     this.#me = me;
@@ -692,10 +698,16 @@ export class SuiMessaging implements Messaging {
           if (!readGrants(me.id).has(id)) {
             try {
               await ensureDelegateMembership(rt, id);
+              this.#joinFails.delete(id);
               console.log("[reef-msg] joined group", id);
             } catch (err) {
-              console.warn("[reef-msg] can't join group", id, "→ skipping:", err instanceof Error ? err.message : err);
-              markSkip(me.id, id);
+              const n = (this.#joinFails.get(id) ?? 0) + 1;
+              this.#joinFails.set(id, n);
+              console.warn(`[reef-msg] can't join group ${id} (attempt ${n}/3):`, err instanceof Error ? err.message : err);
+              if (n >= 3) {
+                markSkip(me.id, id);
+                this.#joinFails.delete(id);
+              }
               continue;
             }
           }
