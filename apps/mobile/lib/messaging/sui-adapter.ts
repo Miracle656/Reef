@@ -265,9 +265,9 @@ function markGranted(me: string, groupId: string): void {
 // Groups our delegate can't join (e.g. orphaned groups where we lack
 // PermissionsAdmin) — hidden from the list so they don't clutter.
 function skipKey(me: string): string {
-  // v7: reset — v6 lists were poisoned by transient RPC errors during the
+  // v8: reset — earlier lists were poisoned by transient RPC errors during the
   // Aug 2026 JSON-RPC deprecation (join failures wrongly marked permanent).
-  return `reef:msg-skip:v7:${me.toLowerCase()}`;
+  return `reef:msg-skip:v8:${me.toLowerCase()}`;
 }
 function readSkip(me: string): Set<string> {
   try {
@@ -979,6 +979,8 @@ export class SuiMessaging implements Messaging {
       const granted = readGrants(me.id);
       for (const g of readStore(me.id)) {
         if (!granted.has(g.groupId)) continue;
+        // Muted this session after repeated 403s (see below) — a reload retries.
+        if ((this.#pollFails.get(g.uuid) ?? 0) >= 15) continue;
         try {
           const after = this.#lastOrder.get(g.uuid) ?? -1;
           const res = await rt.client.messaging.getMessages({ signer: rt.signer, groupRef: { uuid: g.uuid }, afterOrder: after < 0 ? undefined : after, limit: 50 });
@@ -1033,10 +1035,10 @@ export class SuiMessaging implements Messaging {
               } catch (e) {
                 console.warn("[reef-msg] repair failed for", g.groupId, "→", e instanceof Error ? e.message : e);
               }
-            } else if (n >= 15) {
-              console.warn("[reef-msg] giving up on", g.uuid, "(relayer never synced membership) — hiding");
-              markSkip(me.id, g.groupId);
-              this.#pollFails.delete(g.uuid);
+            } else if (n === 15) {
+              // Session-only mute (no persistent markSkip): a dead relayer or a
+              // failed repair must not permanently hide a real conversation.
+              console.warn("[reef-msg] muting", g.uuid, "for this session (relayer never synced membership)");
             }
           } else {
             console.warn("[reef-msg] poll getMessages failed for", g.uuid, "→", err instanceof Error ? err.message : err);
