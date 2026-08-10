@@ -5,12 +5,21 @@
     "scheme": "umbra",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/adaptive-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#18C2C2"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -20,7 +29,18 @@
       "bundleIdentifier": "app.umbra.mobile"
     },
     "android": {
-      "package": "app.umbra.mobile"
-    }
+      "package": "app.umbra.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#18C2C2"
+      }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "11eab6ec-1f4a-4360-9e8e-ac0faabee335"
+      }
+    },
+    "owner": "miracle_codes"
   }
 }

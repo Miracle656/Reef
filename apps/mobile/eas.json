@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base": {
+      "env": {
+        "EXPO_PUBLIC_SUI_NETWORK": "testnet",
+        "EXPO_PUBLIC_UMBRA_PACKAGE_ID": "0x2e066a2176aaaf4e61064b74d3b4d9ea80d10ceca1372a9cd4bda36412ff761f",
+        "EXPO_PUBLIC_UMBRA_REGISTRY_ID": "0x1abe492364bcaff32648a432ca5ca4cf91d9fa0307b4f389ecf1a9c36daad933",
+        "EXPO_PUBLIC_INDEXER_URL": "https://reef-hgu8.onrender.com",
+        "EXPO_PUBLIC_ENOKI_PUBLIC_API_KEY": "enoki_public_cec96135dc3d381b8f700677326f3d6a",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "1001833478866-cd4sg9nqk6pr7h5v34lsi5g2iiqggb8h.apps.googleusercontent.com",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_URL": "https://reef-web-one.vercel.app/auth/native"
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "extends": "base",
+      "autoIncrement": true,
+      "android": { "buildType": "apk" }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
