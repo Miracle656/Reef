@@ -36,11 +36,15 @@ export const WALRUS_TESTNET: WalrusConfig = {
     "https://aggregator.walrus-testnet.walrus.space/v1/blobs",
     "https://walrus-testnet-aggregator.nodes.guru/v1/blobs",
   ],
-  defaultEpochs: 30,
+  // Testnet epochs are 1 day; 53 is the max a blob can be stored ahead. The
+  // durable fix is the server-side renewal job (extend blobs nearing expiry).
+  defaultEpochs: 53,
 };
 
 const FULLNODE: Record<SuiNetwork, string> = {
-  testnet: "https://fullnode.testnet.sui.io:443",
+  // Mysten deprecated JSON-RPC on the public fullnodes (Aug 2026) — publicnode
+  // still serves the full JSON-RPC surface for testnet.
+  testnet: "https://sui-testnet-rpc.publicnode.com",
   mainnet: "https://fullnode.mainnet.sui.io:443",
   devnet: "https://fullnode.devnet.sui.io:443",
 };

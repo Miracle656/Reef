@@ -16,7 +16,39 @@ import { gcm } from "@noble/ciphers/aes.js";
 
 const g = globalThis as unknown as {
   crypto?: { getRandomValues?: unknown; randomUUID?: unknown; subtle?: unknown };
+  Intl?: { PluralRules?: unknown };
 };
+
+// Hermes ships Intl but not Intl.PluralRules, and @mysten/sui's client/utils.mjs
+// constructs one at module scope (for "1st/2nd/3rd command" in error messages) —
+// without this shim the whole messaging client fails to import. English-only
+// rules are all the SDK needs.
+if (g.Intl && typeof g.Intl.PluralRules === "undefined") {
+  class PluralRulesShim {
+    #type: string;
+    constructor(_locales?: unknown, options?: { type?: string }) {
+      this.#type = options?.type === "ordinal" ? "ordinal" : "cardinal";
+    }
+    select(n: number): "one" | "two" | "few" | "other" {
+      if (this.#type === "ordinal") {
+        const rem10 = Math.abs(n) % 10;
+        const rem100 = Math.abs(n) % 100;
+        if (rem10 === 1 && rem100 !== 11) return "one";
+        if (rem10 === 2 && rem100 !== 12) return "two";
+        if (rem10 === 3 && rem100 !== 13) return "few";
+        return "other";
+      }
+      return n === 1 ? "one" : "other";
+    }
+    resolvedOptions() {
+      return { locale: "en-US", type: this.#type };
+    }
+    static supportedLocalesOf() {
+      return ["en-US"];
+    }
+  }
+  g.Intl.PluralRules = PluralRulesShim;
+}
 if (!g.crypto) g.crypto = {};
 if (typeof g.crypto.getRandomValues !== "function") {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +56,37 @@ if (typeof g.crypto.getRandomValues !== "function") {
 }
 if (typeof g.crypto.randomUUID !== "function") {
   g.crypto.randomUUID = () => randomUUID();
+}
+
+// Hermes has AbortController/AbortSignal but not the static helpers the Mysten
+// SDKs use for request timeouts (relayer fetches, RPC): AbortSignal.timeout and
+// AbortSignal.any. Both are small compositions over AbortController.
+{
+  const AS = (globalThis as { AbortSignal?: unknown }).AbortSignal as
+    | { timeout?: unknown; any?: unknown }
+    | undefined;
+  if (AS && typeof AS.timeout !== "function") {
+    AS.timeout = (ms: number) => {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(new Error(`TimeoutError: signal timed out after ${ms}ms`)), ms);
+      return ctrl.signal;
+    };
+  }
+  if (AS && typeof AS.any !== "function") {
+    AS.any = (signals: AbortSignal[]) => {
+      const ctrl = new AbortController();
+      for (const s of signals) {
+        if (s.aborted) {
+          ctrl.abort((s as { reason?: unknown }).reason ?? new Error("aborted"));
+          break;
+        }
+        s.addEventListener("abort", () => ctrl.abort((s as { reason?: unknown }).reason ?? new Error("aborted")), {
+          once: true,
+        });
+      }
+      return ctrl.signal;
+    };
+  }
 }
 
 // ── minimal SubtleCrypto: AES-GCM only ────────────────────────────────────────

@@ -704,11 +704,15 @@ export class SuiMessaging implements Messaging {
     const rt = requireRuntime();
     const uuid = deriveDirectUuid(me.id, participantId);
     const groupId = rt.client.messaging.derive.groupId({ uuid });
+    console.log("[reef-msg] createDirect: start", { uuid, groupId });
 
     // 1. create + share the group if it doesn't exist yet (idempotent on retry).
-    if (!(await groupExists(rt, groupId))) {
+    const exists = await groupExists(rt, groupId);
+    console.log("[reef-msg] createDirect: groupExists =", exists);
+    if (!exists) {
       try {
         await rt.sponsorExecute(rt.client.messaging.tx.createAndShareGroup({ uuid, name: "" }));
+        console.log("[reef-msg] createDirect: group created");
       } catch (e) {
         console.warn("[reef-msg] createAndShareGroup (may already exist):", e);
       }
@@ -716,8 +720,10 @@ export class SuiMessaging implements Messaging {
     // 2. grant the other party Reader+Sender+PermissionsAdmin so THEY can later
     //    grant their own delegate (the two-way join).
     await grantMissing(rt, groupId, participantId, [MSG_PERMS.MessagingReader, MSG_PERMS.MessagingSender, GRP_PERMS.PermissionsAdmin, GRP_PERMS.ExtensionPermissionsAdmin]);
+    console.log("[reef-msg] createDirect: peer granted");
     // 3. add MY delegate so the relayer authorizes my sends/reads.
     await ensureDelegateMembership(rt, groupId);
+    console.log("[reef-msg] createDirect: delegate ensured");
 
     unmarkSkip(me.id, groupId);
     const peer = await resolveProfile(participantId);
@@ -997,6 +1003,7 @@ export class SuiMessaging implements Messaging {
     };
     // Typing presence: a separate, faster loop (one batched request).
     const typingTick = async () => {
+      if (!getMessagingRuntime()) return; // not signed in yet — stay quiet like tick()
       const me = this.me();
       const granted = readGrants(me.id);
       const uuids = readStore(me.id)

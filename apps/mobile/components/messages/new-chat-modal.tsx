@@ -22,6 +22,7 @@ export function NewChatModal({
   const [picked, setPicked] = useState<Participant[]>([]);
   const [groupName, setGroupName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const needle = q.trim();
@@ -48,21 +49,37 @@ export function NewChatModal({
 
   const choose = async (u: Participant) => {
     if (mode === 'direct') {
+      if (busy) return;
+      console.log('[reef-msg] new-chat: picked', u.username, u.id);
       setBusy(true);
-      const id = await startDirect(u.id);
-      onClose();
-      onOpened(id);
+      setError(null);
+      try {
+        const id = await startDirect(u.id);
+        onClose();
+        onOpened(id);
+      } catch (e) {
+        console.warn('[reef-msg] new-chat: startDirect failed:', e);
+        setError(e instanceof Error ? e.message : 'Could not start the conversation. Try again.');
+        setBusy(false);
+      }
     } else {
       setPicked((prev) => (pickedIds.has(u.id) ? prev.filter((p) => p.id !== u.id) : [...prev, u]));
     }
   };
 
   const submitGroup = async () => {
-    if (!groupName.trim() || picked.length === 0) return;
+    if (!groupName.trim() || picked.length === 0 || busy) return;
     setBusy(true);
-    const id = await createGroup({ name: groupName.trim(), participantIds: picked.map((p) => p.id) });
-    onClose();
-    onOpened(id);
+    setError(null);
+    try {
+      const id = await createGroup({ name: groupName.trim(), participantIds: picked.map((p) => p.id) });
+      onClose();
+      onOpened(id);
+    } catch (e) {
+      console.warn('[reef-msg] new-chat: createGroup failed:', e);
+      setError(e instanceof Error ? e.message : 'Could not create the group. Try again.');
+      setBusy(false);
+    }
   };
 
   return (
@@ -110,6 +127,14 @@ export function NewChatModal({
               style={{ flex: 1, fontSize: 14, color: t.ink, paddingVertical: 2 }}
             />
           </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {busy && mode === 'direct' ? (
+            <View style={styles.busyRow}>
+              <Spinner />
+              <Text style={[styles.busyText, { color: t.inkSoft }]}>Setting up the conversation…</Text>
+            </View>
+          ) : null}
 
           <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
             {loading ? (
@@ -163,6 +188,9 @@ const styles = StyleSheet.create({
   results: { flexGrow: 0 },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
   emptyText: { textAlign: 'center', fontSize: 14, paddingVertical: 32 },
+  errorText: { color: '#d33', fontSize: 13, marginBottom: 8, textAlign: 'center' },
+  busyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+  busyText: { fontSize: 13.5 },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 10 },
   userName: { fontSize: 14.5, fontWeight: '600' },
   userHandle: { fontSize: 12 },

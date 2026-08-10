@@ -15,7 +15,11 @@ import type { Signer } from "@mysten/sui/cryptography";
 import { messagingEnv } from "./sui-config";
 
 function rpcUrl(): string {
-  return process.env.EXPO_PUBLIC_SUI_FULLNODE_URL || `https://fullnode.${messagingEnv.network}.sui.io:443`;
+  if (process.env.EXPO_PUBLIC_SUI_FULLNODE_URL) return process.env.EXPO_PUBLIC_SUI_FULLNODE_URL;
+  // Mysten deprecated JSON-RPC on the public fullnodes (Aug 2026); publicnode still serves it.
+  return messagingEnv.network === "testnet"
+    ? "https://sui-testnet-rpc.publicnode.com"
+    : `https://fullnode.${messagingEnv.network}.sui.io:443`;
 }
 
 /**
