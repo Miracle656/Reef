@@ -72,14 +72,14 @@ Backend: run the indexer (`pnpm --filter @umbra/indexer dev`, needs `DATABASE_UR
 
 Port each from `apps/web` (the data/onchain bits are already shared):
 
-- [ ] **Design refresh** — "liquid neobrutalism": Sui-blue accent (`#0a84ff`), frosted cards, soft shadows, big radii, lighter type. Tokens in `packages/ui/tokens.ts`; the web theme is `packages/ui/theme.css` (CSS — translate to NativeWind classes / RN styles).
-- [ ] **Cast-style compose modal** with **image previews** (up to 2) + a **Tokenize toggle** (web: `components/compose-modal.tsx`, `compose-box.tsx`). Inline = quick post, modal = full.
-- [ ] **Likes** — Sui-logo icon, grey→blue, **per-user persisted** via `trpc.likeState` + `addReaction` (sign personal message with the zkLogin keypair). Web: `components/like-button.tsx`.
-- [ ] **Toasts** + auto-refresh after posting (post is indexed ~4s later). Web: `components/toaster.tsx`.
-- [ ] **DeepBook trade terminal** (`/trade`): pair selector (all testnet pools + SULTAN), live order book (`deepbook.getOrderBook`), price chart. ⚠️ `lightweight-charts` is web-only — use a RN chart lib (e.g. `react-native-wagmi-charts` or `victory-native`).
-- [ ] **Predict feed** — real DeepBook Predict BTC oracle markets + livestream "pops". Web: `lib/predict.ts` (port as-is — it's just `fetch`), `components/predict-feed.tsx`.
-- [ ] **Wallet binding** (Settings) — link an external Sui wallet (Farcaster-style verified address). Mobile needs an RN wallet-connect path (different from web dapp-kit); `trpc.linkWallet` + signing are shared.
-- [ ] **Creator coin on profile** — `trpc.creatorCoins(owner)` card with a Trade button.
+- [x] **Design refresh** — "liquid neobrutalism": Sui-blue accent (`#0a84ff`), frosted cards, soft shadows, big radii, lighter type. Tokens in `packages/ui/tokens.ts`; the web theme is `packages/ui/theme.css` (CSS — translate to NativeWind classes / RN styles).
+- [x] **Cast-style compose** with **image previews** (up to 2, removable) + a **Tokenize toggle** (`app/compose.tsx`; web: `components/compose-modal.tsx`, `compose-box.tsx`). The toggle is UI-only on both platforms until the mint engine lands.
+- [x] **Likes** — Sui-logo icon, grey→blue, **per-user persisted** via `trpc.likeState` + `addReaction` (sign personal message with the zkLogin keypair). Web: `components/like-button.tsx`.
+- [x] **Toasts** + auto-refresh after posting (post is indexed ~4s later). `components/toaster.tsx` (`toast(msg)`, mounted in `app/_layout.tsx`).
+- [x] **DeepBook trade terminal** (`/trade`): pair selector (all testnet pools + SULTAN), live order book (`deepbook.getOrderBook`), price chart. ⚠️ `lightweight-charts` is web-only — use a RN chart lib (e.g. `react-native-wagmi-charts` or `victory-native`).
+- [x] **Predict feed** — real DeepBook Predict BTC oracle markets + livestream "pops". Web: `lib/predict.ts` (port as-is — it's just `fetch`), `components/predict-feed.tsx`.
+- [ ] **Wallet binding** (Settings) — Settings now lists linked wallets and can unlink (`trpc.linkedWallets` / `unlinkWallet`). **Still open:** linking a new wallet from mobile needs an RN wallet-connect path (different from web dapp-kit) to sign `canonicalWalletLinkBytes`; today it is done on web.
+- [x] **Creator coin on profile** — `trpc.creatorCoins(owner)` card with a Trade button.
 - [ ] **Messages** — placeholder only for now (Phase 3, Sui Stack Messaging SDK). Don't build.
 
 ---
