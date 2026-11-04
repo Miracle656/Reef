@@ -1,11 +1,11 @@
-import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { UmbraConfig } from "../config";
 
 /**
- * Create a Sui JSON-RPC client for the configured fullnode.
- * (`@mysten/sui` v2 renamed the RPC client to `SuiJsonRpcClient`; the abstract
- * interface is `ClientWithCoreApi` from `@mysten/sui/client`.)
+ * Create a Sui gRPC client for the configured fullnode. Sui JSON-RPC was shut
+ * off on public fullnodes in 2026, so everything goes through the transport-
+ * agnostic core API (`client.core` / `ClientWithCoreApi`) over gRPC-web.
  */
-export function createSuiClient(cfg: UmbraConfig): SuiJsonRpcClient {
-  return new SuiJsonRpcClient({ url: cfg.fullnodeUrl, network: cfg.network });
+export function createSuiClient(cfg: UmbraConfig): SuiGrpcClient {
+  return new SuiGrpcClient({ baseUrl: cfg.fullnodeUrl, network: cfg.network });
 }

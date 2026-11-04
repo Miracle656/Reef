@@ -240,6 +240,7 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - **D-7** Posts are owned + **editable/deletable** (`edit_post`/`delete_post`), not frozen. *Decided.*
 - **D-8** `@mysten/sui` v2 API notes (verified): RPC client is `SuiJsonRpcClient` from `@mysten/sui/jsonRpc` (`new SuiJsonRpcClient({ url, network })`); `@mysten/sui/client` exports the `ClientWithCoreApi` interface; sig verify via `@mysten/sui/verify`. Core uses extensionless imports (moduleResolution: Bundler).
 - **D-9** Indexer ingests via `queryEvents` polling per MoveModule with a persisted cursor (not raw checkpoint streaming) — simpler + resumable for Phase 1; swappable later.
+- **D-11** (2026-11) Sui shut JSON-RPC off on public endpoints (Mysten Aug 2026, publicnode Oct 2026). `createSuiClient` now returns `SuiGrpcClient` (`@mysten/sui/grpc`, gRPC-web to `fullnode.<net>.sui.io:443`); code uses the core API (`listOwnedObjects`, `getBalance().balance.balance`, `simulateTransaction` instead of devInspect). The indexer ingests events over **GraphQL** (gRPC has no event query); GraphQL cursors are stored tagged `eventSeq="gql"`, and an untagged legacy cursor triggers a safe full replay. Web: dapp-kit 1.x gets the gRPC client via `createClient`; read it with `useChainClient()` (`apps/web/lib/sui-client.ts`). Supersedes the RPC parts of D-8/D-9.
 - **D-10** `@umbra/core` split entrypoints: client-safe `@umbra/core` vs server-only `@umbra/core/server` (Enoki private key), so the key can't be bundled into apps.
 
 ## TODO

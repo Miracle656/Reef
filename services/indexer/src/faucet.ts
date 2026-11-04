@@ -34,7 +34,7 @@ export function faucetRoutes(env: IndexerEnv): Hono {
     // Idempotency 1: already funded enough to trade → no-op.
     try {
       const bal = await client.getBalance({ owner: address, coinType: PREDICT_DUSDC_TYPE });
-      if (BigInt(bal.totalBalance) >= dripBase) return c.json({ funded: true, skipped: "already funded" });
+      if (BigInt(bal.balance.balance) >= dripBase) return c.json({ funded: true, skipped: "already funded" });
     } catch {
       /* balance read failed — fall through and try the drip */
     }

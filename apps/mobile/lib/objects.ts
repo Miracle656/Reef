@@ -4,13 +4,8 @@ import { umbraConfig } from "./config";
 const client = createSuiClient(umbraConfig);
 
 async function findOwned(owner: string, typeSuffix: string): Promise<string | null> {
-  const res = await client.getOwnedObjects({
-    owner,
-    filter: { StructType: `${umbraConfig.packageId}::${typeSuffix}` },
-    options: { showType: true },
-    limit: 1,
-  });
-  return res.data[0]?.data?.objectId ?? null;
+  const res = await client.listOwnedObjects({ owner, type: `${umbraConfig.packageId}::${typeSuffix}`, limit: 1 });
+  return res.objects[0]?.objectId ?? null;
 }
 
 export const getFollowSetId = (owner: string) => findOwned(owner, "follow::FollowSet");

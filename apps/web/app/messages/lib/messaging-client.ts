@@ -26,16 +26,15 @@ import {
   createSuiStackMessagingClient,
   WalrusHttpStorageAdapter,
 } from "@mysten/sui-stack-messaging";
-import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Signer } from "@mysten/sui/cryptography";
 import { messagingEnv } from "./sui-config";
 
 function rpcUrl(): string {
-  if (process.env.NEXT_PUBLIC_SUI_FULLNODE_URL) return process.env.NEXT_PUBLIC_SUI_FULLNODE_URL;
-  // Mysten deprecated JSON-RPC on the public fullnodes (Aug 2026); publicnode still serves it.
-  return messagingEnv.network === "testnet"
-    ? "https://sui-testnet-rpc.publicnode.com"
-    : `https://fullnode.${messagingEnv.network}.sui.io:443`;
+  // gRPC(-web) only — Sui shut JSON-RPC off in 2026. A separate var from the old
+  // NEXT_PUBLIC_SUI_FULLNODE_URL so a stale JSON-RPC value can't break chat.
+  if (process.env.NEXT_PUBLIC_SUI_GRPC_URL) return process.env.NEXT_PUBLIC_SUI_GRPC_URL;
+  return `https://fullnode.${messagingEnv.network}.sui.io:443`;
 }
 
 /**
@@ -46,7 +45,7 @@ function rpcUrl(): string {
  * network — no packageConfig needed on testnet/mainnet.
  */
 export function createReefMessagingClient(signer: Signer) {
-  const baseClient = new SuiJsonRpcClient({ url: rpcUrl(), network: messagingEnv.network });
+  const baseClient = new SuiGrpcClient({ baseUrl: rpcUrl(), network: messagingEnv.network });
 
   const attachments =
     messagingEnv.walrusPublisherUrl && messagingEnv.walrusAggregatorUrl

@@ -1,10 +1,11 @@
 "use client";
 
-import { useSuiClient, useWallets } from "@mysten/dapp-kit";
+import { useWallets } from "@mysten/dapp-kit";
 import { isEnokiWallet } from "@mysten/enoki";
 import { sponsorAndExecute } from "@umbra/core";
 import { Transaction } from "@mysten/sui/transactions";
 import { useCallback } from "react";
+import { useChainClient } from "@/lib/sui-client";
 import { NETWORK, SPONSOR_API_URL } from "./config";
 
 type SignFeature = {
@@ -55,7 +56,7 @@ export function useEnokiSignPersonalMessage() {
  * account's transaction.
  */
 export function useGasless() {
-  const client = useSuiClient();
+  const client = useChainClient();
   const wallets = useWallets();
   const enokiWallet = wallets.find(isEnokiWallet);
   const enokiAccount = enokiWallet?.accounts[0];

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { useSuiClient } from "@mysten/dapp-kit";
 import { useSocialAccount } from "./account";
 import { useGasless } from "./gasless";
+import { useChainClient } from "./sui-client";
 import {
   buildCreateManagerTx,
   buildDepositMintRangeTx,
@@ -153,7 +153,7 @@ export interface TradePreview {
  * null when the strike is outside the quotable band (the move call aborts).
  */
 export function usePreviewTrade() {
-  const client = useSuiClient();
+  const client = useChainClient();
   const account = useSocialAccount();
 
   return useCallback(
@@ -167,12 +167,11 @@ export function usePreviewTrade() {
         isUp: p.isUp,
         quantity,
       });
-      const res = await client.devInspectTransactionBlock({
-        sender: account?.address ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
-        transactionBlock: tx,
-      });
-      if (res.effects?.status?.status !== "success") return null;
-      const amounts = await decodeTradeAmounts(res.results);
+      tx.setSenderIfNotSet(account?.address ?? "0x0000000000000000000000000000000000000000000000000000000000000000");
+      // Read-only dry run (the gRPC replacement for devInspect).
+      const res = await client.simulateTransaction({ transaction: tx, include: { commandResults: true }, checksEnabled: false });
+      if (res.$kind !== "Transaction") return null;
+      const amounts = await decodeTradeAmounts(res.commandResults);
       if (!amounts) return null;
       const costUsd = Number(amounts.cost) / 1e6;
       const payoutUsd = Number(amounts.payout) / 1e6;
@@ -222,12 +221,12 @@ export function useWithdraw() {
 
 /** The caller's spendable dUSDC balance (wallet), in USD. */
 export function useDusdcBalance() {
-  const client = useSuiClient();
+  const client = useChainClient();
   const account = useSocialAccount();
   return useCallback(async (): Promise<number> => {
     if (!account) return 0;
     const bal = await client.getBalance({ owner: account.address, coinType: DUSDC_TYPE });
-    return Number(bal.totalBalance) / 1e6;
+    return Number(bal.balance.balance) / 1e6;
   }, [client, account]);
 }
 
@@ -282,7 +281,7 @@ export function useMintRange() {
 
 /** Live cost/payout preview for a range band (devInspect, read-only). */
 export function useRangePreview() {
-  const client = useSuiClient();
+  const client = useChainClient();
   const account = useSocialAccount();
 
   return useCallback(
@@ -296,12 +295,11 @@ export function useRangePreview() {
         higherStrike: usdToStrike(p.higherUsd),
         quantity,
       });
-      const res = await client.devInspectTransactionBlock({
-        sender: account?.address ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
-        transactionBlock: tx,
-      });
-      if (res.effects?.status?.status !== "success") return null;
-      const amounts = await decodeTradeAmounts(res.results);
+      tx.setSenderIfNotSet(account?.address ?? "0x0000000000000000000000000000000000000000000000000000000000000000");
+      // Read-only dry run (the gRPC replacement for devInspect).
+      const res = await client.simulateTransaction({ transaction: tx, include: { commandResults: true }, checksEnabled: false });
+      if (res.$kind !== "Transaction") return null;
+      const amounts = await decodeTradeAmounts(res.commandResults);
       if (!amounts) return null;
       const costUsd = Number(amounts.cost) / 1e6;
       const payoutUsd = Number(amounts.payout) / 1e6;
@@ -311,11 +309,10 @@ export function useRangePreview() {
   );
 }
 
-type RangeFieldContent = {
-  fields?: {
-    name?: { fields?: { oracle_id?: string; expiry?: string; lower_strike?: string; higher_strike?: string } };
-    value?: string;
-  };
+/** gRPC JSON of a `Field<RangeKey, u64>` dynamic field (no `fields` wrappers). */
+type RangeFieldJson = {
+  name?: { oracle_id?: string; expiry?: string; lower_strike?: string; higher_strike?: string };
+  value?: string;
 };
 
 /**
@@ -324,34 +321,34 @@ type RangeFieldContent = {
  * any error or empty table.
  */
 export function useRangePositions() {
-  const client = useSuiClient();
+  const client = useChainClient();
   return useCallback(
     async (managerId: string): Promise<RangePosition[]> => {
       try {
-        const obj = await client.getObject({ id: managerId, options: { showContent: true } });
-        const content = obj.data?.content as
-          | { fields?: { range_positions?: { fields?: { id?: { id?: string }; size?: string } } } }
-          | undefined;
-        const tableId = content?.fields?.range_positions?.fields?.id?.id;
-        const size = Number(content?.fields?.range_positions?.fields?.size ?? 0);
+        const { object } = await client.getObject({ objectId: managerId, include: { json: true } });
+        const json = object.json as { range_positions?: { id?: string; size?: string } } | null | undefined;
+        const tableId = json?.range_positions?.id;
+        const size = Number(json?.range_positions?.size ?? 0);
         if (!tableId || size === 0) return [];
 
         const fieldIds: string[] = [];
         let cursor: string | null = null;
         do {
-          const page = await client.getDynamicFields({ parentId: tableId, cursor });
-          for (const f of page.data) fieldIds.push(f.objectId);
-          cursor = page.hasNextPage ? page.nextCursor ?? null : null;
+          const page: { dynamicFields: { fieldId: string }[]; hasNextPage: boolean; cursor: string | null } =
+            await client.listDynamicFields({ parentId: tableId, cursor });
+          for (const f of page.dynamicFields) fieldIds.push(f.fieldId);
+          cursor = page.hasNextPage ? page.cursor : null;
         } while (cursor);
         if (fieldIds.length === 0) return [];
 
         const out: RangePosition[] = [];
         for (let i = 0; i < fieldIds.length; i += 50) {
-          const objs = await client.multiGetObjects({ ids: fieldIds.slice(i, i + 50), options: { showContent: true } });
-          for (const o of objs) {
-            const c = o.data?.content as RangeFieldContent | undefined;
-            const key = c?.fields?.name?.fields;
-            const qty = Number(c?.fields?.value ?? 0);
+          const { objects } = await client.getObjects({ objectIds: fieldIds.slice(i, i + 50), include: { json: true } });
+          for (const o of objects) {
+            if (o instanceof Error) continue;
+            const f = o.json as RangeFieldJson | null | undefined;
+            const key = f?.name;
+            const qty = Number(f?.value ?? 0);
             if (!key || !key.oracle_id || qty <= 0) continue;
             out.push({
               oracleId: key.oracle_id,

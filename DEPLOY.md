@@ -29,6 +29,8 @@ It's a pnpm-workspace package, so build/run from the **repo root**.
 | `DUSDC_DRIP_USD` | optional | dUSDC dripped per new address (default `25`) |
 | `INDEXER_PORT` | optional | defaults to `3001` (most hosts inject `PORT` — set `INDEXER_PORT=$PORT` if needed) |
 | `POLL_INTERVAL_MS` | optional | defaults to `3000` |
+| `SUI_GRPC_URL` | optional | gRPC(-web) fullnode, defaults to `https://fullnode.testnet.sui.io:443`. Sui JSON-RPC URLs no longer work. Delete any old `SUI_FULLNODE_URL` |
+| `SUI_GRAPHQL_URL` | optional | event ingestion, defaults to `https://graphql.testnet.sui.io/graphql` |
 
 **Commands**
 ```bash

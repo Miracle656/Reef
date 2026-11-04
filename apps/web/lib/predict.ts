@@ -240,16 +240,16 @@ export async function requestDusdc(address: string): Promise<DripResult> {
  * (an abort means the strike is out of the quotable band).
  */
 export async function decodeTradeAmounts(
-  results: { returnValues?: [number[], string][] }[] | null | undefined,
+  results: { returnValues?: { bcs: Uint8Array }[] }[] | null | undefined,
 ): Promise<{ cost: bigint; payout: bigint } | null> {
   const { bcs } = await import("@mysten/sui/bcs");
   const ret = results?.[1]?.returnValues;
-  const costBytes = ret?.[0]?.[0];
-  const payoutBytes = ret?.[1]?.[0];
+  const costBytes = ret?.[0]?.bcs;
+  const payoutBytes = ret?.[1]?.bcs;
   if (!costBytes || !payoutBytes) return null;
   try {
-    const cost = bcs.u64().parse(new Uint8Array(costBytes));
-    const payout = bcs.u64().parse(new Uint8Array(payoutBytes));
+    const cost = bcs.u64().parse(costBytes);
+    const payout = bcs.u64().parse(payoutBytes);
     return { cost: BigInt(cost), payout: BigInt(payout) };
   } catch {
     return null;

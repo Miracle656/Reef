@@ -1,19 +1,18 @@
 "use client";
 
-import { useSuiClient } from "@mysten/dapp-kit";
 import { useSocialAccount } from "@/lib/account";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { buildFollowTx, buildUnfollowTx } from "@umbra/core";
 import { umbraConfig } from "@/lib/config";
 import { useGasless } from "@/lib/gasless";
 import { getFollowSetId } from "@/lib/objects";
 import { trpc } from "@/lib/trpc";
+import { useChainClient } from "@/lib/sui-client";
 import { Button } from "./ui";
 
 export function FollowButton({ target }: { target: string }) {
   const account = useSocialAccount();
-  const client = useSuiClient() as unknown as SuiJsonRpcClient;
+  const client = useChainClient();
   const run = useGasless();
   const qc = useQueryClient();
 
