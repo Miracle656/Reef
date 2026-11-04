@@ -2,7 +2,7 @@
   "name": "umbra",
   "version": "0.1.0",
   "private": true,
-  "description": "Umbra — a Sui-native decentralized social superapp (Phase 1).",
+  "description": "ReeF — a Sui-native decentralized social superapp (testnet).",
   "packageManager": "pnpm@10.20.0",
   "engines": {
     "node": ">=20"
