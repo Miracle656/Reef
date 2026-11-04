@@ -8,6 +8,13 @@ export interface WalrusConfig {
   aggregators: string[];
   /** default storage duration in epochs for new blobs */
   defaultEpochs: number;
+  /**
+   * Address that should own newly created Blob objects (publisher
+   * `send_object_to`). Without it the public publisher keeps the Blob and we
+   * can never renew it, so media silently expires. Set this to the address
+   * whose key the indexer's renewal job holds.
+   */
+  blobOwner?: string;
 }
 
 export interface UmbraConfig {
@@ -50,13 +57,17 @@ const FULLNODE: Record<SuiNetwork, string> = {
 };
 
 /** Build a config from package/registry ids (testnet defaults). */
-export function testnetConfig(packageId: string, registryId: string): UmbraConfig {
+export function testnetConfig(
+  packageId: string,
+  registryId: string,
+  opts: { walrusBlobOwner?: string } = {},
+): UmbraConfig {
   return {
     network: "testnet",
     fullnodeUrl: FULLNODE.testnet,
     packageId,
     registryId,
     clockId: SUI_CLOCK_ID,
-    walrus: WALRUS_TESTNET,
+    walrus: opts.walrusBlobOwner ? { ...WALRUS_TESTNET, blobOwner: opts.walrusBlobOwner } : WALRUS_TESTNET,
   };
 }

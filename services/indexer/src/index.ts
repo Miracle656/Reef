@@ -10,6 +10,7 @@ try {
 }
 import { startPoller } from "./indexer/poller";
 import { createServer } from "./server";
+import { startWalrusRenewer } from "./walrus-renew";
 
 const env = loadEnv();
 const app = createServer(env);
@@ -19,3 +20,4 @@ serve({ fetch: app.fetch, port: env.port }, (info) => {
 });
 
 void startPoller(env);
+startWalrusRenewer(env.umbra, env.walrusRenewerKey, env.walrusRenewIntervalMs);
