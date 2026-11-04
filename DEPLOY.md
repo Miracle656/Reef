@@ -63,6 +63,39 @@ CORS is already open (`app.use("*", cors())`), so the Vercel origin can call it.
 
 ---
 
+## 3. Upgrading the Move package (live-upgrade runbook)
+
+Move code lives in `packages/move` (`umbra`) and the upgrade timelock lives in `packages/move/policy` (`umbra_policy`, published separately).
+
+### Rules for every upgrade
+- **Never change a public function signature, struct layout, enum variant or event shape.** To retire a function, keep its signature and make it abort.
+- **New state goes in dynamic fields or new objects.** The `Registry` schema version is itself a `ConfigKey` dynamic field.
+- **Event types keep the original package id forever.** `UMBRA_PACKAGE_ID` in the indexer must stay the **original** id (`original-id` in `Published.toml`). Move-call targets must use the **latest** id (`published-at`).
+- **SDK upgrades don't bump `Published.toml`.** After upgrading through the SDK, edit `published-at` and `version` by hand, or `sui move verify-source` fails.
+- **Old package versions stay callable.** `assert_version` only stops code that includes the check. v1 (`0x2e06…761f`) has no gate, so it can write to `Registry` until v1 is gone for good. Every version from v2 on is cut off as soon as `migrate` bumps the stored version.
+
+### One-time: adopt the version gate on the live v1 registry
+1. Upgrade `umbra` to the code with `registry::VERSION = 2`. `Registry` writes abort with `EWrongVersion` until step 3.
+2. As the publisher `0x669f…ec58`, call `registry::bootstrap_admin(registry)`. This works once and returns `RegistryAdminCap`.
+3. Call `registry::migrate(registry, admin_cap)` with the **new** package id. It emits `RegistryMigrated { from_version: 1, to_version: 2 }` (legacy has no version field, so `version()` reports `1`).
+
+### One-time: put the UpgradeCap behind the timelock
+1. `sui move test --path packages/move/policy`, then publish `packages/move/policy`.
+2. Call `timelock_policy::new(upgrade_cap, delay_ms)` (the minimum is 1h; use ≥24h before mainnet) and transfer the resulting `TimelockCap` to the holder.
+3. Optional: call `timelock_policy::only_additive_upgrades` once the schema is stable. This can't be undone.
+4. **Before mainnet:** transfer `TimelockCap` and `RegistryAdminCap` to a Sui multisig address (`sui keytool multi-sig-address …`), then remove them from the single hot key.
+
+### Each upgrade
+1. Bump `VERSION` in `registry.move` if older versions must be cut off. Run `pnpm move:test`.
+2. Get the digest: `sui move build --dump-bytecode-as-base64 --path packages/move`.
+3. Call `timelock_policy::propose(tl, digest, policy, clock)`. `UpgradeProposed` announces the digest on-chain.
+4. Wait `delay_ms`. Call `timelock_policy::cancel` if anything looks wrong.
+5. In one PTB: `authorize(tl, digest, clock)` → `Upgrade` command → `commit(tl, receipt)`.
+6. If `VERSION` was bumped, call `registry::migrate`.
+7. Update `Published.toml` (`published-at`, `version`) and `deployments/testnet.json`. Point the web/mobile call targets at the new id and leave the indexer's `UMBRA_PACKAGE_ID` on the original id.
+
+---
+
 ## Notes
 - **Testnet only** — never point these at mainnet in Phase 1.
 - The `ENOKI_PRIVATE_API_KEY` must **only** ever live on the indexer service, never in the web env.

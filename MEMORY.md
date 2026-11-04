@@ -6,7 +6,7 @@
 > Codename in code is still `umbra` (`@umbra/*` packages) — a full rename is pending.
 > **Testnet only.** Repo: github.com/Miracle656/Reef.
 
-_Last updated: 2026-06-23. Companion to `CLAUDE.md` (architecture + decisions D-1…D-10)._
+_Last updated: 2026-11-04. Companion to `CLAUDE.md` (architecture + decisions D-1…D-11)._
 
 ---
 
@@ -14,7 +14,7 @@ _Last updated: 2026-06-23. Companion to `CLAUDE.md` (architecture + decisions D-
 
 | Area | State |
 |---|---|
-| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ published to testnet · 16 tests |
+| Move contracts (`profile`/`post`/`follow`/`registry`) | ✅ published to testnet · 23 tests (+ `umbra_policy` timelock) |
 | `@umbra/core` (client, bindings, Walrus, Enoki, DeepBook, schemas) | ✅ 12 tests |
 | `services/indexer` (tRPC + Prisma + Neon, Enoki sponsor, reactions, links, creator coins) | ✅ 3 tests · running on :3001 |
 | `apps/web` (Next 15) | ✅ feature-rich, `next build` clean · running on :3000 |
@@ -42,7 +42,7 @@ _Last updated: 2026-06-23. Companion to `CLAUDE.md` (architecture + decisions D-
 ## Architecture
 
 ```
-packages/move/     Sui Move (profile, post, follow, registry) — published testnet
+packages/move/     Sui Move (profile, post, follow, registry) + policy/ timelock — published testnet
 packages/core/     shared: config, sui client, contract PTB builders, walrus, auth/sponsor-client, deepbook v3, zod schemas
 packages/ui/       design tokens (palette, spacing, radius, shadow) + web theme.css
 services/indexer/  event poller → Postgres(Neon) via Prisma; tRPC AppRouter (feed/profile/post/graph/reactions/likeState/creatorCoins/linkWallet); Enoki /sponsor; SuiNS mint stub
@@ -66,6 +66,7 @@ Key: durable state on-chain (profiles/posts/follows); high-frequency low-value (
 
 ## Next / open work
 
+- **Live upgrades** — `Registry` version gate + admin `migrate` and `packages/move/policy` timelock are in source. Still need to publish the updated package, run `bootstrap_admin` + `migrate`, wrap the live `UpgradeCap` with `timelock_policy::new`, and move `TimelockCap` + `RegistryAdminCap` to a multisig (`DEPLOY.md` §3).
 - **Per-post coin mint engine** (the headline next build): publish a freshly-patched `creator_coin` module via `@mysten/move-bytecode-template` → `tx.publish` → create `<COIN>/DEEP` pool (500 DEEP), signed by the creator's **linked wallet**. Ticker auto-derived from post text. Then show coin on post + profile. Reference: deepmarket `CreateMarketModal` + `api.ts`.
 - **DeepBook trade execution** — BalanceManager + `placeLimitOrder` via linked wallet (terminal trade panel is a shell).
 - **Predict mint** — open PredictManager + mint up/down with DUSDC (feed is read-only).

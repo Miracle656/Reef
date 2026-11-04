@@ -24,6 +24,8 @@ function req(name: string): string {
 export function loadEnv(): IndexerEnv {
   return {
     umbra: {
+      // UMBRA_PACKAGE_ID must stay the ORIGINAL package id: Move event type
+      // origins never change on upgrade, and the poller filters on this id.
       ...testnetConfig(req("UMBRA_PACKAGE_ID"), req("UMBRA_REGISTRY_ID")),
       // Optional RPC override — the official fullnode occasionally 404s;
       // lets us point at a public mirror without changing the shared default.

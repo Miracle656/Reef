@@ -25,6 +25,10 @@ pnpm --filter @umbra/indexer dev   # starts API + poller
 Requires `DATABASE_URL`, `UMBRA_PACKAGE_ID`, `UMBRA_REGISTRY_ID`; `ENOKI_PRIVATE_API_KEY`
 and `SUINS_PARENT_NAME` enable the sponsor and minting endpoints respectively.
 
+`UMBRA_PACKAGE_ID` must stay the **original** package id after upgrades: Move
+event type origins never change, and the poller filters on this id (see
+`DEPLOY.md` §3).
+
 ## Status
 
 API, poller, sponsor, and reactions are implemented and typechecked against the
