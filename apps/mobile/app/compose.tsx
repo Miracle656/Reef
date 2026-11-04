@@ -125,7 +125,7 @@ export default function Compose() {
           className="mt-4 flex-row items-center justify-between rounded-2xl bg-surface-muted px-3 py-2.5"
         >
           <View className="flex-1 flex-row items-center gap-2 pr-3">
-            <Text>🪙</Text>
+            <Ionicons name="cash-outline" size={20} color={palette.light.accent} />
             <Text className="flex-1 text-sm text-ink">
               <Text style={{ fontFamily: "Expose-Bold" }}>Tokenize</Text> — make this post a tradable coin
             </Text>
