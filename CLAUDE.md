@@ -1,14 +1,14 @@
-# Umbra — CLAUDE.md
+# ReeF — CLAUDE.md
 
-> Working codename: **Umbra**. A Sui-native decentralized social superapp.
+> **ReeF** (codename in code: `umbra`). A Sui-native decentralized social superapp.
 > Identity, the social graph, content, payments, and messaging are native Sui
 > primitives. Target users: mainstream, mobile-first, **Lagos-first** — so
 > walletless onboarding and gasless UX are hard product requirements.
 
 **Current phase:** Phase 1 (identity → on-chain graph → storage → indexer → feed).
 **Network:** testnet only. Never mainnet in Phase 1.
-**Status:** contract layer complete + tested. Apps intentionally not scaffolded
-yet — awaiting design review (see "Review checkpoint" at the bottom).
+**Status:** contracts published to testnet; `@umbra/core`, the indexer, the web
+app and the mobile app are built. See `README.md` for the current status table.
 
 ---
 
@@ -37,13 +37,14 @@ low-value actions (likes/reactions) are **off-chain**, aggregated by the indexer
 ## Monorepo layout
 
 ```
-umbra/
-├── apps/web/            Next.js (deferred)
-├── apps/mobile/         Expo (deferred)
-├── packages/move/       Sui Move package + tests   ✅ DONE
-├── packages/core/       Sui client, bindings, Walrus/Seal/Enoki wrappers, schemas (shell)
-├── packages/ui/         design tokens + headless components (shell)
-└── services/indexer/    checkpoint indexer + feed API + sponsor endpoint (shell)
+reef/
+├── apps/web/                Next.js 15 web app (Vercel)
+├── apps/mobile/             Expo SDK 54 app
+├── packages/move/           Sui Move package + tests (published to testnet)
+├── packages/creator-coin/   creator-coin template ($SULTAN)
+├── packages/core/           Sui client, tx builders, sponsor client, Walrus, DeepBook, schemas
+├── packages/ui/             design tokens + Tailwind v4 theme
+└── services/indexer/        event poller + tRPC API + sponsor endpoint + faucet
 ```
 
 Tooling: pnpm workspaces + Turborepo, TypeScript strict everywhere.
@@ -251,8 +252,9 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [x] `@umbra/core`: client factory, bindings, Enoki sponsor helper, Walrus module, Zod schemas (12 tests).
 - [x] `services/indexer`: event poller → Postgres (Prisma) → tRPC feed API + sponsor endpoint + reactions + SuiNS mint stub (typechecked, 3 tests).
 - [x] `packages/ui`: smooth-neobrutalist design tokens + Tailwind v4 theme.
-- [x] `apps/web`: Next 15 App Router — sign-in, onboarding, feed, compose, profile, follow, likes; gasless via core. **`next build` clean (4 routes)**, typechecks.
-- [ ] `apps/mobile` (Expo) — same feature set, shares `@umbra/core`.
+- [x] `apps/web`: Next 15 App Router — sign-in, onboarding, feed, compose, profile, follow, likes, trade, predict, messages, stories; gasless via core.
+- [x] `apps/mobile` (Expo) — most web features incl. messages, shares `@umbra/core` (swaps not wired yet; see #1).
+- [ ] Finish the `umbra` → ReeF code rename (`@umbra/*`, `UMBRA_*`, bundle id, Expo scheme/slug).
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
 - [ ] Walrus epoch renewal job (server-side, `@mysten/walrus`).
 
@@ -264,7 +266,5 @@ Object model (D-1/D-2), module interfaces, and the Enoki flow were reviewed.
 Decisions locked: **D-3** free SuiNS leaf-subname `<handle>.umbra.sui`; **D-7**
 editable/deletable posts. Contract layer updated + re-tested (16/16).
 
-**Next slice (not yet started):** publish to testnet → `@umbra/core` (client,
-bindings, Enoki auth + sponsor helper, Walrus, Zod schemas) → `services/indexer`
-(checkpoint ingest → Postgres → tRPC + sponsor endpoint + SuiNS subname minting)
-→ `packages/ui` tokens → `apps/web` → `apps/mobile`.
+Everything in the original "next slice" (testnet publish → core → indexer → ui →
+web → mobile) has shipped. Open work is tracked in GitHub issues.

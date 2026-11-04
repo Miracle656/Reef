@@ -1,6 +1,6 @@
 # Messages (`/messages`)
 
-The Mystry messaging app, ported into ReeF/Umbra and re-skinned to the ReeF
+The Mystry messaging app, ported into ReeF and re-skinned to the ReeF
 design system. It lives entirely under this folder and is wired into the app via
 the existing nav entry in `components/side-rail.tsx`.
 

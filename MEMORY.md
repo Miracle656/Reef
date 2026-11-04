@@ -6,6 +6,9 @@
 > Codename in code is still `umbra` (`@umbra/*` packages) — a full rename is pending.
 > **Testnet only.** Repo: github.com/Miracle656/Reef.
 
+> ⚠️ Snapshot from 2026-06-23. Some of it is out of date; `README.md` has the current
+> status and open work is tracked in GitHub issues.
+
 _Last updated: 2026-06-23. Companion to `CLAUDE.md` (architecture + decisions D-1…D-10)._
 
 ---

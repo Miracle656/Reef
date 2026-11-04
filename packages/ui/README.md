@@ -1,6 +1,6 @@
 # @umbra/ui
 
-Umbra's design system: **smooth, clean neobrutalism**. Near-monochrome paper/ink
+ReeF's design system: **smooth, clean neobrutalism**. Near-monochrome paper/ink
 palette, 2px ink borders, hard (no-blur) offset shadows, softened corners, and a
 single sparing teal accent. Confident, not loud.
 
