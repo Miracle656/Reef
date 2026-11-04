@@ -257,7 +257,7 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [x] `apps/mobile` (Expo) — most web features incl. messages, shares `@umbra/core` (swaps not wired yet; see #1).
 - [ ] Finish the `umbra` → ReeF code rename (`@umbra/*`, `UMBRA_*`, bundle id, Expo scheme/slug).
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
-- [ ] Walrus epoch renewal job (server-side, `@mysten/walrus`).
+- [x] Walrus blob ownership + renewal job (`services/indexer/src/walrus-renew.ts`; uploads `send_object_to` the blob owner, job calls `system::extend_blob`). Needs `WALRUS_RENEWER_SECRET_KEY` + `*_WALRUS_BLOB_OWNER` set in prod.
 
 ---
 
