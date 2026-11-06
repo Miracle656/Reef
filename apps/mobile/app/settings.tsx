@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { palette } from "@umbra/ui";
 import { useAuth } from "@/lib/auth";
@@ -16,6 +16,7 @@ const short = (a: string) => `${a.slice(0, 10)}…${a.slice(-6)}`;
 export default function Settings() {
   const router = useRouter();
   const { address, signOut } = useAuth();
+  const qc = useQueryClient();
 
   const profile = useQuery({
     queryKey: ["profile-by-addr", address],
@@ -23,6 +24,16 @@ export default function Settings() {
     enabled: Boolean(address),
   });
   const p = profile.data;
+
+  const linked = useQuery({
+    queryKey: ["linked", address],
+    queryFn: () => trpc.linkedWallets.query({ owner: address! }),
+    enabled: Boolean(address),
+  });
+  const unlink = useMutation({
+    mutationFn: (addr: string) => trpc.unlinkWallet.mutate({ owner: address!, linked: addr }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["linked", address] }),
+  });
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -56,23 +67,37 @@ export default function Settings() {
           </View>
         </View>
 
-        {/* link an external wallet (design: Sui Wallet / Suiet / Phantom) */}
+        {/* bound external wallets (linking itself is done from the web app) */}
         <View className="rounded-3xl p-4" style={{ borderWidth: 1, borderColor: palette.light.border }}>
-          <Text style={{ fontFamily: "Expose-Bold", fontSize: 15 }} className="text-ink">Link an external wallet</Text>
+          <Text style={{ fontFamily: "Expose-Bold", fontSize: 15 }} className="text-ink">Linked wallets</Text>
           <Text className="mt-1 text-sm leading-5 text-ink-soft">
-            Connect a Sui wallet to move assets. Linking proves ownership with a signed message.
+            Wallets bound to your account are used to trade and pay. Each link is proven with a signed message.
           </Text>
           <View className="mt-3" style={{ gap: 8 }}>
-            {["Sui Wallet", "Suiet", "Phantom"].map((w) => (
-              <View
-                key={w}
-                className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3"
-                style={{ borderWidth: 1, borderColor: palette.light.border, opacity: 0.75 }}
-              >
-                <Text style={{ fontFamily: "Expose-Medium" }} className="text-ink">{w}</Text>
-                <Text style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: 1 }} className="text-ink-faint">SOON — LINK ON WEB</Text>
-              </View>
-            ))}
+            {linked.data && linked.data.length > 0 ? (
+              linked.data.map((addr) => (
+                <View
+                  key={addr}
+                  className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3"
+                  style={{ borderWidth: 1, borderColor: palette.light.border }}
+                >
+                  <View className="flex-row items-center gap-2">
+                    <Text selectable style={{ fontFamily: MONO, fontSize: 12 }} className="text-ink">{short(addr)}</Text>
+                    <CopyButton value={addr} size={15} />
+                  </View>
+                  <Pressable onPress={() => unlink.mutate(addr)} disabled={unlink.isPending} hitSlop={8}>
+                    <Text className="text-xs font-semibold text-danger">Unlink</Text>
+                  </Pressable>
+                </View>
+              ))
+            ) : (
+              <Text className="text-sm text-ink-faint">
+                {linked.isLoading ? "Loading…" : "No wallet linked yet."}
+              </Text>
+            )}
+            <Text style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: 1 }} className="text-ink-faint">
+              TO LINK A NEW WALLET, USE SETTINGS ON THE WEB APP
+            </Text>
           </View>
         </View>
 

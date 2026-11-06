@@ -12,6 +12,7 @@ import { palette } from "@umbra/ui";
 import { AuthProvider } from "@/lib/auth";
 import { MessagingProvider } from "@/lib/messaging/provider";
 import { Splash } from "@/components/splash";
+import { Toaster } from "@/components/toaster";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ export default function RootLayout() {
           <MessagingProvider>
             <StatusBar style={splashGone ? "dark" : "light"} />
             {loaded ? <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.light.background } }} /> : null}
+            <Toaster />
             {!splashGone ? <Splash ready={loaded} onDone={() => setSplashGone(true)} /> : null}
           </MessagingProvider>
         </AuthProvider>
