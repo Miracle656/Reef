@@ -42,9 +42,9 @@ export const WALRUS_TESTNET: WalrusConfig = {
 };
 
 const FULLNODE: Record<SuiNetwork, string> = {
-  // Mysten deprecated JSON-RPC on the public fullnodes (Aug 2026) — publicnode
-  // still serves the full JSON-RPC surface for testnet.
-  testnet: "https://sui-testnet-rpc.publicnode.com",
+  // gRPC(-web) endpoints. JSON-RPC is gone: Mysten turned it off in Aug 2026
+  // and publicnode followed by Oct 2026. (publicnode gRPC rejects grpc-web.)
+  testnet: "https://fullnode.testnet.sui.io:443",
   mainnet: "https://fullnode.mainnet.sui.io:443",
   devnet: "https://fullnode.devnet.sui.io:443",
 };

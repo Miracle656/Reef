@@ -5,8 +5,8 @@ import type { IndexerEnv } from "./config";
 
 /**
  * DeepBook reads (order book + mid) run here, NOT on the device: @mysten/sui's
- * jsonRpc effect-parsing crashes under React Native's Metro/Hermes (circular
- * module init), but works fine in Node. Mobile fetches these as plain JSON.
+ * simulate/effect-parsing path crashed under React Native's Metro/Hermes
+ * (circular module init), but works fine in Node. Mobile fetches plain JSON.
  */
 const SULTAN = {
   packageId: "0x052a466afe35f5db6c6143ed62dcc2e2c28bb64f909b773ed409b71a8b5e0f4b",

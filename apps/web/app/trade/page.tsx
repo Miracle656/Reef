@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import Link from "next/link";
 import { deepbook } from "@umbra/core";
@@ -15,6 +14,7 @@ import { toast } from "@/components/toaster";
 import { useSocialAccount } from "@/lib/account";
 import { useGasless } from "@/lib/gasless";
 import { COINS, PAIRS, useDeepBook, type Pair } from "@/lib/deepbook";
+import { useChainClient } from "@/lib/sui-client";
 import { getOracleState, getOracleTrades, listMarkets, toUsd } from "@/lib/predict";
 
 const coinMeta = COINS as Record<string, { type: string; scalar: number }>;
@@ -226,7 +226,7 @@ function SwapCard({ pair, pairKey, mid }: { pair: Pair; pairKey: string; mid: nu
   const db = useDeepBook();
   const run = useGasless();
   const account = useSocialAccount();
-  const client = useSuiClient();
+  const client = useChainClient();
   const qc = useQueryClient();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -246,7 +246,7 @@ function SwapCard({ pair, pairKey, mid }: { pair: Pair; pairKey: string; mid: nu
         const m = coinMeta[sym];
         if (!m) return 0;
         const b = await client.getBalance({ owner: account!.address, coinType: m.type });
-        return Number(b.totalBalance) / m.scalar;
+        return Number(b.balance.balance) / m.scalar;
       };
       const [base, quote] = await Promise.all([get(pair.base), get(pair.quote)]);
       return { base, quote };

@@ -5,6 +5,8 @@ export interface IndexerEnv {
   databaseUrl: string;
   port: number;
   pollIntervalMs: number;
+  /** Sui GraphQL endpoint used for event ingestion (gRPC has no event query) */
+  graphqlUrl: string;
   /** Enoki private API key (server-only); sponsor disabled if absent */
   enokiApiKey?: string;
   /** app-owned SuiNS parent name, e.g. "umbra.sui"; minting disabled if absent */
@@ -25,13 +27,14 @@ export function loadEnv(): IndexerEnv {
   return {
     umbra: {
       ...testnetConfig(req("UMBRA_PACKAGE_ID"), req("UMBRA_REGISTRY_ID")),
-      // Optional RPC override — the official fullnode occasionally 404s;
-      // lets us point at a public mirror without changing the shared default.
-      ...(process.env.SUI_FULLNODE_URL ? { fullnodeUrl: process.env.SUI_FULLNODE_URL } : {}),
+      // Optional gRPC(-web) fullnode override. Must speak gRPC — Sui JSON-RPC
+      // URLs (e.g. the old publicnode one) no longer work.
+      ...(process.env.SUI_GRPC_URL ? { fullnodeUrl: process.env.SUI_GRPC_URL } : {}),
     },
     databaseUrl: req("DATABASE_URL"),
     port: Number(process.env.INDEXER_PORT ?? 3001),
     pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 3000),
+    graphqlUrl: process.env.SUI_GRAPHQL_URL ?? "https://graphql.testnet.sui.io/graphql",
     enokiApiKey: process.env.ENOKI_PRIVATE_API_KEY,
     suinsParentName: process.env.SUINS_PARENT_NAME,
     dusdcFaucetKey: process.env.DUSDC_FAUCET_SECRET_KEY,

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { useSuiClient } from "@mysten/dapp-kit";
 import { type DeepBookCompatibleClient, testnetCoins, testnetPools } from "@mysten/deepbook-v3";
 import { deepbook } from "@umbra/core";
+import { useChainClient } from "@/lib/sui-client";
 import { useSocialAccount } from "./account";
 
 /** The demo creator coin + its pool (testnet). */
@@ -43,7 +43,7 @@ export const PAIRS: Pair[] = Object.entries(POOLS)
 
 /** DeepBook client configured with every coin + pool (reads + tx building). */
 export function useDeepBook() {
-  const client = useSuiClient();
+  const client = useChainClient();
   const account = useSocialAccount();
   return useMemo(
     () =>

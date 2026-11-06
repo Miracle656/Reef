@@ -1,11 +1,11 @@
 /**
- * Event poller. We poll `queryEvents` per MoveModule with a persisted cursor
- * rather than streaming raw checkpoints — simpler and sufficient for Phase 1
- * volumes, and the cursor makes ingestion resumable/idempotent. (Justified in
- * CLAUDE.md; can be swapped for full checkpoint streaming later without schema
- * changes.)
+ * Event poller. We page through each MoveModule's events over Sui GraphQL with
+ * a persisted cursor rather than streaming raw checkpoints — simpler and
+ * sufficient for Phase 1 volumes, and the cursor makes ingestion resumable/
+ * idempotent. (GraphQL replaced JSON-RPC `queryEvents`, which Sui shut off in
+ * 2026; gRPC has no event query.)
  */
-import { createSuiClient } from "@umbra/core";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { prisma } from "../db";
 import type { IndexerEnv } from "../config";
 import { applyEvent, normalizeEvent } from "./handlers";
@@ -13,49 +13,70 @@ import { applyEvent, normalizeEvent } from "./handlers";
 const MODULES = ["profile", "post", "follow"] as const;
 const PAGE = 50;
 
-type Cursor = { txDigest: string; eventSeq: string } | null;
+/**
+ * Cursors live in the `txDigest` column, tagged `eventSeq = "gql"`. A row
+ * without the tag is a leftover JSON-RPC cursor: ignore it and re-ingest from
+ * the start (every handler is an upsert/update, so a replay is safe).
+ */
+const GQL_TAG = "gql";
 
-async function loadCursor(module: string): Promise<Cursor> {
+const EVENTS_QUERY = `
+  query Events($module: String!, $after: String, $first: Int!) {
+    events(first: $first, after: $after, filter: { module: $module }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { contents { type { repr } json } }
+    }
+  }
+`;
+
+type EventsResult = {
+  events: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: { contents: { type: { repr: string }; json: unknown } | null }[];
+  };
+};
+
+async function loadCursor(module: string): Promise<string | null> {
   const row = await prisma.ingestCursor.findUnique({ where: { module } });
-  return row ? { txDigest: row.txDigest, eventSeq: row.eventSeq } : null;
+  return row?.eventSeq === GQL_TAG ? row.txDigest : null;
 }
 
-async function saveCursor(module: string, cursor: Cursor): Promise<void> {
-  if (!cursor) return;
+async function saveCursor(module: string, cursor: string): Promise<void> {
   await prisma.ingestCursor.upsert({
     where: { module },
-    create: { module, txDigest: cursor.txDigest, eventSeq: cursor.eventSeq },
-    update: { txDigest: cursor.txDigest, eventSeq: cursor.eventSeq },
+    create: { module, txDigest: cursor, eventSeq: GQL_TAG },
+    update: { txDigest: cursor, eventSeq: GQL_TAG },
   });
 }
 
 export async function pollOnce(env: IndexerEnv): Promise<number> {
-  const client = createSuiClient(env.umbra);
+  const gql = new SuiGraphQLClient({ url: env.graphqlUrl, network: env.umbra.network });
   let total = 0;
 
   for (const module of MODULES) {
     let cursor = await loadCursor(module);
     let hasNext = true;
     while (hasNext) {
-      const res = await client.queryEvents({
-        query: { MoveModule: { package: env.umbra.packageId, module } },
-        cursor,
-        order: "ascending",
-        limit: PAGE,
+      const res = await gql.query<EventsResult>({
+        query: EVENTS_QUERY,
+        variables: { module: `${env.umbra.packageId}::${module}`, after: cursor, first: PAGE },
       });
-      for (const ev of res.data) {
-        const name = ev.type.split("::").pop() ?? "";
-        const normalized = normalizeEvent(name, ev.parsedJson);
+      if (res.errors?.length) throw new Error(`GraphQL: ${res.errors.map((e) => e.message).join("; ")}`);
+      const page = res.data!.events;
+      for (const node of page.nodes) {
+        if (!node.contents) continue;
+        const name = node.contents.type.repr.split("::").pop() ?? "";
+        const normalized = normalizeEvent(name, node.contents.json);
         if (normalized) {
           await applyEvent(prisma, normalized);
           total += 1;
         }
       }
-      if (res.data.length > 0) {
-        cursor = res.nextCursor as Cursor;
+      if (page.nodes.length > 0 && page.pageInfo.endCursor) {
+        cursor = page.pageInfo.endCursor;
         await saveCursor(module, cursor);
       }
-      hasNext = res.hasNextPage && res.data.length > 0;
+      hasNext = page.pageInfo.hasNextPage && page.nodes.length > 0;
     }
   }
   return total;
