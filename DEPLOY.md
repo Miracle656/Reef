@@ -31,6 +31,8 @@ It's a pnpm-workspace package, so build/run from the **repo root**.
 | `POLL_INTERVAL_MS` | optional | defaults to `3000` |
 | `SUI_GRPC_URL` | optional | gRPC(-web) fullnode, defaults to `https://fullnode.testnet.sui.io:443`. Sui JSON-RPC URLs no longer work. Delete any old `SUI_FULLNODE_URL` |
 | `SUI_GRAPHQL_URL` | optional | event ingestion, defaults to `https://graphql.testnet.sui.io/graphql` |
+| `WALRUS_RENEWER_SECRET_KEY` | for media | **server-only** `suiprivkey…` of the Walrus blob owner (must match `NEXT_PUBLIC_WALRUS_BLOB_OWNER` on Vercel), funded with **SUI + WAL**. Every 6h extends owned blobs within 7 epochs of expiry to 50 epochs ahead. Omit → renewal disabled and media expires |
+| `WALRUS_RENEW_INTERVAL_MS` | optional | defaults to 6h |
 
 **Commands**
 ```bash
@@ -57,6 +59,7 @@ CORS is already open (`app.use("*", cors())`), so the Vercel origin can call it.
    - `NEXT_PUBLIC_ENOKI_PUBLIC_API_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
    - `NEXT_PUBLIC_INDEXER_URL` = the indexer URL from step 1
    - `NEXT_PUBLIC_SPONSOR_API_URL` = `<indexer URL>/sponsor`
+   - `NEXT_PUBLIC_WALRUS_BLOB_OWNER` = the address whose key the indexer holds as `WALRUS_RENEWER_SECRET_KEY` (so uploaded media can be renewed)
 4. **Deploy.**
 
 ### After deploy — whitelist the domain (or sign-in fails)

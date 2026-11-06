@@ -5,7 +5,9 @@ const PACKAGE_ID = process.env.EXPO_PUBLIC_UMBRA_PACKAGE_ID ?? "0x0";
 const REGISTRY_ID = process.env.EXPO_PUBLIC_UMBRA_REGISTRY_ID ?? "0x0";
 
 export const NETWORK: SuiNetwork = (process.env.EXPO_PUBLIC_SUI_NETWORK as SuiNetwork) ?? "testnet";
-export const umbraConfig: UmbraConfig = testnetConfig(PACKAGE_ID, REGISTRY_ID);
+/** Address that owns uploaded Walrus blobs so the indexer can renew them (#7). */
+const WALRUS_BLOB_OWNER = process.env.EXPO_PUBLIC_WALRUS_BLOB_OWNER || undefined;
+export const umbraConfig: UmbraConfig = testnetConfig(PACKAGE_ID, REGISTRY_ID, { walrusBlobOwner: WALRUS_BLOB_OWNER });
 
 /**
  * The indexer runs on the same machine as the Expo dev server, so derive its

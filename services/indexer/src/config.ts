@@ -15,6 +15,10 @@ export interface IndexerEnv {
   dusdcFaucetKey?: string;
   /** dUSDC dripped to a new zkLogin address on first ask, in USD (default 25) */
   dusdcDripUsd: number;
+  /** key (`suiprivkey…`) of WALRUS_BLOB_OWNER; Walrus renewal disabled if absent */
+  walrusRenewerKey?: string;
+  /** how often the Walrus renewal job runs (default 6h) */
+  walrusRenewIntervalMs: number;
 }
 
 function req(name: string): string {
@@ -39,5 +43,7 @@ export function loadEnv(): IndexerEnv {
     suinsParentName: process.env.SUINS_PARENT_NAME,
     dusdcFaucetKey: process.env.DUSDC_FAUCET_SECRET_KEY,
     dusdcDripUsd: Number(process.env.DUSDC_DRIP_USD ?? 25),
+    walrusRenewerKey: process.env.WALRUS_RENEWER_SECRET_KEY,
+    walrusRenewIntervalMs: Number(process.env.WALRUS_RENEW_INTERVAL_MS ?? 6 * 60 * 60 * 1000),
   };
 }

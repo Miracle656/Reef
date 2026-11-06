@@ -9,20 +9,28 @@ export interface UploadResult {
   /** true if Walrus had to store it fresh (vs already-certified dedupe) */
   newlyCreated: boolean;
   endpoint: string;
+  /** on-chain Blob object id (only for newly created blobs) */
+  blobObjectId?: string;
+  /** Walrus epoch at which the stored copy expires, when the publisher reports it */
+  endEpoch?: number;
 }
 
 type WalrusPublisherResponse = {
-  newlyCreated?: { blobObject?: { blobId?: string } };
-  alreadyCertified?: { blobId?: string };
+  newlyCreated?: { blobObject?: { id?: string; blobId?: string; storage?: { endEpoch?: number } } };
+  alreadyCertified?: { blobId?: string; endEpoch?: number };
   blobObject?: { blobId?: string };
   blobId?: string;
 };
 
-function extractBlobId(data: WalrusPublisherResponse): { blobId: string; newlyCreated: boolean } | null {
-  const fresh = data.newlyCreated?.blobObject?.blobId;
-  if (fresh) return { blobId: fresh, newlyCreated: true };
+type Extracted = Omit<UploadResult, "endpoint">;
+
+export function extractBlobId(data: WalrusPublisherResponse): Extracted | null {
+  const obj = data.newlyCreated?.blobObject;
+  if (obj?.blobId) {
+    return { blobId: obj.blobId, newlyCreated: true, blobObjectId: obj.id, endEpoch: obj.storage?.endEpoch };
+  }
   const certified = data.alreadyCertified?.blobId ?? data.blobObject?.blobId ?? data.blobId;
-  if (certified) return { blobId: certified, newlyCreated: false };
+  if (certified) return { blobId: certified, newlyCreated: false, endEpoch: data.alreadyCertified?.endEpoch };
   return null;
 }
 
@@ -36,7 +44,8 @@ export async function uploadBlob(
   let lastError: unknown;
 
   for (const base of walrus.publishers) {
-    const endpoint = `${base.replace(/\/$/, "")}?epochs=${epochs}`;
+    const owner = walrus.blobOwner ? `&send_object_to=${encodeURIComponent(walrus.blobOwner)}` : "";
+    const endpoint = `${base.replace(/\/$/, "")}?epochs=${epochs}${owner}`;
     try {
       // Wrap in a Blob so the body type is portable across node + DOM lib
       // typings. Re-allocating into a fresh ArrayBuffer-backed array avoids the
@@ -47,7 +56,7 @@ export async function uploadBlob(
       const json = (await res.json()) as WalrusPublisherResponse;
       const found = extractBlobId(json);
       if (!found) throw new Error("blobId missing in Walrus response");
-      return { blobId: found.blobId, newlyCreated: found.newlyCreated, endpoint };
+      return { ...found, endpoint };
     } catch (err) {
       lastError = err;
     }
@@ -81,12 +90,10 @@ export const urlFor = (cfg: UmbraConfig, blobId: string) => blobUrl(cfg.walrus, 
 
 /**
  * Epoch renewal: Walrus blobs expire after their stored epoch count. Renewal
- * extends the on-chain Blob object's `end_epoch` and requires the WalrusClient
- * SDK (`@mysten/walrus` `WalrusClient.extendBlob`) or an equivalent Move call —
- * it is NOT exposed over the HTTP publisher. Implemented in the indexer's
- * scheduled renewal job (it holds the funding key), not in this client module.
- *
- * Tracking: see CLAUDE.md TODO "Walrus epoch renewal job".
+ * is a Move call (`<walrus>::system::extend_blob`) by the Blob's owner, so
+ * uploads send the Blob to `walrus.blobOwner` and the indexer's renewal job
+ * (`services/indexer/src/walrus-renew.ts`, holds that key + WAL) extends blobs
+ * nearing expiry. Not exposed over the HTTP publisher.
  */
 export const RENEWAL_NOTE =
-  "Blob renewal runs server-side via @mysten/walrus WalrusClient.extendBlob; see indexer renewal job.";
+  "Blob renewal runs server-side in services/indexer/src/walrus-renew.ts (system::extend_blob).";
