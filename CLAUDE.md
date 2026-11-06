@@ -37,14 +37,13 @@ low-value actions (likes/reactions) are **off-chain**, aggregated by the indexer
 ## Monorepo layout
 
 ```
-reef/
-├── apps/web/                Next.js 15 web app (Vercel)
-├── apps/mobile/             Expo SDK 54 app
-├── packages/move/           Sui Move package + tests (published to testnet)
-├── packages/creator-coin/   creator-coin template ($SULTAN)
-├── packages/core/           Sui client, tx builders, sponsor client, Walrus, DeepBook, schemas
-├── packages/ui/             design tokens + Tailwind v4 theme
-└── services/indexer/        event poller + tRPC API + sponsor endpoint + faucet
+umbra/
+├── apps/web/            Next.js (deferred)
+├── apps/mobile/         Expo (deferred)
+├── packages/move/       Sui Move package + tests (+ `policy` timelock) ✅ DONE
+├── packages/core/       Sui client, bindings, Walrus/Seal/Enoki wrappers, schemas (shell)
+├── packages/ui/         design tokens + headless components (shell)
+└── services/indexer/    checkpoint indexer + feed API + sponsor endpoint (shell)
 ```
 
 Tooling: pnpm workspaces + Turborepo, TypeScript strict everywhere.
@@ -130,10 +129,17 @@ on-chain as a backstop. `Profile.handle` = the label (`alice`);
 
 ### Move module interfaces (Phase 1)
 
-`registry` (shared `Registry`):
-- `register(reg, handle, owner, profile_id)` — `public(package)`; aborts on dup handle/profile.
-- `change_handle(reg, old, new, owner)` — `public(package)`.
-- views: `has_profile`, `handle_taken`, `profile_of`.
+`registry` (shared `Registry`, schema-versioned for live upgrades):
+- `register(reg, handle, owner, profile_id)` — `public(package)`; `assert_version`; aborts on dup handle/profile.
+- `change_handle(reg, old, new, owner)` — `public(package)`; `assert_version`.
+- `bootstrap_admin(reg, ctx) -> RegistryAdminCap` — one-time, fixed bootstrap address (live v1 registry).
+- `migrate(reg, admin_cap, ctx)` — admin-gated cutover; creates/updates the `ConfigKey` dynamic field.
+- views: `has_profile`, `handle_taken`, `profile_of`, `version`, `admin_cap_id`.
+
+Schema version lives in a `ConfigKey` dynamic field (struct layouts are frozen);
+new state goes in dynamic fields or new objects. The `UpgradeCap` is wrapped by
+the separate `packages/move/policy` timelock (propose → wait → authorize →
+commit) and held in a multisig before mainnet. See `DEPLOY.md` §3.
 
 `profile` (owned `Profile { owner, handle, display_name, bio, avatar_blob_id, suins_name, created_at_ms, updated_at_ms }`):
 - `create_profile(reg, handle, display_name, bio, avatar_blob_id: Option, suins_name: Option, clock, ctx)`
@@ -212,7 +218,8 @@ would need a separate schema/codegen step for the same safety. ORM: **Prisma**
 ```bash
 # Move contracts (works today)
 pnpm move:build
-pnpm move:test          # 16 tests, all passing
+pnpm move:test          # core modules
+pnpm move:policy:test   # timelock policy package
 pnpm move:publish       # testnet; needs a funded sui client (see below)
 
 # Monorepo (shells only until apps are built)
@@ -242,20 +249,22 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - **D-9** Indexer ingests via `queryEvents` polling per MoveModule with a persisted cursor (not raw checkpoint streaming) — simpler + resumable for Phase 1; swappable later.
 - **D-11** (2026-11) Sui shut JSON-RPC off on public endpoints (Mysten Aug 2026, publicnode Oct 2026). `createSuiClient` now returns `SuiGrpcClient` (`@mysten/sui/grpc`, gRPC-web to `fullnode.<net>.sui.io:443`); code uses the core API (`listOwnedObjects`, `getBalance().balance.balance`, `simulateTransaction` instead of devInspect). The indexer ingests events over **GraphQL** (gRPC has no event query); GraphQL cursors are stored tagged `eventSeq="gql"`, and an untagged legacy cursor triggers a safe full replay. Web: dapp-kit 1.x gets the gRPC client via `createClient`; read it with `useChainClient()` (`apps/web/lib/sui-client.ts`). Supersedes the RPC parts of D-8/D-9.
 - **D-10** `@umbra/core` split entrypoints: client-safe `@umbra/core` vs server-only `@umbra/core/server` (Enoki private key), so the key can't be bundled into apps.
+- **D-11** Live upgrades: `Registry` schema version in a `ConfigKey` dynamic field + `assert_version` + admin `migrate` (`bootstrap_admin` for the live v1 registry); `packages/move/policy` (`umbra_policy`) wraps the `UpgradeCap` in a `TimelockCap` (propose → wait → authorize → commit, digest announced on-chain), optionally `only_additive_upgrades`; `TimelockCap` + `RegistryAdminCap` go to a multisig before mainnet. Never change public signatures/struct layouts/event shapes — deprecate by aborting. Indexer keeps the **original** package id (event types never move); bump `Published.toml` by hand after SDK upgrades. Runbook: `DEPLOY.md` §3.
 
 ## TODO
 
 - [x] Verify SDK versions.
 - [x] Scaffold monorepo (pnpm + Turbo) + `.env.example`.
-- [x] `profile` / `post` / `follow` / `registry` Move modules + 16 tests + publish script.
+- [x] `profile` / `post` / `follow` / `registry` Move modules + 23 tests (+ policy tests) + publish script.
 - [x] **Review checkpoint** — object model, interfaces, Enoki flow reviewed; D-3 (SuiNS subname) + D-7 (editable posts) decided.
 - [x] Publish package to testnet (via WSL sui 1.72, owner `0x669f…ec58`). Package `0x2e066a2176aaaf4e61064b74d3b4d9ea80d10ceca1372a9cd4bda36412ff761f`, Registry `0x1abe492364bcaff32648a432ca5ca4cf91d9fa0307b4f389ecf1a9c36daad933` (see `packages/move/deployments/testnet.json`).
 - [x] `@umbra/core`: client factory, bindings, Enoki sponsor helper, Walrus module, Zod schemas (12 tests).
 - [x] `services/indexer`: event poller → Postgres (Prisma) → tRPC feed API + sponsor endpoint + reactions + SuiNS mint stub (typechecked, 3 tests).
 - [x] `packages/ui`: smooth-neobrutalist design tokens + Tailwind v4 theme.
-- [x] `apps/web`: Next 15 App Router — sign-in, onboarding, feed, compose, profile, follow, likes, trade, predict, messages, stories; gasless via core.
-- [x] `apps/mobile` (Expo) — most web features incl. messages, shares `@umbra/core` (swaps not wired yet; see #1).
-- [ ] Finish the `umbra` → ReeF code rename (`@umbra/*`, `UMBRA_*`, bundle id, Expo scheme/slug).
+- [x] `apps/web`: Next 15 App Router — sign-in, onboarding, feed, compose, profile, follow, likes; gasless via core. **`next build` clean (4 routes)**, typechecks.
+- [x] **Live-upgrade pattern** — `Registry` version gate + admin `migrate`; `packages/move/policy` timelock. Runbook in `DEPLOY.md` §3.
+- [ ] Upgrade live testnet package → `bootstrap_admin` + `migrate`; wrap `UpgradeCap` in the timelock; move caps to a multisig (needs a signing session).
+- [ ] `apps/mobile` (Expo) — same feature set, shares `@umbra/core`.
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
 - [ ] Walrus epoch renewal job (server-side, `@mysten/walrus`).
 

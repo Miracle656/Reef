@@ -1,0 +1,14 @@
+[package]
+name = "umbra_policy"
+edition = "2024.beta"
+version = "0.1.0"
+# Timelocked custody for the umbra package's UpgradeCap. Published separately
+# so the policy itself is not upgraded by the cap it guards.
+
+# No explicit framework dependency (see ../Move.toml, decision D-5).
+[dependencies]
+
+[addresses]
+umbra_policy = "0x0"
+
+[dev-dependencies]

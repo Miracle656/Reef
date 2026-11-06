@@ -43,7 +43,7 @@ pnpm workspaces + Turborepo, TypeScript strict throughout.
 
 | Area | State |
 |---|---|
-| Move contracts | ✅ published to testnet · 16 tests |
+| Move contracts | ✅ published to testnet · 23 tests (+ timelock policy) |
 | `@umbra/core` | ✅ 12 tests |
 | `services/indexer` | ✅ 3 tests |
 | `apps/web` | ✅ social, trade, predict, messages, stories |
@@ -61,6 +61,7 @@ pnpm install
 # contracts (needs the sui CLI)
 pnpm move:build
 pnpm move:test
+pnpm move:policy:test                   # timelock upgrade policy
 pnpm move:publish                       # testnet; needs a funded sui client (see CLAUDE.md)
 
 # tests
@@ -85,7 +86,7 @@ plus `ENOKI_PRIVATE_API_KEY` for gasless transactions. The apps need the public
 
 - `CLAUDE.md`: architecture, the owned-vs-shared object model, the Enoki
   sponsored-transaction flow and the decisions log
-- `DEPLOY.md`: deploying the web app (Vercel) and the indexer
+- `DEPLOY.md`: deploying the web app (Vercel), the indexer, and the live-upgrade runbook
 - `apps/mobile/CONTRIBUTING.md`: guide to working on the mobile app
 - `docs/reef-brief.html`: product and design brief
 
