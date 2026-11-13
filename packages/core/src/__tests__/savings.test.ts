@@ -69,3 +69,33 @@ describe("savings tx builders", () => {
     expect(LOCK_DURATIONS_MS).toEqual([1, 3, 6, 12].map((m) => m * MONTH_MS));
   });
 });
+
+describe("savings amounts + lock decoding", () => {
+  it("parses and formats USDC amounts exactly", async () => {
+    const { parseAmount, formatAmount } = await import("../savings/index");
+    expect(parseAmount("12.5")).toBe(12_500_000n);
+    expect(parseAmount("0")).toBeNull();
+    expect(parseAmount("1.0000001")).toBeNull();
+    expect(formatAmount(12_500_000n)).toBe("12.5");
+    expect(formatAmount(-2n)).toBe("-0.000002");
+  });
+
+  it("decodes a SavingsLock (Lender and Halal holdings)", async () => {
+    const { parseLock } = await import("../savings/index");
+    const { bcs } = await import("@mysten/sui/bcs");
+    const Lock = bcs.struct("SavingsLock", {
+      id: bcs.Address,
+      owner: bcs.Address,
+      principal: bcs.u64(),
+      holding: bcs.enum("Holding", { Lender: bcs.struct("L", { receipts: bcs.u64() }), Halal: bcs.struct("H", { funds: bcs.u64() }) }),
+      created_ms: bcs.u64(),
+      unlock_ms: bcs.u64(),
+      breakable: bcs.bool(),
+    });
+    const id = "0x" + "1".repeat(64);
+    const lender = Lock.serialize({ id, owner: id, principal: 50n, holding: { Lender: { receipts: 49n } }, created_ms: 1n, unlock_ms: 2n, breakable: true }).toBytes();
+    expect(parseLock(lender)).toMatchObject({ principal: 50n, receipts: 49n, halal: false, unlockMs: 2, breakable: true });
+    const halal = Lock.serialize({ id, owner: id, principal: 10n, holding: { Halal: { funds: 10n } }, created_ms: 1n, unlock_ms: 2n, breakable: false }).toBytes();
+    expect(parseLock(halal)).toMatchObject({ principal: 10n, receipts: 0n, halal: true, breakable: false });
+  });
+});

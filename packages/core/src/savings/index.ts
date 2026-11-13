@@ -28,6 +28,25 @@ export interface SavingsDeployment {
   underlyingType: string;
 }
 
+/** "12.5" → base units (6 decimals), exact, no floating point. Null if invalid or ≤ 0. */
+export function parseAmount(amount: string, decimals = 6): bigint | null {
+  const s = amount.trim();
+  if (!/^\d*\.?\d*$/.test(s) || s === "" || s === ".") return null;
+  const [whole = "", frac = ""] = s.split(".");
+  if (frac.length > decimals) return null;
+  const units = BigInt((whole || "0") + frac.padEnd(decimals, "0"));
+  return units > 0n ? units : null;
+}
+
+/** Base units → "12.5" (trailing zeros trimmed). */
+export function formatAmount(units: bigint, decimals = 6): string {
+  const neg = units < 0n;
+  const abs = neg ? -units : units;
+  const base = 10n ** BigInt(decimals);
+  const frac = (abs % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${neg ? "-" : ""}${abs / base}${frac ? `.${frac}` : ""}`;
+}
+
 export const receiptType = (d: SavingsDeployment) => `${d.packageId}::mock_yield::MOCK_YIELD`;
 export const lockType = (d: SavingsDeployment) => `${d.packageId}::savings::SavingsLock<${d.underlyingType}>`;
 
@@ -84,6 +103,14 @@ export function buildOpenLockTx(
       arguments: [tx.object(d.configId), tx.object(d.vaultId), coin, tx.pure.u64(p.durationMs), tx.pure.bool(p.breakable), tx.object(CLOCK)],
     });
   }
+  return tx;
+}
+
+/** TESTNET ONLY: mint `amount` of the package's test USDC to `owner`. */
+export function buildTestUsdcMintTx(packageId: string, faucetId: string, owner: string, amount: bigint): Transaction {
+  const tx = new Transaction();
+  const [c] = tx.moveCall({ target: `${packageId}::test_usdc::mint`, arguments: [tx.object(faucetId), tx.pure.u64(amount)] });
+  tx.transferObjects([c!], tx.pure.address(owner));
   return tx;
 }
 
@@ -173,6 +200,67 @@ export function breakEarlyPreview(p: { principal: bigint; receipts: bigint; rate
   if (needed >= p.receipts) return { returned: valueOf(p.receipts, p.rate), forfeitedReceipts: 0n, forfeitedValue: 0n };
   const forfeitedReceipts = p.receipts - needed;
   return { returned: valueOf(needed, p.rate), forfeitedReceipts, forfeitedValue: valueOf(forfeitedReceipts, p.rate) };
+}
+
+export interface LockView {
+  id: string;
+  principal: bigint;
+  /** lender receipts held (0 for a Halal lock) */
+  receipts: bigint;
+  halal: boolean;
+  createdMs: number;
+  unlockMs: number;
+  breakable: boolean;
+}
+
+const SavingsLockBcs = bcs.struct("SavingsLock", {
+  id: bcs.Address,
+  owner: bcs.Address,
+  principal: bcs.u64(),
+  holding: bcs.enum("Holding", {
+    Lender: bcs.struct("Lender", { receipts: bcs.u64() }),
+    Halal: bcs.struct("Halal", { funds: bcs.u64() }),
+  }),
+  created_ms: bcs.u64(),
+  unlock_ms: bcs.u64(),
+  breakable: bcs.bool(),
+});
+
+/** Decode a `SavingsLock<T>` object's BCS content. */
+export function parseLock(content: Uint8Array): LockView {
+  const l = SavingsLockBcs.parse(content);
+  const lender = l.holding.$kind === "Lender";
+  return {
+    id: l.id,
+    principal: BigInt(l.principal),
+    receipts: lender ? BigInt(l.holding.Lender!.receipts) : 0n,
+    halal: !lender,
+    createdMs: Number(l.created_ms),
+    unlockMs: Number(l.unlock_ms),
+    breakable: l.breakable,
+  };
+}
+
+/** The owner's open locks, read straight from the chain. */
+export async function readLocks(client: ClientWithCoreApi, d: SavingsDeployment, owner: string): Promise<LockView[]> {
+  const out: LockView[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: Awaited<ReturnType<typeof client.core.listOwnedObjects<{ content: true }>>> = await client.core.listOwnedObjects({
+      owner,
+      type: lockType(d),
+      include: { content: true },
+      cursor,
+    });
+    for (const o of page.objects) if (o.content) out.push(parseLock(o.content));
+    cursor = page.hasNextPage ? page.cursor : null;
+  } while (cursor);
+  return out.sort((a, b) => a.unlockMs - b.unlockMs);
+}
+
+/** Current USDC value of a lock: receipts at the current rate, or the coin itself (Halal). */
+export function lockValue(l: LockView, rate: bigint): bigint {
+  return l.halal ? l.principal : valueOf(l.receipts, rate);
 }
 
 /** Where a real lender plugs in later (Scallop/NAVI/Suilend, see #16). */

@@ -65,7 +65,28 @@ and the test-USDC faucet are sponsored.
 | Flex withdraw all | `6Bj96XHi…` | ✅ got back 39.999999 |
 | open Halal lock with 10 | `8zjo3bRh…` | ✅ |
 
-## Still to build (follow-up PR on #15)
+## Indexer
 
-- **Indexer**: ingest `savings` events (positions, cost basis, accrued yield, trailing APY, per-user yield statements; gains are taxable in Nigeria from 1 Jan 2026).
-- **UI**: Flex, Lock (1/3/6/12 months) and Goals pots, a live-ticking balance (`projectRate` each second), a ≈₦ equivalent, a "variable, not guaranteed" APY label, a break-early sheet with the exact numbers ("you get back $X, you give up $Y"), "not insured" copy, and never the words "interest", "guaranteed", "insured" or "risk-free".
+With `SAVINGS_PACKAGE_ID` set, the poller also ingests `savings` events into
+`SavingsEvent` (keyed by tx digest + event sequence, so replays are no-ops) and
+`SavingsLock`. tRPC adds `savingsLocks`, `savingsActivity` and
+`savingsStatement`. The statement gives realized yield for a period, using
+average cost for Flex and returned minus principal for locks. A lender loss
+shows as a negative number, not hidden. Gains are taxable income in Nigeria
+from 1 Jan 2026, so users get this from day one.
+
+## App (`/savings`)
+
+Shown in the nav when `NEXT_PUBLIC_SAVINGS_*` is set (values from
+`deployments/testnet.json`). Positions are read **straight from the chain**:
+the receipt balance, the user's `SavingsLock` objects and the vault. The
+indexer only supplies the yearly statement.
+
+- A first-visit **acknowledgement**: the rate is variable and not guaranteed, savings are not insured, and taking money out depends on available cash.
+- A total that ticks every second (`projectRate`), plus ≈₦ when `NEXT_PUBLIC_NGN_PER_USD` is set. There's no invented exchange rate.
+- Flex add/take out, and new locks of 1, 3, 6 or 12 months, with a Halal (0%) option and a no-early-break option.
+- A break-early sheet with the exact on-chain numbers ("you get back $X and give up $Y it earned"). It warns when the lender's rate has fallen.
+- Testnet: a "Get 100 test USDC" button.
+- Copy never says "interest", "guaranteed", "insured" or "risk-free", except in negations such as "not insured".
+
+Not built: named **Goals** pots. A lock has no on-chain name yet; it needs a small label store.

@@ -58,6 +58,41 @@ model Follow {
 
 /// Verified external wallets linked to a zkLogin social account (the external
 /// wallet signed the link). Farcaster-style "verified addresses".
+/// USDC savings (#15): one row per savings event. Keyed by tx digest + event
+/// sequence, so replaying a page is a no-op.
+model SavingsEvent {
+  id          String @id // `${digest}:${sequenceNumber}`
+  owner       String
+  kind        String // flex_deposit | flex_withdraw | lock_open | lock_withdraw | lock_break
+  /// USDC base units moved (in for deposits/opens, out for withdrawals/breaks)
+  amount      BigInt
+  receipts    BigInt
+  lockId      String?
+  /// receipts forfeited to the bonus pool (lock_break)
+  forfeited   BigInt  @default(0)
+  timestampMs BigInt
+  digest      String
+
+  @@index([owner, timestampMs])
+}
+
+/// A savings lock as the indexer last saw it (the chain stays the source of truth).
+model SavingsLock {
+  lockId    String  @id
+  owner     String
+  principal BigInt
+  receipts  BigInt
+  unlockMs  BigInt
+  breakable Boolean
+  halal     Boolean
+  openedMs  BigInt
+  status    String  @default("open") // open | withdrawn | broken
+  returned  BigInt?
+  closedMs  BigInt?
+
+  @@index([owner])
+}
+
 model LinkedAddress {
   owner       String // zkLogin / social address
   linked      String // external wallet (the signer)
