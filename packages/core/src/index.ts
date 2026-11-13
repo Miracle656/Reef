@@ -20,3 +20,6 @@ export * from "./auth/sponsor-client";
 
 // DeepBook v3 (creator-coin markets)
 export * as deepbook from "./deepbook/index";
+
+// USDC savings (#15)
+export * as savings from "./savings/index";
