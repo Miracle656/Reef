@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "walrus:renew": "tsx scripts/walrus-renew.ts",
+    "sponsor:fund": "tsx scripts/sponsor-fund.ts",
+    "sponsor:smoke": "tsx scripts/sponsor-smoke.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev"
