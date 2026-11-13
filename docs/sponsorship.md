@@ -15,7 +15,7 @@ indexer can sponsor two ways, and the apps choose with one env var:
 | Abuse controls | Allowlist | Allowlist, gas-coin and sponsor-object guards, a budget cap per tx (`SPONSOR_MAX_GAS_BUDGET`), a per-sender rate limit, and a rolling daily cap (`SPONSOR_DAILY_BUDGET`) |
 | Secrets | `ENOKI_PRIVATE_API_KEY` | `SPONSOR_SECRET_KEY` (an Ed25519 key holding real SUI on mainnet) |
 | Ops | Enoki account and plan, portal allowlist | Keep the address balance topped up (`sponsor:fund`) and watch it; rotate the key if it leaks |
-| Passkey senders | Protocol-level fine; the smoke test confirms it with your key | Works (the smoke test runs it) |
+| Passkey senders | Protocol-level fine; the smoke test confirms it with your key | **Verified on testnet** (see below) |
 
 ## What the self-run sponsor checks
 
@@ -39,13 +39,14 @@ storage. The differences are:
 - **Enoki** adds whatever your Enoki plan charges for sponsored transactions (check the Enoki portal for current pricing). Gas is paid from Enoki's pool.
 - **Self-run** has no per-transaction fee. ReeF pays the network gas from its own address balance, plus hosting it already pays for (the indexer). The real cost is ops: funding, monitoring and key custody.
 
-Measured on testnet by `pnpm --filter @umbra/indexer sponsor:smoke` for one
-`follow::create_follow_set` (net gas = computation + storage − rebate):
+Measured on testnet (2026-11-13, protocol 142) by `pnpm --filter @umbra/indexer sponsor:smoke` for one
+`follow::create_follow_set` from a brand-new sender holding 0 SUI (net gas = computation + storage − rebate).
+The sponsor's address balance fell by exactly the sum (1.0000 → 0.9948 SUI):
 
 | Case | Net gas (MIST) |
 |---|---|
-| self-run · Ed25519 sender | _run the smoke test_ |
-| self-run · passkey sender | _run the smoke test_ |
+| self-run · Ed25519 sender | 2,611,200 (1,000,000 computation + 1,611,200 storage). Testnet [`9UaN13gu…`](https://suiscan.xyz/testnet/tx/9UaN13guxdbdKgTEe6KGLYMd2RPQQDETFEvx4PFrogL5) |
+| self-run · passkey sender | 2,611,200, identical. Testnet [`2rsyGcKh…`](https://suiscan.xyz/testnet/tx/2rsyGcKhTVEybYgZPvykPoCxfieh9zP21LCWkWhWdgMn) |
 | Enoki · passkey sender | _needs `ENOKI_PRIVATE_API_KEY`_ |
 | Enoki · Ed25519 sender | _needs `ENOKI_PRIVATE_API_KEY`_ |
 
@@ -58,8 +59,11 @@ Measured on testnet by `pnpm --filter @umbra/indexer sponsor:smoke` for one
 ## Running the smoke test
 
 ```bash
-# 1. a sponsor key with SUI (testnet: https://faucet.sui.io), in .env as SPONSOR_SECRET_KEY
-pnpm --filter @umbra/indexer sponsor:fund 1     # move 1 SUI into its address balance
+# 1. a sponsor key with SUI, in .env as SPONSOR_SECRET_KEY. The testnet faucet
+#    (https://faucet.sui.io) now pays straight into the address balance; SUI that
+#    arrives as coins needs moving across:
+pnpm --filter @umbra/indexer sponsor:fund        # show coin vs address balance
+pnpm --filter @umbra/indexer sponsor:fund 1      # move 1 SUI of coins into the address balance
 # 2. optional: ENOKI_PRIVATE_API_KEY in .env to add the Enoki cases
 pnpm --filter @umbra/indexer sponsor:smoke
 ```
