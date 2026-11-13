@@ -51,21 +51,22 @@ Tooling: pnpm workspaces + Turborepo, TypeScript strict everywhere.
 
 ---
 
-## Locked SDK versions (verified against npm registry, 2026-06-21)
+## Locked SDK versions (verified against npm registry, 2026-11-13)
 
 | Package | Version | Used in |
 |---|---|---|
-| `@mysten/sui` | 2.19.0 | core (web + mobile) |
-| `@mysten/dapp-kit` | 1.1.1 | web |
-| `@mysten/enoki` | 1.1.1 | auth + sponsor |
+| `@mysten/sui` | 2.39.1 | core (web + mobile + indexer). Needs Node 22+ |
+| `@mysten/dapp-kit` | 1.1.17 | web (deprecated upstream: JSON-RPC only) |
+| `@mysten/enoki` | 1.3.4 | auth + sponsor |
 | `@mysten/walrus` | 1.2.1 | storage |
-| `@mysten/seal` | 1.2.1 | gated content (P2) |
+| `@mysten/seal` | 1.5.4 | chat encryption (messaging peer) |
 | `@mysten/suins` | 1.2.1 | handles link |
+| `@mysten/deepbook-v3` | 2.12.0 | trade (spot only; the 2.0 break was margin/Pyth) |
 | `@mysten/sui-stack-messaging` | 0.0.2 | chat (P3) |
 | `@mysten/sui-groups` | 0.0.1 | chat (P3) |
 | `@tanstack/react-query` | ^5.90 | web/mobile data |
 
-Toolchain present: Sui CLI **1.60.0**, Node **24**, pnpm **10.20**.
+Toolchain present: Sui CLI **1.60.0**, Node **24** (22+ required), pnpm **10.20**.
 
 > Note: `@mysten/sui` is on the **2.x** line and `@mysten/dapp-kit` on **1.x** —
 > several older reference apps in `C:\Users\HP\Documents\sui\*` pin 1.x/0.x. We
