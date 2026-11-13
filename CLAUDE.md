@@ -51,21 +51,22 @@ Tooling: pnpm workspaces + Turborepo, TypeScript strict everywhere.
 
 ---
 
-## Locked SDK versions (verified against npm registry, 2026-06-21)
+## Locked SDK versions (verified against npm registry, 2026-11-13)
 
 | Package | Version | Used in |
 |---|---|---|
-| `@mysten/sui` | 2.19.0 | core (web + mobile) |
-| `@mysten/dapp-kit` | 1.1.1 | web |
-| `@mysten/enoki` | 1.1.1 | auth + sponsor |
+| `@mysten/sui` | 2.39.1 | core (web + mobile + indexer). Needs Node 22+ |
+| `@mysten/dapp-kit` | 1.1.17 | web (deprecated upstream; migration plan in D-12) |
+| `@mysten/enoki` | 1.3.4 | auth + sponsor |
 | `@mysten/walrus` | 1.2.1 | storage |
-| `@mysten/seal` | 1.2.1 | gated content (P2) |
+| `@mysten/seal` | 1.5.4 | chat encryption (messaging peer) |
 | `@mysten/suins` | 1.2.1 | handles link |
+| `@mysten/deepbook-v3` | 2.12.0 | trade (spot only; the 2.0 break was margin/Pyth) |
 | `@mysten/sui-stack-messaging` | 0.0.2 | chat (P3) |
 | `@mysten/sui-groups` | 0.0.1 | chat (P3) |
 | `@tanstack/react-query` | ^5.90 | web/mobile data |
 
-Toolchain present: Sui CLI **1.60.0**, Node **24**, pnpm **10.20**.
+Toolchain present: Sui CLI **1.60.0**, Node **24** (22+ required), pnpm **10.20**.
 
 > Note: `@mysten/sui` is on the **2.x** line and `@mysten/dapp-kit` on **1.x** —
 > several older reference apps in `C:\Users\HP\Documents\sui\*` pin 1.x/0.x. We
@@ -242,6 +243,12 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - **D-9** Indexer ingests via `queryEvents` polling per MoveModule with a persisted cursor (not raw checkpoint streaming) — simpler + resumable for Phase 1; swappable later.
 - **D-11** (2026-11) Sui shut JSON-RPC off on public endpoints (Mysten Aug 2026, publicnode Oct 2026). `createSuiClient` now returns `SuiGrpcClient` (`@mysten/sui/grpc`, gRPC-web to `fullnode.<net>.sui.io:443`); code uses the core API (`listOwnedObjects`, `getBalance().balance.balance`, `simulateTransaction` instead of devInspect). The indexer ingests events over **GraphQL** (gRPC has no event query); GraphQL cursors are stored tagged `eventSeq="gql"`, and an untagged legacy cursor triggers a safe full replay. Web: dapp-kit 1.x gets the gRPC client via `createClient`; read it with `useChainClient()` (`apps/web/lib/sui-client.ts`). Supersedes the RPC parts of D-8/D-9.
 - **D-10** `@umbra/core` split entrypoints: client-safe `@umbra/core` vs server-only `@umbra/core/server` (Enoki private key), so the key can't be bundled into apps.
+- **D-12** (2026-11, #18) **`@mysten/dapp-kit` → `@mysten/dapp-kit-react`: migrate, but as its own change.** npm marks dapp-kit 1.x deprecated ("only supports the deprecated Sui JSON-RPC API and will not receive further updates"), so web should move. It is not a hook rename, for three reasons:
+  1. `useWallets()` returns `UiWallet` handles (`@wallet-standard/ui`), not raw wallet-standard wallets. `isEnokiWallet()` and Enoki's `getSession(wallet)` take the raw wallet, so they need `getWalletFeature` from `@wallet-standard/ui-features` (add it as a direct dep) or a `features.includes("enoki:getMetadata")` check.
+  2. `dAppKit.signTransaction` / `signPersonalMessage` take an optional `account` but sign through the *connected* wallet. ReeF's rule is that the zkLogin wallet signs even while a linked Slush wallet is connected (`lib/gasless.ts`), so keep calling the Enoki wallet's feature directly, via `getWalletFeature(enokiUiWallet, "sui:signTransaction")`.
+  3. Enoki 1.3 ships `enokiWalletsInitializer` for `createDAppKit({ walletInitializers })`, but the Google `redirectUrl` uses `window.location.origin`, which doesn't exist when Next renders on the server. Keep registering Enoki wallets in a client-only effect (`registerEnokiWallets({ client: useCurrentClient(), network: useCurrentNetwork() })`), or create the kit lazily on the client.
+
+  Mapping: `useSuiClient` → `useCurrentClient` (this removes the `useChainClient()` cast), `useSuiClientContext` → `useCurrentClient` + `useCurrentNetwork`, `useConnectWallet`/`useDisconnectWallet`/`useSignPersonalMessage` → `useDAppKit().connectWallet/disconnectWallet/signPersonalMessage` (wrap in `useMutation` where `isPending` is shown), `useCurrentWallet().currentWallet` → `useCurrentWallet()`. Add the `Register` module augmentation for typed hooks. Touches 11 files in `apps/web`. **Gate:** test Google sign-in, onboarding, likes, and link/unlink of a Slush wallet on the production URL before merging, since none of that can be tested on preview or localhost.
 
 ## TODO
 

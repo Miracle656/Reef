@@ -15,6 +15,8 @@ The web app talks to the indexer over HTTP (tRPC feed/profile API, the Enoki **s
 
 It's a pnpm-workspace package, so build/run from the **repo root**.
 
+**Node 22 or newer.** `@mysten/sui` 2.39+ requires it (root `engines.node` is `>=22`). Render and Vercel default to 22+, but check any host that pins an older Node.
+
 **Provision Postgres** (Neon works — already used in dev) and get its connection string.
 
 **Environment variables**
