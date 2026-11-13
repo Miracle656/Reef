@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import { testnetConfig, type SuiNetwork, type UmbraConfig } from "@umbra/core";
+import { parseSponsorMode, testnetConfig, type SuiNetwork, type UmbraConfig } from "@umbra/core";
 
 const PACKAGE_ID = process.env.EXPO_PUBLIC_UMBRA_PACKAGE_ID ?? "0x0";
 const REGISTRY_ID = process.env.EXPO_PUBLIC_UMBRA_REGISTRY_ID ?? "0x0";
@@ -23,6 +23,8 @@ function devIndexerUrl(): string {
 
 export const INDEXER_URL = process.env.EXPO_PUBLIC_INDEXER_URL ?? devIndexerUrl();
 export const SPONSOR_API_URL = process.env.EXPO_PUBLIC_SPONSOR_API_URL ?? `${INDEXER_URL}/sponsor`;
+/** "enoki" (default) or "self" (our own sponsor key, address-balance gas; see #11). */
+export const SPONSOR_MODE = parseSponsorMode(process.env.EXPO_PUBLIC_SPONSOR_MODE);
 export const SUINS_MINT_URL = `${INDEXER_URL}/suins/mint`;
 
 /** Walrus image served through the indexer proxy (reachable + correct Content-Type). */

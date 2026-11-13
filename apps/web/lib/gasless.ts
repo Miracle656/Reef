@@ -2,11 +2,11 @@
 
 import { useWallets } from "@mysten/dapp-kit";
 import { isEnokiWallet } from "@mysten/enoki";
-import { sponsorAndExecute } from "@umbra/core";
+import { executeGasless } from "@umbra/core";
 import { Transaction } from "@mysten/sui/transactions";
 import { useCallback } from "react";
 import { useChainClient } from "@/lib/sui-client";
-import { NETWORK, SPONSOR_API_URL } from "./config";
+import { NETWORK, SPONSOR_API_URL, SPONSOR_MODE } from "./config";
 
 type SignFeature = {
   signTransaction: (input: {
@@ -67,7 +67,7 @@ export function useGasless() {
       const feature = (enokiWallet.features as Record<string, unknown>)["sui:signTransaction"] as SignFeature | undefined;
       if (!feature?.signTransaction) throw new Error("Enoki wallet can't sign transactions");
 
-      return sponsorAndExecute({
+      return executeGasless(SPONSOR_MODE, {
         sponsorUrl: SPONSOR_API_URL,
         client,
         tx,
