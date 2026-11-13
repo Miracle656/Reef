@@ -25,7 +25,7 @@ import {
   SponsorPolicyError,
   umbraAllowedTargets,
 } from "@umbra/core/server";
-import { createSuiClient, type SuiNetwork } from "@umbra/core";
+import { createSuiClient, savings, type SuiNetwork } from "@umbra/core";
 import type { IndexerEnv } from "./config";
 
 /** Self-run sponsor rate limit: transactions per sender per window. */
@@ -58,6 +58,10 @@ export function sponsorRoutes(env: IndexerEnv): Hono {
     ...predictAllowedTargets(),
     ...messagingAllowedTargets(),
     ...frameworkCoinTargets().map(normalizeMoveTarget),
+    // #15 savings (testnet): the six savings entry points + the test-USDC faucet.
+    ...(env.savingsPackageId
+      ? [...savings.savingsAllowedTargets(env.savingsPackageId), env.savingsPackageId + "::test_usdc::mint"].map(normalizeMoveTarget)
+      : []),
   ];
 
   app.post("/sponsor", async (c) => {

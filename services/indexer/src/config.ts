@@ -13,6 +13,9 @@ export interface IndexerEnv {
   selfSponsorKey?: string;
   /** per-transaction gas budget cap for the self-run sponsor, in MIST (default 0.05 SUI) */
   selfSponsorMaxGasBudget: bigint;
+  /** reef_savings package (#15); when set, its entry points (and the testnet
+   *  test-USDC faucet) are sponsored */
+  savingsPackageId?: string;
   /** rolling 24h cap on the self-run sponsor's total gas budgets, in MIST (default 10 SUI). Senders are free to rotate addresses, so this bounds the worst case. */
   selfSponsorDailyBudget: bigint;
   /** app-owned SuiNS parent name, e.g. "umbra.sui"; minting disabled if absent */
@@ -49,6 +52,7 @@ export function loadEnv(): IndexerEnv {
     selfSponsorKey: process.env.SPONSOR_SECRET_KEY,
     selfSponsorMaxGasBudget: BigInt(process.env.SPONSOR_MAX_GAS_BUDGET ?? 50_000_000),
     selfSponsorDailyBudget: BigInt(process.env.SPONSOR_DAILY_BUDGET ?? 10_000_000_000),
+    savingsPackageId: process.env.SAVINGS_PACKAGE_ID || undefined,
     suinsParentName: process.env.SUINS_PARENT_NAME,
     dusdcFaucetKey: process.env.DUSDC_FAUCET_SECRET_KEY,
     dusdcDripUsd: Number(process.env.DUSDC_DRIP_USD ?? 25),
