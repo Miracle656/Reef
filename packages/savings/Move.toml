@@ -1,0 +1,15 @@
+[package]
+name = "reef_savings"
+edition = "2024.beta"
+version = "0.1.0"
+# USDC savings (#15), testnet: Flex (hold the lender's receipt) and Lock (a
+# user-owned, non-transferable SavingsLock wrapping it). `mock_yield` stands in
+# for a real lender (Scallop/NAVI/Suilend) until one is chosen (#16). Kept as
+# its own package so it publishes independently of the social package.
+
+# Like packages/move: no pinned framework rev; the CLI injects the system
+# packages that match its version.
+[dependencies]
+
+[addresses]
+reef_savings = "0x0"

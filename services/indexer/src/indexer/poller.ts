@@ -9,6 +9,7 @@ import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { prisma } from "../db";
 import type { IndexerEnv } from "../config";
 import { applyEvent, normalizeEvent } from "./handlers";
+import { applySavingsEvent, normalizeSavingsEvent } from "./savings";
 
 const MODULES = ["profile", "post", "follow"] as const;
 const PAGE = 50;
@@ -49,6 +50,62 @@ async function saveCursor(module: string, cursor: string): Promise<void> {
   });
 }
 
+// Savings (#15) needs each event's tx digest + sequence (ledger key) and time.
+const SAVINGS_EVENTS_QUERY = `
+  query SavingsEvents($module: String!, $after: String, $first: Int!) {
+    events(first: $first, after: $after, filter: { module: $module }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { sequenceNumber timestamp transaction { digest } contents { type { repr } json } }
+    }
+  }
+`;
+
+type SavingsEventsResult = {
+  events: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: {
+      sequenceNumber: number;
+      timestamp: string | null;
+      transaction: { digest: string } | null;
+      contents: { type: { repr: string }; json: unknown } | null;
+    }[];
+  };
+};
+
+/** Ingest `reef_savings::savings` events (separate package, own cursor). */
+async function pollSavings(gql: SuiGraphQLClient, packageId: string): Promise<number> {
+  const key = `savings:${packageId}`;
+  let cursor = await loadCursor(key);
+  let hasNext = true;
+  let total = 0;
+  while (hasNext) {
+    const res = await gql.query<SavingsEventsResult>({
+      query: SAVINGS_EVENTS_QUERY,
+      variables: { module: `${packageId}::savings`, after: cursor, first: PAGE },
+    });
+    if (res.errors?.length) throw new Error(`GraphQL: ${res.errors.map((e) => e.message).join("; ")}`);
+    const page = res.data!.events;
+    for (const n of page.nodes) {
+      if (!n.contents || !n.transaction) continue;
+      const ev = normalizeSavingsEvent(n.contents.type.repr, n.contents.json, {
+        digest: n.transaction.digest,
+        sequenceNumber: n.sequenceNumber,
+        timestampMs: n.timestamp ? Date.parse(n.timestamp) : 0,
+      });
+      if (ev) {
+        await applySavingsEvent(prisma, ev);
+        total += 1;
+      }
+    }
+    if (page.nodes.length > 0 && page.pageInfo.endCursor) {
+      cursor = page.pageInfo.endCursor;
+      await saveCursor(key, cursor);
+    }
+    hasNext = page.pageInfo.hasNextPage && page.nodes.length > 0;
+  }
+  return total;
+}
+
 export async function pollOnce(env: IndexerEnv): Promise<number> {
   const gql = new SuiGraphQLClient({ url: env.graphqlUrl, network: env.umbra.network });
   let total = 0;
@@ -79,6 +136,7 @@ export async function pollOnce(env: IndexerEnv): Promise<number> {
       hasNext = page.pageInfo.hasNextPage && page.nodes.length > 0;
     }
   }
+  if (env.savingsPackageId) total += await pollSavings(gql, env.savingsPackageId);
   return total;
 }
 

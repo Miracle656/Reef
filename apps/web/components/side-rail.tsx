@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
-import { umbraConfig } from "@/lib/config";
+import { SAVINGS, umbraConfig } from "@/lib/config";
 import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
 import { ComposeModal } from "./compose-modal";
@@ -23,6 +23,9 @@ export function SearchIcon({ className = cls }: { className?: string }) {
 }
 export function MarketsIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><path d="M3 3v18h18" /><path d="M7 14l3-4 3 3 4-6" /></svg>;
+}
+export function SavingsIcon({ className = cls }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" {...stroke}><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M16 13.5h.01M3 10h18M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>;
 }
 export function CrosshairIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="9" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></svg>;
@@ -96,6 +99,8 @@ function useNav() {
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
     { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
+    // #15: only when a savings deployment is configured
+    ...(SAVINGS ? [{ href: "/savings", label: "Savings", active: pathname.startsWith("/savings"), icon: <SavingsIcon /> }] : []),
     { href: "/notifications", label: "Notifications", active: pathname.startsWith("/notifications"), icon: <BellIcon />, badge: unread },
     { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon />, badge: msgUnread },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },

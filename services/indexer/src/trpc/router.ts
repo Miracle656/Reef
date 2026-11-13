@@ -11,6 +11,7 @@ import type { Post as PostRow, Profile as ProfileRow } from "@prisma/client";
 import { applyReaction } from "../reactions";
 import { applyStatus, applyStatusDelete, STATUS_TTL_MS } from "../status";
 import { applyWalletLink } from "../links";
+import { savingsStatement, type SavingsKind } from "../indexer/savings";
 import { publicProcedure, router } from "./trpc";
 
 const SuiAddress = z.string().regex(/^0x[0-9a-fA-F]+$/);
@@ -561,6 +562,40 @@ export const appRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ctx.prisma.linkedAddress.deleteMany({ where: { owner: input.owner, linked: input.linked } });
       return { ok: true };
+    }),
+
+  // --- USDC savings (#15) ---
+  savingsLocks: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
+    const rows = await ctx.prisma.savingsLock.findMany({ where: { owner: input.owner }, orderBy: { openedMs: "desc" } });
+    return rows.map((r) => ({
+      lockId: r.lockId,
+      principal: r.principal.toString(),
+      receipts: r.receipts.toString(),
+      unlockMs: Number(r.unlockMs),
+      breakable: r.breakable,
+      halal: r.halal,
+      openedMs: Number(r.openedMs),
+      status: r.status,
+      returned: r.returned?.toString() ?? null,
+      closedMs: r.closedMs == null ? null : Number(r.closedMs),
+    }));
+  }),
+  savingsActivity: publicProcedure
+    .input(z.object({ owner: SuiAddress, limit: z.number().int().min(1).max(100).default(30) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.savingsEvent.findMany({ where: { owner: input.owner }, orderBy: { timestampMs: "desc" }, take: input.limit });
+      return rows.map((r) => ({ id: r.id, kind: r.kind, amount: r.amount.toString(), lockId: r.lockId, timestampMs: Number(r.timestampMs), digest: r.digest }));
+    }),
+  /** Realized yield for a period (e.g. a tax year); amounts in USDC base units. */
+  savingsStatement: publicProcedure
+    .input(z.object({ owner: SuiAddress, fromMs: z.number().int().optional(), toMs: z.number().int().optional() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.savingsEvent.findMany({ where: { owner: input.owner }, orderBy: [{ timestampMs: "asc" }, { id: "asc" }] });
+      return savingsStatement(
+        rows.map((r) => ({ ...r, kind: r.kind as SavingsKind })),
+        input.fromMs == null ? undefined : BigInt(input.fromMs),
+        input.toMs == null ? undefined : BigInt(input.toMs),
+      );
     }),
 
   // --- messaging typing presence (ephemeral, in-memory) ---
