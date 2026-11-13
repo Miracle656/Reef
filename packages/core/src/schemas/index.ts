@@ -211,3 +211,41 @@ export type SignedWalletLink = z.infer<typeof SignedWalletLinkSchema>;
 export function canonicalWalletLinkBytes(m: WalletLinkMessage): Uint8Array {
   return new TextEncoder().encode(`umbra:link:${m.owner}:${m.linked}:${m.timestamp}`);
 }
+
+// ---- recovery passkeys (#10) -------------------------------------------------
+
+/**
+ * Record (or forget) a recovery passkey for an account. The on-chain
+ * `AddressAliases` set decides who can sign; this stores what the chain doesn't:
+ * the WebAuthn credential id + public key a new device needs, and a label.
+ * Signed by `owner` (or one of its aliases), so nobody else can add or remove
+ * records for an account.
+ */
+export const PasskeyRecordMessageSchema = z.object({
+  action: z.enum(["add", "remove"]),
+  /** the account the passkey can sign for (the zkLogin address) */
+  owner: SuiAddress,
+  /** the passkey's own Sui address (must match `publicKey`) */
+  passkey: SuiAddress,
+  /** base64 compressed secp256r1 public key (33 bytes) */
+  publicKey: z.string().max(64),
+  /** base64url WebAuthn credential id */
+  credentialId: z.string().max(1024),
+  label: z.string().max(64),
+  timestamp: z.number().int(),
+});
+
+export const SignedPasskeyRecordSchema = z.object({
+  message: PasskeyRecordMessageSchema,
+  /** base64 personal-message signature by `owner` (or an alias) over canonicalPasskeyRecordBytes */
+  signature: z.string(),
+});
+
+export type PasskeyRecordMessage = z.infer<typeof PasskeyRecordMessageSchema>;
+export type SignedPasskeyRecord = z.infer<typeof SignedPasskeyRecordSchema>;
+
+export function canonicalPasskeyRecordBytes(m: PasskeyRecordMessage): Uint8Array {
+  return new TextEncoder().encode(
+    `reef:passkey:${m.action}:${m.owner}:${m.passkey}:${m.publicKey}:${m.credentialId}:${m.timestamp}:${m.label}`,
+  );
+}
