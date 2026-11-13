@@ -1,5 +1,5 @@
 /**
- * DeepBook v3 integration (@mysten/deepbook-v3 1.5.1).
+ * DeepBook v3 integration (@mysten/deepbook-v3 2.12, spot only).
  *
  * DeepBook trades existing `Coin<T>` types — it does not mint coins. The flow:
  *   1. publish a creator coin (see packages/creator-coin) -> a Coin<T>
@@ -7,8 +7,8 @@
  *      POOL_CREATION_FEE_DEEP, paid by the pool creator)
  *   3. traders use a shared BalanceManager + `addPlaceLimitOrder`
  *
- * The `DeepBookClient` accepts our normal JSON-RPC client
- * (`DeepBookCompatibleClient extends ClientWithCoreApi`) — no gRPC needed.
+ * The `DeepBookClient` accepts our gRPC client
+ * (`DeepBookCompatibleClient extends ClientWithCoreApi`).
  */
 import {
   DeepBookClient,
