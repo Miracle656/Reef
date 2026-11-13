@@ -153,6 +153,18 @@ export function ActionBar({ post }: { post: Post }) {
         <span>{d?.bookmarks ?? 0}</span>
       </button>
 
+      {/* #13: tip the author; opens your DM with them, where the note stays private */}
+      {account && account.address !== post.author ? (
+        <Link
+          href={`/messages?to=${post.author}&pay=1&post=${post.id}`}
+          className="inline-flex items-center text-sm transition-colors hover:text-ink"
+          aria-label="Tip"
+          title="Tip"
+        >
+          <Icon name="tip" />
+        </Link>
+      ) : null}
+
       <button type="button" onClick={share} className="inline-flex items-center text-sm transition-colors hover:text-ink" aria-label="Share">
         <Icon name="share" />
       </button>
@@ -161,7 +173,7 @@ export function ActionBar({ post }: { post: Post }) {
   );
 }
 
-function Icon({ name, filled }: { name: "comment" | "repost" | "bookmark" | "share"; filled?: boolean }) {
+function Icon({ name, filled }: { name: "comment" | "repost" | "bookmark" | "share" | "tip"; filled?: boolean }) {
   const common = { className: "h-[18px] w-[18px]", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (name === "comment")
     return (
@@ -176,6 +188,13 @@ function Icon({ name, filled }: { name: "comment" | "repost" | "bookmark" | "sha
         <path d="M3 11V9a4 4 0 0 1 4-4h14" />
         <path d="m7 23-4-4 4-4" />
         <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+      </svg>
+    );
+  if (name === "tip")
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M15 9.5c-.4-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.6-.5-3-1.5M12 6.5V8m0 8v1.5" />
       </svg>
     );
   if (name === "bookmark")

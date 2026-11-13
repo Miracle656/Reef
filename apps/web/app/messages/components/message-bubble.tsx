@@ -7,7 +7,8 @@ import { timeShort } from "../lib/format";
 import { downloadMedia, useMediaUrl } from "../lib/media-crypto";
 import type { Message } from "../lib/types";
 import { PollView } from "./poll-view";
-import { CheckIcon, CheckCheckIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, MoreIcon, PaperclipIcon, ReplyIcon } from "./icons";
+import { explorerTxUrl } from "@/lib/config";
+import { CheckIcon, CheckCheckIcon, CoinIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, MoreIcon, PaperclipIcon, ReplyIcon } from "./icons";
 
 export interface ReplyPreview {
   name: string;
@@ -159,6 +160,7 @@ function Content({
   }
   if (m.type === "voice" && m.fileUrl) return <VoiceClip message={m} />;
   if (m.type === "poll" && m.poll) return <PollView message={m} mine={mine} onVote={(i) => onVotePoll(m.id, i)} />;
+  if (m.type === "payment" && m.payment) return <PaymentCard message={m} mine={mine} />;
   if (m.type === "image" && m.fileUrl) return <ChatImage message={m} onOpenImage={onOpenImage} />;
   if (m.type === "file" && m.fileUrl) {
     return (
@@ -275,5 +277,28 @@ function highlightMentions(text: string) {
     ) : (
       <span key={i}>{renderEmoji(p)}</span>
     ),
+  );
+}
+
+/** A payment sent in the DM (#13): public on-chain transfer + encrypted note. */
+function PaymentCard({ message: m, mine }: { message: Message; mine: boolean }) {
+  const p = m.payment!;
+  const soft = mine ? "text-on-accent/75" : "text-ink-faint";
+  return (
+    <div className="min-w-[200px]">
+      <span className={`flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide ${soft}`}>
+        <CoinIcon className="h-3.5 w-3.5" /> {p.postId ? (mine ? "You tipped" : "Tip for your post") : mine ? "You sent" : "You received"}
+      </span>
+      <span className="mt-0.5 block text-[22px] font-bold leading-tight">
+        {p.amount} {p.coin}
+      </span>
+      {m.content ? <span className="mt-1 block whitespace-pre-wrap break-words">{m.content}</span> : null}
+      <span className={`mt-1.5 flex items-center gap-1 text-[11.5px] ${soft}`}>
+        <LockIcon className="h-3 w-3" /> {m.content ? "Note is private" : "Private chat"} · payment is on-chain ·{" "}
+        <a href={explorerTxUrl(p.digest)} target="_blank" rel="noreferrer" className="underline">
+          view
+        </a>
+      </span>
+    </div>
   );
 }

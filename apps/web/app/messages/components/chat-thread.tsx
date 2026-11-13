@@ -25,7 +25,16 @@ const DISAPPEAR_OPTIONS: { label: string; seconds: number }[] = [
   { label: "7 days", seconds: 604800 },
 ];
 
-export function ChatThread({ onBack }: { onBack: () => void }) {
+export function ChatThread({
+  onBack,
+  payIntent = null,
+  onPayIntentDone,
+}: {
+  onBack: () => void;
+  /** tip deep link (#13): open the pay sheet once this DM is active */
+  payIntent?: { to: string; postId?: string } | null;
+  onPayIntentDone?: () => void;
+}) {
   const { state, me, activeChat, toggleReaction, votePoll, markViewOnce } = useMessaging();
   const scrollRef = useRef<HTMLDivElement>(null);
   const chat = activeChat;
@@ -183,6 +192,9 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
         editing={editing}
         onCancelReply={() => setReplyTo(null)}
         onCancelEdit={() => setEditing(null)}
+        payRecipient={chat.type === "direct" && peer ? peer : undefined}
+        payIntent={payIntent && peer && sameId(payIntent.to, peer.id) ? payIntent : null}
+        onPayIntentDone={onPayIntentDone}
       />
 
       {/* overlays */}

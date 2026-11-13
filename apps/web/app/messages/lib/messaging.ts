@@ -23,6 +23,7 @@ import type {
   Message,
   MessageType,
   Participant,
+  PaymentInfo,
   PollState,
   Status,
   StatusGroup,
@@ -52,6 +53,8 @@ export interface SendMessageInput {
   /** poll creation (type "poll"): option texts + choice mode */
   pollOptions?: string[];
   allowMultiple?: boolean;
+  /** payment details (type "payment", #13) */
+  payment?: PaymentInfo;
   /** client-generated id for optimistic reconciliation */
   clientId?: string;
 }

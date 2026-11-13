@@ -91,3 +91,6 @@ export const FileIcon = ({ className = base }: P) => (
 export const WaveIcon = ({ className = base }: P) => (
   <svg className={className} viewBox="0 0 24 24" {...s}><path d="M18 11V6a1.5 1.5 0 0 0-3 0M15 11V4.5a1.5 1.5 0 0 0-3 0V11M12 11V6a1.5 1.5 0 0 0-3 0v8" /><path d="M9 12.5 7.5 11A1.6 1.6 0 0 0 5 13l2 3.5A7 7 0 0 0 18 15v-4a1.5 1.5 0 0 0-3 0" /></svg>
 );
+export const CoinIcon = ({ className = base }: P) => (
+  <svg className={className} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M15 9.5c-.4-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.6-.5-3-1.5M12 6.5V8m0 8v1.5" /></svg>
+);

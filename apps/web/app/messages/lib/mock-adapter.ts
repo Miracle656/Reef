@@ -349,6 +349,7 @@ export class MockMessaging implements Messaging {
       viewOnce: input.viewOnce,
       mentionIds: input.mentionIds,
       audienceIds: input.audienceIds,
+      payment: input.payment,
       clientId: input.clientId,
       status: "sent",
       createdAt: nowIso(),

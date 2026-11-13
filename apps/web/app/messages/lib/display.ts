@@ -48,6 +48,9 @@ function bodyPreview(m: Message): string {
       return "Location";
     case "poll":
       return m.poll?.question ?? "Poll";
+    case "payment":
+      // Amount only. The note stays inside the thread.
+      return m.payment ? `💸 ${m.payment.amount} ${m.payment.coin}` : "Payment";
     default:
       if (m.isWhisper) return "Whisper";
       return m.content || "";

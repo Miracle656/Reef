@@ -43,7 +43,7 @@ sign-in — Mystry's OTP/invite auth was intentionally dropped.
 
 ## Features
 
-- **Done:** DMs, groups (+ admin: add/remove/promote/leave, edit name/desc),
+- **Done:** payments with a private note (#13, see docs/private-tips.md), DMs, groups (+ admin: add/remove/promote/leave, edit name/desc),
   reactions, edit, reply, forward, in-chat search, media + file + image viewer,
   typing, read receipts, mute/archive, whisper messages, polls, location,
   view-once photos, disappearing-message timer, saved + pinned, @mentions,

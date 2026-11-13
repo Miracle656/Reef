@@ -21,6 +21,8 @@ export type MessageType =
   | "voice"
   | "location"
   | "poll"
+  /** on-chain transfer + private note (#13); `payment` holds the details, `content` the note */
+  | "payment"
   | "system"
   // control messages — ride the same encrypted transport but are applied to
   // other messages (reactions, pins, poll votes) instead of being rendered
@@ -43,6 +45,20 @@ export interface PollState {
   myVotes: number[];
   /** per-user vote registry (userId → option indices) — counts derive from it */
   voters?: Record<string, number[]>;
+}
+
+/** A payment sent inside a DM (#13). The transfer is public on-chain; the note
+ *  (the message `content`) is end-to-end encrypted like any other message. */
+export interface PaymentInfo {
+  /** transaction digest */
+  digest: string;
+  coin: "SUI" | "USDC";
+  /** human amount, e.g. "2" or "0.5" */
+  amount: string;
+  /** recipient address */
+  to: string;
+  /** set when it's a tip on a post */
+  postId?: string;
 }
 
 export interface Message {
@@ -97,6 +113,7 @@ export interface Message {
 
   reactions?: Reaction[];
   poll?: PollState;
+  payment?: PaymentInfo;
 
   createdAt: string;
   sender?: ChatUser;
