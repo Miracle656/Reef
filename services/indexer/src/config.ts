@@ -9,6 +9,12 @@ export interface IndexerEnv {
   graphqlUrl: string;
   /** Enoki private API key (server-only); sponsor disabled if absent */
   enokiApiKey?: string;
+  /** self-run sponsor key (`suiprivkey…`), pays gas from its SUI address balance; `/sponsor/self` disabled if absent */
+  selfSponsorKey?: string;
+  /** per-transaction gas budget cap for the self-run sponsor, in MIST (default 0.05 SUI) */
+  selfSponsorMaxGasBudget: bigint;
+  /** rolling 24h cap on the self-run sponsor's total gas budgets, in MIST (default 10 SUI). Senders are free to rotate addresses, so this bounds the worst case. */
+  selfSponsorDailyBudget: bigint;
   /** app-owned SuiNS parent name, e.g. "umbra.sui"; minting disabled if absent */
   suinsParentName?: string;
   /** dUSDC faucet keypair (bech32 `suiprivkey…`); drip disabled if absent */
@@ -40,6 +46,9 @@ export function loadEnv(): IndexerEnv {
     pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 3000),
     graphqlUrl: process.env.SUI_GRAPHQL_URL ?? "https://graphql.testnet.sui.io/graphql",
     enokiApiKey: process.env.ENOKI_PRIVATE_API_KEY,
+    selfSponsorKey: process.env.SPONSOR_SECRET_KEY,
+    selfSponsorMaxGasBudget: BigInt(process.env.SPONSOR_MAX_GAS_BUDGET ?? 50_000_000),
+    selfSponsorDailyBudget: BigInt(process.env.SPONSOR_DAILY_BUDGET ?? 10_000_000_000),
     suinsParentName: process.env.SUINS_PARENT_NAME,
     dusdcFaucetKey: process.env.DUSDC_FAUCET_SECRET_KEY,
     dusdcDripUsd: Number(process.env.DUSDC_DRIP_USD ?? 25),

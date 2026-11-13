@@ -5,7 +5,7 @@
   "description": "ReeF — a Sui-native decentralized social superapp (testnet).",
   "packageManager": "pnpm@10.20.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "turbo run dev",

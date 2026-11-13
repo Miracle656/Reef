@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMessaging } from "../lib/provider";
 import type { Message, Participant } from "../lib/types";
 import { PollComposer } from "./poll-composer";
-import { EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, PaperclipIcon, PlusIcon, PollIcon, SendIcon, XIcon } from "./icons";
+import { PaySheet } from "./pay-sheet";
+import { CoinIcon, EyeIcon, ImageIcon, LockIcon, MapPinIcon, MicIcon, PaperclipIcon, PlusIcon, PollIcon, SendIcon, XIcon } from "./icons";
 
 export function Composer({
   chatId,
@@ -16,6 +17,9 @@ export function Composer({
   editing,
   onCancelReply,
   onCancelEdit,
+  payRecipient,
+  payIntent,
+  onPayIntentDone,
 }: {
   chatId: string;
   participants?: Participant[];
@@ -26,6 +30,11 @@ export function Composer({
   editing?: Message | null;
   onCancelReply: () => void;
   onCancelEdit: () => void;
+  /** the other person in a DM; enables "Send money" (#13) */
+  payRecipient?: Participant;
+  /** open the pay sheet right away (tip deep link from a post) */
+  payIntent?: { postId?: string } | null;
+  onPayIntentDone?: () => void;
 }) {
   const { send, editMessage, setTyping, uploadMedia } = useMessaging();
   const [text, setText] = useState("");
@@ -34,6 +43,10 @@ export function Composer({
   const [asideOn, setAsideOn] = useState(false);
   const [asideAudience, setAsideAudience] = useState<Set<string>>(new Set());
   const [pollOpen, setPollOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  useEffect(() => {
+    if (payIntent && payRecipient) setPayOpen(true);
+  }, [payIntent, payRecipient]);
   const otherMembers = participants.filter((p) => p.id !== meId);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -259,6 +272,9 @@ export function Composer({
                 <button onClick={() => fileRef.current?.click()} className={attachItem}><PaperclipIcon className="h-4 w-4 text-ink-soft" /> File</button>
                 <button onClick={() => { setAttachOpen(false); setPollOpen(true); }} className={attachItem}><PollIcon className="h-4 w-4 text-ink-soft" /> Poll</button>
                 <button onClick={shareLocation} className={attachItem}><MapPinIcon className="h-4 w-4 text-ink-soft" /> Location</button>
+                {payRecipient ? (
+                  <button onClick={() => { setAttachOpen(false); setPayOpen(true); }} className={attachItem}><CoinIcon className="h-4 w-4 text-ink-soft" /> Send money</button>
+                ) : null}
               </div>
             </>
           ) : null}
@@ -327,6 +343,17 @@ export function Composer({
       </div>
 
       {pollOpen ? <PollComposer chatId={chatId} onClose={() => setPollOpen(false)} /> : null}
+      {payOpen && payRecipient ? (
+        <PaySheet
+          chatId={chatId}
+          recipient={payRecipient}
+          postId={payIntent?.postId}
+          onClose={() => {
+            setPayOpen(false);
+            onPayIntentDone?.();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

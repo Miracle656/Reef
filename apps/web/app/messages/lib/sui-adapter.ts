@@ -26,6 +26,7 @@ import type {
   Message,
   MessageType,
   Participant,
+  PaymentInfo,
   StatusGroup,
 } from "./types";
 import { encryptAndUpload } from "./media-crypto";
@@ -71,6 +72,8 @@ interface Envelope {
   /** poll creation (type "poll") */
   pollOptions?: string[];
   allowMultiple?: boolean;
+  /** payment details (type "payment", #13) */
+  payment?: PaymentInfo;
   clientId?: string;
 }
 
@@ -95,6 +98,7 @@ function encodeEnvelope(input: SendMessageInput, from: string): string {
     optionIndex: input.optionIndex,
     pollOptions: input.pollOptions,
     allowMultiple: input.allowMultiple,
+    payment: input.payment,
     clientId: input.clientId,
   };
   return JSON.stringify(env);
@@ -157,6 +161,7 @@ function toMessage(chatId: string, dm: DecodedSdkMessage): Message {
     pinned: env.pinned,
     optionIndex: env.optionIndex,
     poll: env.type === "poll" ? pollFrom(dm.messageId, env.content ?? "", env.pollOptions, env.allowMultiple) : undefined,
+    payment: env.type === "payment" ? env.payment : undefined,
     isDeleted: dm.isDeleted,
     isEdited: dm.isEdited,
     status: "delivered",

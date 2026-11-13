@@ -117,6 +117,80 @@ export interface SponsorAndExecuteParams {
   sign: (sponsoredBytes: string) => Promise<{ signature: string }>;
 }
 
+// ---- mode switch ------------------------------------------------------------
+
+/** Who pays gas: Enoki (default) or ReeF's own sponsor key (`/sponsor/self`). */
+export type SponsorMode = "enoki" | "self";
+
+/** Reads `*_SPONSOR_MODE` env values; anything but `"self"` means Enoki. */
+export function parseSponsorMode(value: string | undefined): SponsorMode {
+  return value?.trim().toLowerCase() === "self" ? "self" : "enoki";
+}
+
+/** Run a gasless transaction through whichever sponsor `mode` selects. The
+ *  `sign` callback is the same for both: sign the final bytes as the sender. */
+export function executeGasless(mode: SponsorMode, p: SponsorAndExecuteParams): Promise<ExecuteResponse> {
+  return mode === "self" ? selfSponsorAndExecute(p) : sponsorAndExecute(p);
+}
+
+// ---- self-run sponsor (#11): address-balance gas, user signs first ---------
+
+export interface SelfSponsorInfo {
+  /** address whose SUI address balance pays the gas */
+  sponsorAddress: string;
+  /** per-transaction budget cap (MIST, decimal string) */
+  maxGasBudget: string;
+}
+
+/** `GET {sponsorUrl}/self` → the self-run sponsor's address + budget cap. */
+export async function getSelfSponsorInfo(sponsorUrl: string): Promise<SelfSponsorInfo> {
+  const res = await fetch(`${sponsorUrl.replace(/\/$/, "")}/self`);
+  if (!res.ok) throw new SponsorHttpError(res.status, `self sponsor info failed: HTTP ${res.status}`);
+  return (await res.json()) as SelfSponsorInfo;
+}
+
+/** `POST {sponsorUrl}/self` with the user-signed bytes → sponsor co-signs + executes. */
+export async function submitSelfSponsored(
+  sponsorUrl: string,
+  body: { txBytes: string; signature: string },
+): Promise<ExecuteResponse> {
+  const res = await fetch(`${sponsorUrl.replace(/\/$/, "")}/self`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null) as { error?: string } | null;
+    throw new SponsorHttpError(res.status, `self sponsor failed: HTTP ${res.status}${detail?.error ? ` (${detail.error})` : ""}`);
+  }
+  return (await res.json()) as ExecuteResponse;
+}
+
+/**
+ * Self-run sponsorship: gas comes from the sponsor key's SUI **address
+ * balance**, so there are no gas coins to pick and the bytes are final before
+ * the sponsor sees them. Order: set gas owner = sponsor + payment = [] → build
+ * (the SDK adds a short `ValidDuring` expiration) → user signs → sponsor checks
+ * policy, co-signs and executes.
+ *
+ * Retrying the submit is safe: the bytes (and so the digest) are fixed, so a
+ * second submit of the same signed tx can't execute twice.
+ */
+export async function selfSponsorAndExecute(p: Omit<SponsorAndExecuteParams, "network">): Promise<ExecuteResponse> {
+  const info = await withRetry(() => getSelfSponsorInfo(p.sponsorUrl));
+  p.tx.setSender(p.sender);
+  p.tx.setGasOwner(info.sponsorAddress);
+  p.tx.setGasPayment([]);
+  const bytes = await p.tx.build({ client: p.client });
+  const budget = BigInt(p.tx.getData().gasData.budget ?? 0);
+  if (budget > BigInt(info.maxGasBudget)) {
+    throw new SponsorHttpError(400, `gas budget ${budget} is over the sponsor's ${info.maxGasBudget} cap`);
+  }
+  const txBytes = toBase64(bytes);
+  const { signature } = await withRetry(() => p.sign(txBytes), 2, 500);
+  return withRetry(() => submitSelfSponsored(p.sponsorUrl, { txBytes, signature }));
+}
+
 /** Full client orchestration: build -> sponsor -> sign -> execute.
  *
  * Each step retries transient failures (Enoki prover/API blips, 5xx, network),
