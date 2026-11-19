@@ -6,6 +6,6 @@ import type { UmbraConfig } from "../config";
  * off on public fullnodes in 2026, so everything goes through the transport-
  * agnostic core API (`client.core` / `ClientWithCoreApi`) over gRPC-web.
  */
-export function createSuiClient(cfg: UmbraConfig): SuiGrpcClient {
+export function createSuiClient(cfg: Pick<UmbraConfig, "network" | "fullnodeUrl">): SuiGrpcClient {
   return new SuiGrpcClient({ baseUrl: cfg.fullnodeUrl, network: cfg.network });
 }

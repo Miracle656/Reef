@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
-import { umbraConfig } from "@/lib/config";
+import { umbraConfig, WALLET_NETWORK } from "@/lib/config";
 import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
 import { ComposeModal } from "./compose-modal";
@@ -38,6 +38,9 @@ export function BellIcon({ className = cls }: { className?: string }) {
 }
 export function GearIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
+}
+export function WalletIcon({ className = cls }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" {...stroke}><path d="M19 7V6a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7" /><path d="M16.5 14h.01" /></svg>;
 }
 export function PlusIcon({ className = cls }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>;
@@ -96,6 +99,8 @@ function useNav() {
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
     { href: "/trade", label: "Trade", active: pathname === "/trade" || pathname.startsWith("/m/"), icon: <MarketsIcon /> },
+    // Only when a wallet network is configured (NEXT_PUBLIC_WALLET_NETWORK).
+    ...(WALLET_NETWORK ? [{ href: "/wallet", label: "Wallet", active: pathname.startsWith("/wallet"), icon: <WalletIcon /> }] : []),
     { href: "/notifications", label: "Notifications", active: pathname.startsWith("/notifications"), icon: <BellIcon />, badge: unread },
     { href: "/messages", label: "Messages", active: pathname.startsWith("/messages"), icon: <MessagesIcon />, badge: msgUnread },
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
@@ -178,7 +183,7 @@ function RailItem({ href, label, active, icon, badge }: Item) {
 /** Mobile bottom bar — the rail is hidden on small screens, so EVERY
  *  destination must be reachable here: Home/Search/Trade/Notifications/
  *  Messages as icon pills, compose in the middle, and the avatar opens a
- *  menu with Profile + Settings. */
+ *  menu with Profile + Wallet (when configured) + Settings. */
 export function MobileNav() {
   const { account, profile, profileHref, items } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
@@ -188,7 +193,8 @@ export function MobileNav() {
     .map((l) => items.find((i) => i.label === l))
     .filter(Boolean) as Item[];
   const avatarUrl = profile.data?.avatarBlobId ? walrus.urlFor(umbraConfig, profile.data.avatarBlobId) : null;
-  const meActive = items.find((i) => i.label === "Profile")?.active || items.find((i) => i.label === "Settings")?.active;
+  const walletItem = items.find((i) => i.label === "Wallet");
+  const meActive = items.find((i) => i.label === "Profile")?.active || walletItem?.active || items.find((i) => i.label === "Settings")?.active;
 
   return (
     <>
@@ -225,6 +231,11 @@ export function MobileNav() {
               <Link href={profileHref} onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
                 <UserIcon className="h-[18px] w-[18px]" /> Profile
               </Link>
+              {walletItem ? (
+                <Link href={walletItem.href} onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
+                  <WalletIcon className="h-[18px] w-[18px]" /> Wallet
+                </Link>
+              ) : null}
               <Link href="/settings" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-surface-muted">
                 <GearIcon className="h-[18px] w-[18px]" /> Settings
               </Link>

@@ -18,5 +18,8 @@ export * from "./contracts/onboard";
 export * as walrus from "./walrus/index";
 export * from "./auth/sponsor-client";
 
+// wallet on the value network: balances + gasless stablecoin transfers
+export * as wallet from "./wallet/index";
+
 // DeepBook v3 (creator-coin markets)
 export * as deepbook from "./deepbook/index";
