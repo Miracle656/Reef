@@ -11,9 +11,6 @@ const WALRUS_BLOB_OWNER = process.env.NEXT_PUBLIC_WALRUS_BLOB_OWNER || undefined
 
 export const umbraConfig: UmbraConfig = testnetConfig(PACKAGE_ID, REGISTRY_ID, { walrusBlobOwner: WALRUS_BLOB_OWNER });
 
-export const SPONSOR_API_URL = process.env.NEXT_PUBLIC_SPONSOR_API_URL ?? "http://localhost:3001/sponsor";
-/** "enoki" (default) or "self" (our own sponsor key, address-balance gas; see #11). */
-export const SPONSOR_MODE = parseSponsorMode(process.env.NEXT_PUBLIC_SPONSOR_MODE);
 /**
  * Network the wallet (balances, sending, cash-out) runs on: "mainnet" for real
  * money, "testnet" to rehearse with test USDC. Unset means the app has no
@@ -23,6 +20,9 @@ export const SPONSOR_MODE = parseSponsorMode(process.env.NEXT_PUBLIC_SPONSOR_MOD
 export const WALLET_NETWORK = wallet.parseWalletNetwork(process.env.NEXT_PUBLIC_WALLET_NETWORK);
 export const walletConfig = WALLET_NETWORK ? wallet.walletConfig(WALLET_NETWORK) : null;
 
+export const SPONSOR_API_URL = process.env.NEXT_PUBLIC_SPONSOR_API_URL ?? "http://localhost:3001/sponsor";
+/** "enoki" (default) or "self" (our own sponsor key, address-balance gas; see #11). */
+export const SPONSOR_MODE = parseSponsorMode(process.env.NEXT_PUBLIC_SPONSOR_MODE);
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:3001";
 export const SUINS_MINT_URL = `${INDEXER_URL}/suins/mint`;
 
