@@ -124,3 +124,36 @@ model Status {
   @@index([owner, createdAtMs])
   @@index([createdAtMs])
 }
+
+/// Naira cash-outs through Linq (CLAUDE.md D-14): one row per order ReeF's server
+/// created. Read and written by the web app's server routes with plain SQL
+/// (`@umbra/core/server` `cashout/store`), never by the indexer. It is declared
+/// here so `prisma db push` knows the table and keeps it.
+model CashoutOrder {
+  id                  String  @id // chosen by the client (uuid); also Linq's idempotency key
+  owner               String // wallet address that made and funds the order
+  network             String // wallet network the deposit is on
+  linqOrderId         String  @unique
+  coin                String // "usdc" | "usdsui"
+  coinType            String
+  depositAddress      String
+  amountStable        BigInt // dollars to send, in the coin's base units
+  amountNgn           String // naira to be paid out, e.g. "82750.00"
+  rate                String // naira per dollar, locked when the order was made
+  bankCode            String
+  bankName            String
+  accountName         String
+  accountNumberMasked String // "******7890": the full number stays with Linq
+  status              String // awaiting_deposit | processing | paid | failed | expired
+  linqStatus          String // Linq's own status text, as last seen
+  depositDigest       String?
+  depositAtMs         BigInt?
+  settledStable       BigInt?
+  settledNgn          String?
+  createdAtMs         BigInt
+  expiresAtMs         BigInt
+  updatedAtMs         BigInt
+  refreshedAtMs       BigInt
+
+  @@index([owner, createdAtMs])
+}
