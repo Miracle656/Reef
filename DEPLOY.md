@@ -62,6 +62,7 @@ CORS is already open (`app.use("*", cors())`), so the Vercel origin can call it.
    - `NEXT_PUBLIC_INDEXER_URL` = the indexer URL from step 1
    - `NEXT_PUBLIC_SPONSOR_API_URL` = `<indexer URL>/sponsor`
    - `NEXT_PUBLIC_WALRUS_BLOB_OWNER` = the address whose key the indexer holds as `WALRUS_RENEWER_SECRET_KEY` (so uploaded media can be renewed)
+   - `NEXT_PUBLIC_WALLET_NETWORK` (optional) = `testnet` or `mainnet` to switch on the wallet at `/wallet`; leave it unset for no wallet. It needs no indexer and no sponsor: USDC and USDSUI are sent with Sui's gasless stablecoin transfers. For `mainnet`, first enable **Mainnet** on the Enoki **public** API key in the Enoki portal. Without that, Google sign-in can't sign on mainnet, so users can receive money but the Send panel says sending isn't switched on. Rehearse on `testnet` first with free test USDC from https://faucet.circle.com.
 4. **Deploy.**
 
 ### After deploy — whitelist the domain (or sign-in fails)

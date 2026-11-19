@@ -24,6 +24,7 @@
     "gsap": "^3.13.0",
     "lightweight-charts": "^4.2.3",
     "next": "15.5.19",
+    "qrcode.react": "4.2.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

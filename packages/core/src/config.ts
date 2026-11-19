@@ -56,6 +56,11 @@ const FULLNODE: Record<SuiNetwork, string> = {
   devnet: "https://fullnode.devnet.sui.io:443",
 };
 
+/** The public gRPC(-web) fullnode for `network`. */
+export function fullnodeUrl(network: SuiNetwork): string {
+  return FULLNODE[network];
+}
+
 /** Build a config from package/registry ids (testnet defaults). */
 export function testnetConfig(
   packageId: string,
