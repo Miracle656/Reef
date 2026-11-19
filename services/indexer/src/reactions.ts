@@ -3,22 +3,14 @@
  * No on-chain write in Phase 1 — the `post_id` is stable so these could be
  * settled on-chain later (see CLAUDE.md D-2).
  */
-import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import { canonicalReactionBytes, type SignedReaction } from "@umbra/core";
 import type { PrismaClient } from "@prisma/client";
-import { suiClient } from "./sui";
+import { verifySignedBy } from "./signer";
 
-/** True iff the signature is valid AND was produced by `message.reactor`. */
+/** True iff the signature is valid AND its signer may act as `message.reactor`
+ *  (the reactor's own key, or a key in its address_alias set, see signer.ts). */
 export async function verifyReaction(signed: SignedReaction): Promise<boolean> {
-  try {
-    const pk = await verifyPersonalMessageSignature(canonicalReactionBytes(signed.message), signed.signature, {
-      client: suiClient,
-      address: signed.message.reactor,
-    });
-    return pk.toSuiAddress() === signed.message.reactor;
-  } catch {
-    return false;
-  }
+  return verifySignedBy(signed.message.reactor, canonicalReactionBytes(signed.message), signed.signature);
 }
 
 /** Verify then record a reaction (latest intent wins). Returns false if invalid. */
