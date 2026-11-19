@@ -95,6 +95,36 @@ type SignTransactionFeature = {
   }) => Promise<{ bytes: string; signature: string }>;
 };
 
+type SignMessageFeature = {
+  signPersonalMessage: (input: {
+    message: Uint8Array;
+    account: { address: string };
+    chain?: string;
+  }) => Promise<{ signature: string; bytes: string }>;
+};
+
+/**
+ * Sign a personal message as the wallet's account, with the WALLET network's
+ * zkLogin session (cash-out requests are verified against that network). Like
+ * sending, the first use on a new network opens Google once, so call this from
+ * a click, not from an effect.
+ */
+export function useWalletSignMessage() {
+  const enokiWallet = useWallets().find(isEnokiWallet);
+  const enokiAccount = enokiWallet?.accounts[0];
+  return useCallback(
+    async (message: Uint8Array): Promise<string> => {
+      if (!WALLET_NETWORK) throw new Error("The wallet isn't switched on");
+      if (!enokiWallet || !enokiAccount) throw new Error("Sign in with Google first");
+      const feature = (enokiWallet.features as Record<string, unknown>)["sui:signPersonalMessage"] as SignMessageFeature | undefined;
+      if (!feature?.signPersonalMessage) throw new Error("This account can't sign messages");
+      const { signature } = await feature.signPersonalMessage({ message, account: enokiAccount, chain: `sui:${WALLET_NETWORK}` });
+      return signature;
+    },
+    [enokiWallet, enokiAccount],
+  );
+}
+
 type GetSessionFeature = {
   getSession: (input?: { network?: string }) => Promise<{ jwt?: string; expiresAt: number } | null>;
 };

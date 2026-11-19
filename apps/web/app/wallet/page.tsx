@@ -5,8 +5,10 @@ import { wallet } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
 import { SignInButton } from "@/components/sign-in-button";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
+import { WalletCashout } from "@/components/wallet-cashout";
 import { WalletReceive } from "@/components/wallet-receive";
 import { WalletSend } from "@/components/wallet-send";
+import { useCashoutInfo } from "@/lib/cashout";
 import { walletConfig } from "@/lib/config";
 import { useWalletBalances, useWalletOwner, useWalletSigning } from "@/lib/wallet";
 
@@ -33,6 +35,15 @@ function ArrowDown() {
     </svg>
   );
 }
+function BankIcon() {
+  return (
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10 12 4l9 6" />
+      <path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8" />
+      <path d="M3 20h18" />
+    </svg>
+  );
+}
 function ArrowUp() {
   return (
     <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -41,7 +52,7 @@ function ArrowUp() {
   );
 }
 
-type Panel = "receive" | "send" | null;
+type Panel = "receive" | "send" | "cashout" | null;
 
 export default function WalletPage() {
   // dapp-kit hooks are client-only: render wallet state after mount.
@@ -52,6 +63,7 @@ export default function WalletPage() {
   const { address, viewOnly } = useWalletOwner();
   const balances = useWalletBalances(address);
   const signing = useWalletSigning();
+  const cashoutInfo = useCashoutInfo();
 
   if (!walletConfig) {
     return (
@@ -66,6 +78,7 @@ export default function WalletPage() {
   const test = walletConfig.network === "testnet";
   const dollars = balances.data ? wallet.stableTotal(balances.data) : null;
   const toggle = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
+  const cashoutOn = cashoutInfo.data?.available ? cashoutInfo.data : null;
 
   return (
     <AppShell title="Wallet" subtitle={test ? "Test money on Sui testnet" : undefined}>
@@ -109,12 +122,20 @@ export default function WalletPage() {
               <Button variant={panel === "send" ? "primary" : "accent"} onClick={() => toggle("send")} aria-expanded={panel === "send"} disabled={!balances.data}>
                 <ArrowUp /> Send
               </Button>
+              {cashoutOn ? (
+                <Button variant={panel === "cashout" ? "primary" : "outline"} onClick={() => toggle("cashout")} aria-expanded={panel === "cashout"} disabled={!balances.data}>
+                  <BankIcon /> Cash out
+                </Button>
+              ) : null}
             </div>
           </Card>
 
           {panel === "receive" ? <WalletReceive address={address} config={walletConfig} /> : null}
           {panel === "send" && balances.data ? (
             <WalletSend address={address} config={walletConfig} balances={balances.data} viewOnly={viewOnly} signing={signing.data} />
+          ) : null}
+          {panel === "cashout" && balances.data && cashoutOn ? (
+            <WalletCashout address={address} config={walletConfig} balances={balances.data} info={cashoutOn} viewOnly={viewOnly} signing={signing.data} />
           ) : null}
 
           <Card className="p-2">

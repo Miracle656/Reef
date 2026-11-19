@@ -258,6 +258,15 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
   - Enoki keeps one zkLogin session per network. `providers.tsx` registers both clients, sign-in creates the social session, and the first wallet send opens Google once for the wallet network. The Enoki **public** key must have that network enabled in the portal (mainnet was not on 2026-11-19); `/wallet` detects this and keeps Send off.
   - The send flow builds and dry-runs first, shows that result for review, then signs exactly those bytes.
   - Live check, read-only: `pnpm --filter @umbra/indexer wallet:probe <mainnet|testnet> <address>`.
+- **D-14** (2026-11) **Naira cash-out runs in the web app, through Linq, without custody.** Linq's B2B offramp API takes USDC/USDSUI on Sui and pays a Nigerian bank account. It is mainnet only and has no sandbox.
+  - **Where it runs:** Next route handlers in `apps/web` (`/api/cashout`, `/api/webhooks/linq`), not the indexer, so cash-out doesn't depend on the indexer host. They are thin: the rules are `createCashoutService` in `@umbra/core/server` (`packages/core/src/cashout`), with Linq, the store and signature verification injected, so the whole flow is unit-tested.
+  - **No custody.** The server asks Linq for an order; the wallet then sends the dollars (a gasless transfer, D-13) straight to that order's one-time deposit address. `manualDeposit: true` is hard-coded in the Linq client: users hold their own keys, so the payout must follow what really arrived.
+  - **Auth without a login:** every request is a personal message signed by the wallet (`cashout.canonicalCashoutBytes`), verified on the wallet's network, fresh within 5 minutes. An order can be read or changed only by the address that made it.
+  - **Linq's answers are checked** before the app is told where to send: chain, coin type, a real Sui address that isn't the user's own, an amount within the limit, numbers that add up. The account name comes from our own bank lookup, never from the client.
+  - **Order ids are chosen by the client** and double as Linq's idempotency key, so a retry can't create a second order. 3 orders per 10 minutes and 20 a day per wallet; $1 to $500 per order by default.
+  - **Status** comes from polling Linq when the app asks; Linq's webhook (HMAC-verified on the raw body) only speeds it up, since Linq sends each event once. A status only moves forward and `paid` is final.
+  - **Storage:** one Postgres table, `CashoutOrder`, plain SQL over Neon's HTTP driver; the full account number is never stored. The table is also in the Prisma schema so `db push` keeps it, and the SQL is tested against a real in-process Postgres (PGlite).
+  - **Rehearsal mode** (`CASHOUT_MODE=mock`) replaces Linq with a stand-in so the flow can be run with test USDC. `pnpm --filter @umbra/indexer cashout:smoke <url> [webhook secret]` drives a rehearsal deployment end to end.
 
 ## TODO
 
@@ -275,7 +284,8 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
 - [x] Web wallet at `/wallet` (D-13): balances, receive (address + QR), gasless USDC/USDSUI send. Off until `NEXT_PUBLIC_WALLET_NETWORK` is set.
 - [ ] Enable Mainnet on the Enoki public key, then set `NEXT_PUBLIC_WALLET_NETWORK=mainnet` on Vercel (rehearse on `testnet` first).
-- [ ] Naira cash-out through Linq's offramp API: server routes that hold the API key, the signed webhook, an order table. Confirm with Linq that they detect address-balance (gasless) deposits.
+- [x] Naira cash-out (D-14): Linq client, rules, order table, API routes and the Cash out screen in `/wallet`, with a rehearsal mode. Off until `LINQ_API_KEY` or `CASHOUT_MODE=mock` is set.
+- [ ] Cash-out go-live: rehearse on production (testnet + mock), get the Linq key (register the webhook URL at signup), confirm Linq detects address-balance (gasless) deposits, get the full bank list (`nigerian-banks.json`; only the 15 banks in Linq's guide are listed), then one small real cash-out.
 - [ ] Wallet on mobile; passkey sign-in (needs the custom domain first, #9).
 - [x] Walrus blob ownership + renewal job (`services/indexer/src/walrus-renew.ts`; uploads `send_object_to` the blob owner, job calls `system::extend_blob`). Needs `WALRUS_RENEWER_SECRET_KEY` + `*_WALRUS_BLOB_OWNER` set in prod.
 

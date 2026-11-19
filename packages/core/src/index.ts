@@ -21,5 +21,9 @@ export * from "./auth/sponsor-client";
 // wallet on the value network: balances + gasless stablecoin transfers
 export * as wallet from "./wallet/index";
 
+// naira cash-out: signed request shapes, banks, status + amount helpers
+// (the half that talks to Linq is server-only: `@umbra/core/server`)
+export * as cashout from "./cashout/index";
+
 // DeepBook v3 (creator-coin markets)
 export * as deepbook from "./deepbook/index";

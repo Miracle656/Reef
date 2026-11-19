@@ -46,7 +46,7 @@ pnpm workspaces + Turborepo, TypeScript strict throughout.
 | Move contracts | ✅ published to testnet · 16 tests |
 | `@umbra/core` | ✅ 12 tests |
 | `services/indexer` | ✅ 3 tests |
-| `apps/web` | ✅ social, trade, predict, messages, stories · 🟡 wallet (`/wallet`, off until `NEXT_PUBLIC_WALLET_NETWORK` is set) |
+| `apps/web` | ✅ social, trade, predict, messages, stories · 🟡 wallet and naira cash-out (`/wallet`, off until `NEXT_PUBLIC_WALLET_NETWORK` is set; see DEPLOY.md) |
 | `apps/mobile` | ✅ most web features, including messages · 🟡 swaps not wired yet |
 
 Not built yet: per-post coin minting (the composer's Tokenize toggle is UI only),

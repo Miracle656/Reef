@@ -14,6 +14,7 @@
     "test": "vitest run",
     "walrus:renew": "tsx scripts/walrus-renew.ts",
     "wallet:probe": "tsx scripts/wallet-probe.ts",
+    "cashout:smoke": "tsx scripts/cashout-smoke.ts",
     "sponsor:fund": "tsx scripts/sponsor-fund.ts",
     "sponsor:smoke": "tsx scripts/sponsor-smoke.ts",
     "db:generate": "prisma generate",

@@ -156,6 +156,9 @@ importers:
       '@mysten/sui-stack-messaging':
         specifier: 0.0.2
         version: 0.0.2(@mysten/bcs@2.1.4)(@mysten/seal@1.5.4(@mysten/sui@2.39.1(typescript@5.9.3)))(@mysten/sui-groups@0.0.1(@mysten/bcs@2.1.4)(@mysten/sui@2.39.1(typescript@5.9.3)))(@mysten/sui@2.39.1(typescript@5.9.3))
+      '@neondatabase/serverless':
+        specifier: 1.2.0
+        version: 1.2.0
       '@tanstack/react-query':
         specifier: ^5.90.5
         version: 5.101.0(react@19.1.0)
@@ -224,6 +227,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.14
+        version: 0.5.14
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.0
@@ -815,6 +821,9 @@ packages:
   '@egjs/hammerjs@2.0.17':
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
+
+  '@electric-sql/pglite@0.5.14':
+    resolution: {integrity: sha512-aAQe7iArcFB2w1xtx91l3l9trxhMzD6aZf+WnosSHNhwgp70EJz80Igw/bHnW14fUEFYWPBoQ1sGom8Xc0Jttg==}
 
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
@@ -1621,6 +1630,10 @@ packages:
     peerDependencies:
       nanostores: ^1.2.0
       react: '>=18.0.0'
+
+  '@neondatabase/serverless@1.2.0':
+    resolution: {integrity: sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ==}
+    engines: {node: '>=19.0.0'}
 
   '@next/env@15.5.19':
     resolution: {integrity: sha512-sWWluFvcv5v3Fxznmf2ZfjyoVQt/64oCnYqS90inQWGzMPK1VjvekPiz3OPHKmFT30EnHrjlbyaHLt3M0vWabw==}
@@ -6236,6 +6249,8 @@ snapshots:
     dependencies:
       '@types/hammerjs': 2.0.46
 
+  '@electric-sql/pglite@0.5.14': {}
+
   '@emnapi/runtime@1.11.1':
     dependencies:
       tslib: 2.8.1
@@ -7209,6 +7224,8 @@ snapshots:
     dependencies:
       nanostores: 1.5.5
       react: 19.2.7
+
+  '@neondatabase/serverless@1.2.0': {}
 
   '@next/env@15.5.19': {}
 
