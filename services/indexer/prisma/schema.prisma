@@ -58,6 +58,21 @@ model Follow {
 
 /// Verified external wallets linked to a zkLogin social account (the external
 /// wallet signed the link). Farcaster-style "verified addresses".
+/// Recovery passkeys (#10): a passkey added to `owner`'s address_alias set. The
+/// on-chain AddressAliases object decides who may sign; this keeps what the chain
+/// doesn't: the WebAuthn credential id + public key a new device needs, and a label.
+model RecoveryPasskey {
+  owner        String // the account (zkLogin address)
+  passkey      String // the passkey's Sui address (an alias of owner)
+  publicKey    String // base64 compressed secp256r1
+  credentialId String // base64url WebAuthn credential id
+  label        String @default("")
+  createdAtMs  BigInt
+
+  @@id([owner, passkey])
+  @@index([passkey])
+}
+
 model LinkedAddress {
   owner       String // zkLogin / social address
   linked      String // external wallet (the signer)

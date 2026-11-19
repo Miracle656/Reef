@@ -14,6 +14,7 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64 } from "@mysten/sui/utils";
 import {
+  addressAliasTargets,
   checkSelfSponsorable,
   createEnokiClient,
   executeSponsoredTransaction,
@@ -58,6 +59,8 @@ export function sponsorRoutes(env: IndexerEnv): Hono {
     ...predictAllowedTargets(),
     ...messagingAllowedTargets(),
     ...frameworkCoinTargets().map(normalizeMoveTarget),
+    // #10 passkey recovery: enable/add/remove the sender's own alias set.
+    ...addressAliasTargets().map(normalizeMoveTarget),
   ];
 
   app.post("/sponsor", async (c) => {
@@ -179,9 +182,12 @@ export function sponsorRoutes(env: IndexerEnv): Hono {
       console.log(`[sponsor/self] ok sender=${sender} digest=${res.Transaction.digest}`);
       return c.json({ digest: res.Transaction.digest });
     } catch (err) {
-      const { status, message } = describeError(err);
-      console.error(`[sponsor/self] EXEC FAIL sender=${sender} status=${status} msg=${message}`);
-      return c.json({ error: message, status }, status);
+      const described = describeError(err);
+      // Validators refusing the USER's signature (e.g. a key that isn't an alias of
+      // the sender) is the client's fault, not ours.
+      const status = /invalid user signature/i.test(described.message) ? 400 : described.status;
+      console.error(`[sponsor/self] EXEC FAIL sender=${sender} status=${status} msg=${described.message}`);
+      return c.json({ error: described.message, status }, status);
     }
   });
 

@@ -3,7 +3,6 @@
  * off-chain but signature-verified — the owner signs a canonical status
  * message with their zkLogin key, so nobody can post (or delete) as you.
  */
-import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import {
   canonicalStatusBytes,
   canonicalStatusDeleteBytes,
@@ -11,18 +10,12 @@ import {
   type SignedStatusDelete,
 } from "@umbra/core";
 import type { PrismaClient } from "@prisma/client";
-import { suiClient } from "./sui";
+import { verifySignedBy } from "./signer";
 
 export const STATUS_TTL_MS = 24 * 3_600_000;
 
-async function verifyBy(owner: string, bytes: Uint8Array, signature: string): Promise<boolean> {
-  try {
-    const pk = await verifyPersonalMessageSignature(bytes, signature, { client: suiClient, address: owner });
-    return pk.toSuiAddress() === owner;
-  } catch {
-    return false;
-  }
-}
+/** Owner's own key or one of its address aliases (#10), see signer.ts. */
+const verifyBy = verifySignedBy;
 
 /** Verify then store a story. Returns the new status id, or null if invalid. */
 export async function applyStatus(prisma: PrismaClient, signed: SignedStatus): Promise<string | null> {

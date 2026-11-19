@@ -13,6 +13,7 @@ export * from "./contracts/profile";
 export * from "./contracts/post";
 export * from "./contracts/follow";
 export * from "./contracts/onboard";
+export * from "./contracts/address-alias";
 
 // storage + gasless client
 export * as walrus from "./walrus/index";

@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import {
   SignedReactionSchema,
   SignedStatusDeleteSchema,
   SignedStatusSchema,
+  SignedPasskeyRecordSchema,
   SignedWalletLinkSchema,
   type Post,
   type Profile,
@@ -11,6 +13,7 @@ import type { Post as PostRow, Profile as ProfileRow } from "@prisma/client";
 import { applyReaction } from "../reactions";
 import { applyStatus, applyStatusDelete, STATUS_TTL_MS } from "../status";
 import { applyWalletLink } from "../links";
+import { applyPasskeyRecord } from "../passkeys";
 import { publicProcedure, router } from "./trpc";
 
 const SuiAddress = z.string().regex(/^0x[0-9a-fA-F]+$/);
@@ -562,6 +565,23 @@ export const appRouter = router({
       await ctx.prisma.linkedAddress.deleteMany({ where: { owner: input.owner, linked: input.linked } });
       return { ok: true };
     }),
+
+  // --- recovery passkeys (#10) ---
+  // Signed by the account (or an alias) for both add AND remove.
+  passkeyRecord: publicProcedure.input(SignedPasskeyRecordSchema).mutation(({ ctx, input }) => applyPasskeyRecord(ctx.prisma, input)),
+  /** an account's recovery passkeys, oldest first */
+  passkeysForOwner: publicProcedure.input(z.object({ owner: SuiAddress })).query(async ({ ctx, input }) => {
+    const rows = await ctx.prisma.recoveryPasskey.findMany({
+      where: { owner: normalizeSuiAddress(input.owner) },
+      orderBy: { createdAtMs: "asc" },
+    });
+    return rows.map((r) => ({ passkey: r.passkey, label: r.label, credentialId: r.credentialId, publicKey: r.publicKey, createdAtMs: Number(r.createdAtMs) }));
+  }),
+  /** recovery lookup: which accounts list this passkey (a new device knows only the passkey) */
+  accountsForPasskey: publicProcedure.input(z.object({ passkey: SuiAddress })).query(async ({ ctx, input }) => {
+    const rows = await ctx.prisma.recoveryPasskey.findMany({ where: { passkey: normalizeSuiAddress(input.passkey) } });
+    return rows.map((r) => r.owner);
+  }),
 
   // --- messaging typing presence (ephemeral, in-memory) ---
   // "X is typing…" is a few-seconds-lived signal, so it never touches the DB or

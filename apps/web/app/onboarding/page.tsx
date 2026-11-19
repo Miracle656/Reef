@@ -10,7 +10,8 @@ import { buildOnboardTx, walrus } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
 import { toast } from "@/components/toaster";
 import { Avatar, Button, Card, Input, Spinner, Textarea } from "@/components/ui";
-import { SUINS_MINT_URL, umbraConfig } from "@/lib/config";
+import { PASSKEY_RECOVERY, SUINS_MINT_URL, umbraConfig } from "@/lib/config";
+import { passkeysSupported } from "@/lib/passkey";
 import { useGasless } from "@/lib/gasless";
 import { trpc } from "@/lib/trpc";
 
@@ -108,7 +109,8 @@ export default function OnboardingPage() {
         await new Promise((r) => setTimeout(r, 1500));
       }
       qc.invalidateQueries({ queryKey: ["profile-by-addr"] });
-      router.push("/");
+      // #10: offer a recovery passkey right after sign-up (skippable).
+      router.push(PASSKEY_RECOVERY && passkeysSupported() ? "/onboarding/secure" : "/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Onboarding failed");
     } finally {
