@@ -13,6 +13,10 @@ import { getCashout } from "@/lib/server/cashout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Creating an order makes two calls to Linq, each with retries. Give it room,
+// so a slow provider doesn't cut the function off halfway. (If it ever is cut
+// off, the client's retry carries the same order id and gets the same order.)
+export const maxDuration = 60;
 
 const NO_STORE = { "Cache-Control": "no-store" };
 /** A signed request is 1-3 KB (a zkLogin or passkey signature is the bulk of it); refuse anything that clearly isn't one. */
