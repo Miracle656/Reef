@@ -10,14 +10,16 @@
  *   LINQ_BASE_URL                 optional override of Linq's base URL
  *   CASHOUT_MODE=mock             rehearsal: no Linq, no bank, test money
  *   CASHOUT_MOCK_DEPOSIT_ADDRESS  where rehearsal deposits are sent (an address you control)
+ *   CASHOUT_MOCK_ALLOWED_OWNERS   mainnet rehearsal only: the wallets allowed to use it (comma-separated)
  *   DATABASE_URL                  Postgres (Neon) for the order table
  *   CASHOUT_MIN_USD / CASHOUT_MAX_USD   per-order limits (default 1 / 500)
- * plus NEXT_PUBLIC_WALLET_NETWORK, which says which network the wallet is on.
+ * The wallet's network comes from lib/config (NEXT_PUBLIC_SUI_NETWORK).
  */
 import { neon } from "@neondatabase/serverless";
 import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { cashout, createSuiClient, wallet } from "@umbra/core";
+import { WALLET_NETWORK } from "@/lib/config";
 import {
   createCashoutService,
   createLinqClient,
@@ -51,7 +53,7 @@ function centsFromEnv(value: string | undefined, fallback: bigint): bigint {
 }
 
 async function build(): Promise<CashoutRuntime> {
-  const network = wallet.parseWalletNetwork(process.env.NEXT_PUBLIC_WALLET_NETWORK);
+  const network = WALLET_NETWORK;
   if (!network) return { ok: false, reason: "The wallet isn't switched on." };
 
   const mock = process.env.CASHOUT_MODE?.trim().toLowerCase() === "mock";
@@ -59,6 +61,23 @@ async function build(): Promise<CashoutRuntime> {
   if (!mock && !apiKey) return { ok: false, reason: "Cash-out isn't set up yet." };
   // Linq pays out real naira for real dollars and only knows mainnet.
   if (!mock && network !== "mainnet") return { ok: false, reason: "Cash-out needs the wallet on mainnet." };
+
+  // A rehearsal on mainnet moves REAL dollars to the rehearsal address and pays
+  // nobody. It must never be open to the public, so it runs only for wallets
+  // that are named explicitly.
+  let allowedOwners: Set<string> | undefined;
+  if (mock && network === "mainnet") {
+    allowedOwners = new Set();
+    for (const raw of (process.env.CASHOUT_MOCK_ALLOWED_OWNERS ?? "").split(",")) {
+      if (!raw.trim()) continue;
+      try {
+        allowedOwners.add(wallet.parseRecipient(raw));
+      } catch {
+        return { ok: false, reason: "CASHOUT_MOCK_ALLOWED_OWNERS has an entry that isn't a full Sui address." };
+      }
+    }
+    if (allowedOwners.size === 0) return { ok: false, reason: "A rehearsal on mainnet needs CASHOUT_MOCK_ALLOWED_OWNERS." };
+  }
 
   const walletCfg = wallet.walletConfig(network);
   const coins: Partial<Record<cashout.CashoutCoin, CashoutCoinInfo>> = {};
@@ -115,7 +134,7 @@ async function build(): Promise<CashoutRuntime> {
   const service = createCashoutService({
     store,
     linq,
-    config: { network, coins, minCents, maxCents, webhookSecret: process.env.LINQ_WEBHOOK_SECRET?.trim() || undefined },
+    config: { network, coins, minCents, maxCents, webhookSecret: process.env.LINQ_WEBHOOK_SECRET?.trim() || undefined, allowedOwners },
     log: (message) => console.log(message),
     verifyOwner: async (owner, bytes, signature) => {
       const publicKey = await verifyPersonalMessageSignature(bytes, signature, { client, address: owner });

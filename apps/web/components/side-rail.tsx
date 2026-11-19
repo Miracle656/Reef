@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
 import { useSocialAccount } from "@/lib/account";
-import { umbraConfig, WALLET_NETWORK } from "@/lib/config";
+import { umbraConfig, WALLET_NETWORK, WALLET_ONLY } from "@/lib/config";
 import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
 import { ComposeModal } from "./compose-modal";
@@ -87,14 +87,22 @@ export function useUnreadMessages(address?: string): number {
 function useNav() {
   const account = useSocialAccount();
   const pathname = usePathname();
+  // On mainnet the app is the wallet alone: no profile, no feed, and nothing
+  // here may call the (testnet) indexer.
+  const social = !WALLET_ONLY;
   const profile = useQuery({
     queryKey: ["profile-by-addr", account?.address],
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
-    enabled: Boolean(account),
+    enabled: Boolean(account) && social,
   });
-  const unread = useUnreadNotifs(account?.address);
-  const msgUnread = useUnreadMessages(account?.address);
+  const unread = useUnreadNotifs(social ? account?.address : undefined);
+  const msgUnread = useUnreadMessages(social ? account?.address : undefined);
   const profileHref = profile.data ? `/u/${profile.data.handle}` : "/onboarding";
+  const walletOnlyItems: Item[] = [
+    { href: "/wallet", label: "Wallet", active: pathname.startsWith("/wallet"), icon: <WalletIcon /> },
+    { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
+  ];
+  if (!social) return { account, profile, profileHref, items: walletOnlyItems, social };
   const items: Item[] = [
     { href: "/", label: "Home", active: pathname === "/", icon: <HomeIcon /> },
     { href: "/search", label: "Search", active: pathname.startsWith("/search"), icon: <SearchIcon /> },
@@ -106,13 +114,13 @@ function useNav() {
     { href: profileHref, label: "Profile", active: pathname.startsWith("/u/") || pathname === "/onboarding", icon: <UserIcon /> },
     { href: "/settings", label: "Settings", active: pathname.startsWith("/settings"), icon: <GearIcon /> },
   ];
-  return { account, profile, profileHref, items };
+  return { account, profile, profileHref, items, social };
 }
 
 /** Static, in-flow desktop sidebar (matches the redesign: it lives in the layout
  *  and pushes content — it never overlaps). Hidden on mobile (see MobileNav). */
 export function SideRail() {
-  const { account, profile, profileHref, items } = useNav();
+  const { account, profile, profileHref, items, social } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
   if (!account) return null;
   const avatarUrl = profile.data?.avatarBlobId ? walrus.urlFor(umbraConfig, profile.data.avatarBlobId) : null;
@@ -123,7 +131,7 @@ export function SideRail() {
           pushes the row — it never overlaps the feed. */}
       <aside className="group hidden w-[74px] shrink-0 flex-col gap-1.5 self-stretch overflow-hidden rounded-[22px] border border-[color:var(--glass-border)] bg-surface-glass p-3 shadow-[var(--shadow-glass)] backdrop-blur-xl transition-[width] duration-[440ms] ease-[cubic-bezier(.22,1,.36,1)] hover:w-[238px] md:flex">
         {/* brand */}
-        <Link href="/" className="mb-1 flex items-center gap-3 rounded-2xl px-1.5 py-1.5">
+        <Link href={social ? "/" : "/wallet"} className="mb-1 flex items-center gap-3 rounded-2xl px-1.5 py-1.5">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink text-[18px] font-black text-on-ink">R</span>
           <span className="reef-lbl text-[24px] font-black tracking-tight">ReeF</span>
         </Link>
@@ -134,6 +142,8 @@ export function SideRail() {
           ))}
         </nav>
 
+        {social ? (
+          <>
         <button
           type="button"
           onClick={() => setComposeOpen(true)}
@@ -152,8 +162,10 @@ export function SideRail() {
             <span className="truncate font-mono text-[11.5px] text-ink-faint">@{profile.data?.handle ?? "you"}</span>
           </span>
         </Link>
+          </>
+        ) : null}
       </aside>
-      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
+      {social ? <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} /> : null}
     </>
   );
 }
@@ -185,10 +197,20 @@ function RailItem({ href, label, active, icon, badge }: Item) {
  *  Messages as icon pills, compose in the middle, and the avatar opens a
  *  menu with Profile + Wallet (when configured) + Settings. */
 export function MobileNav() {
-  const { account, profile, profileHref, items } = useNav();
+  const { account, profile, profileHref, items, social } = useNav();
   const [composeOpen, setComposeOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   if (!account) return null;
+  if (!social) {
+    // Mainnet: just the wallet's own destinations.
+    return (
+      <nav className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-[12rem] items-center justify-around rounded-full border border-[color:var(--glass-border)] bg-surface-glass px-3 py-2 shadow-[var(--shadow-glass-lg)] backdrop-blur-xl md:hidden">
+        {items.map((it) => (
+          <MobilePill key={it.label} {...it} />
+        ))}
+      </nav>
+    );
+  }
   const pill = ["Home", "Search", "Trade", "Notifications", "Messages"]
     .map((l) => items.find((i) => i.label === l))
     .filter(Boolean) as Item[];

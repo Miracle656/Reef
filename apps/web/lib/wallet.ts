@@ -1,23 +1,20 @@
 "use client";
 
 /**
- * The wallet: the signed-in account's money on WALLET_NETWORK (see lib/config).
- * Reads go through a gRPC client for that network; signing goes through the
- * Enoki (zkLogin) wallet, which keeps one Google session per network.
+ * The wallet: the signed-in account's money on WALLET_NETWORK, which is always
+ * the app's own network (see lib/config). Reads go through a gRPC client;
+ * signing goes through the Enoki (zkLogin) wallet with the session sign-in made.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useWallets } from "@mysten/dapp-kit";
-import { EnokiClient, isEnokiWallet } from "@mysten/enoki";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { isEnokiWallet } from "@mysten/enoki";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64, toBase64 } from "@mysten/sui/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createSuiClient, wallet } from "@umbra/core";
-import { NETWORK, WALLET_NETWORK, walletConfig } from "./config";
-import { enokiConfig } from "./enoki";
+import { WALLET_NETWORK, walletConfig } from "./config";
 
-/** gRPC client for the wallet's network, or null when the app has no wallet.
- *  One instance: providers.tsx hands this same client to the Enoki wallet. */
+/** gRPC client for the wallet's network, or null when the app has no wallet. */
 export const walletClient = walletConfig ? createSuiClient(walletConfig) : null;
 
 /**
@@ -52,41 +49,6 @@ export function useWalletBalances(address: string | null) {
   });
 }
 
-export type SigningState = "ready" | "not-enabled" | "unknown";
-
-/**
- * Can this app's Enoki key open a zkLogin session on the wallet network?
- * Networks are switched on per API key in the Enoki portal. If the wallet
- * network isn't, Google sign-in still works for the social app but nothing can
- * be signed here, so the page says so instead of opening a blank Google window.
- */
-export function useWalletSigning() {
-  return useQuery({
-    queryKey: ["wallet-signing", WALLET_NETWORK],
-    // Only worth asking when the wallet is on a different network from the one
-    // the user signed in on; on the same network signing already works.
-    enabled: Boolean(WALLET_NETWORK && WALLET_NETWORK !== NETWORK && enokiConfig.enokiApiKey),
-    staleTime: 10 * 60_000,
-    retry: false,
-    queryFn: async (): Promise<SigningState> => {
-      try {
-        // A nonce request signs nobody in and moves nothing; it only tells us
-        // whether the key accepts this network.
-        await new EnokiClient({ apiKey: enokiConfig.enokiApiKey! }).createZkLoginNonce({
-          network: WALLET_NETWORK!,
-          ephemeralPublicKey: new Ed25519Keypair().getPublicKey(),
-        });
-        return "ready";
-      } catch (e) {
-        const err = e as { status?: number; errors?: { code?: string }[] };
-        if (err.status === 403 && err.errors?.some((x) => x.code === "missing_networks")) return "not-enabled";
-        // Anything else (offline, a blocked origin on a preview): don't guess.
-        return "unknown";
-      }
-    },
-  });
-}
-
 type SignTransactionFeature = {
   signTransaction: (input: {
     transaction: Transaction;
@@ -104,10 +66,9 @@ type SignMessageFeature = {
 };
 
 /**
- * Sign a personal message as the wallet's account, with the WALLET network's
- * zkLogin session (cash-out requests are verified against that network). Like
- * sending, the first use on a new network opens Google once, so call this from
- * a click, not from an effect.
+ * Sign a personal message as the wallet's account (cash-out requests are
+ * verified against the wallet's network). If the Google session has expired
+ * this reopens Google, so call it from a click, not from an effect.
  */
 export function useWalletSignMessage() {
   const enokiWallet = useWallets().find(isEnokiWallet);
@@ -123,25 +84,6 @@ export function useWalletSignMessage() {
     },
     [enokiWallet, enokiAccount],
   );
-}
-
-type GetSessionFeature = {
-  getSession: (input?: { network?: string }) => Promise<{ jwt?: string; expiresAt: number } | null>;
-};
-
-/** Whether a Google session for the wallet network already exists on this
- *  device. When it doesn't, the first send opens Google once to create it. */
-export function useWalletSession(address: string | null) {
-  const enokiWallet = useWallets().find(isEnokiWallet);
-  return useQuery({
-    queryKey: ["wallet-session", WALLET_NETWORK, address],
-    enabled: Boolean(WALLET_NETWORK && enokiWallet && address),
-    queryFn: async (): Promise<boolean> => {
-      const feature = (enokiWallet!.features as Record<string, unknown>)["enoki:getSession"] as GetSessionFeature | undefined;
-      const session = await feature?.getSession({ network: WALLET_NETWORK! });
-      return Boolean(session?.jwt && Date.now() < session.expiresAt);
-    },
-  });
 }
 
 export interface SendRequest {
@@ -224,10 +166,7 @@ export function useWalletSend() {
       if (res.$kind !== "Transaction") throw new Error("The transfer failed on the network. Nothing was sent.");
       const digest = res.Transaction.digest;
       await walletClient.core.waitForTransaction({ digest }).catch(() => {});
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["wallet-balances"] }),
-        qc.invalidateQueries({ queryKey: ["wallet-session"] }),
-      ]);
+      await qc.invalidateQueries({ queryKey: ["wallet-balances"] });
       return { digest };
     },
     [enokiWallet, enokiAccount, qc],

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { wallet } from "@umbra/core";
-import { sendErrorMessage, useWalletSend, useWalletSession, type PreparedSend, type SigningState } from "@/lib/wallet";
+import { sendErrorMessage, useWalletSend, type PreparedSend } from "@/lib/wallet";
 import { toast } from "./toaster";
 import { Button, Card, Input, Spinner } from "./ui";
 
@@ -32,17 +32,14 @@ export function WalletSend({
   config,
   balances,
   viewOnly,
-  signing,
 }: {
   address: string;
   config: wallet.WalletConfig;
   balances: wallet.WalletBalance[];
   /** development preview of someone else's address: nothing can be signed */
   viewOnly: boolean;
-  signing: SigningState | undefined;
 }) {
   const { prepare, send, canSign } = useWalletSend();
-  const session = useWalletSession(viewOnly ? null : address);
 
   // Start on the first coin the account actually holds.
   const [symbol, setSymbol] = useState(() => (balances.find((b) => b.total > 0n) ?? balances[0])?.coin.symbol ?? "");
@@ -56,17 +53,6 @@ export function WalletSend({
   if (!selected) return null;
   const coin = selected.coin;
   const max = coin.gasless ? selected.total : selected.total > SUI_FEE_RESERVE ? selected.total - SUI_FEE_RESERVE : 0n;
-
-  if (signing === "not-enabled") {
-    return (
-      <Card className="p-5">
-        <h2 className="text-lg font-bold">Send</h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          Sending isn&apos;t switched on yet. You can already receive money here, and it will be ready to send as soon as sending opens.
-        </p>
-      </Card>
-    );
-  }
 
   async function review() {
     setError(null);
@@ -157,7 +143,6 @@ export function WalletSend({
         <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
           Transfers can&apos;t be undone, so check the address.
           {p.gasless && config.network === "mainnet" ? " Paying into an exchange for the first time? Send a small amount first." : ""}
-          {session.data === false ? " Google will open once to confirm it's you." : ""}
         </p>
         {viewOnly ? <p className="mt-3 text-sm font-medium text-ink-soft">Preview only: sign in on the live site to send.</p> : null}
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}

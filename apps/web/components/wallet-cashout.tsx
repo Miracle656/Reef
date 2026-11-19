@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { normalizeStructTag } from "@mysten/sui/utils";
 import { cashout, wallet } from "@umbra/core";
 import { activeOrder, CashoutApiError, formatNgn, useCashoutApi, type CashoutInfo } from "@/lib/cashout";
-import { sendErrorMessage, useWalletSend, type PreparedSend, type SigningState } from "@/lib/wallet";
+import { sendErrorMessage, useWalletSend, type PreparedSend } from "@/lib/wallet";
 import { toast } from "./toaster";
 import { Badge, Button, Card, Input, Spinner } from "./ui";
 
@@ -59,14 +59,12 @@ export function WalletCashout({
   balances,
   info,
   viewOnly,
-  signing,
 }: {
   address: string;
   config: wallet.WalletConfig;
   balances: wallet.WalletBalance[];
   info: LiveInfo;
   viewOnly: boolean;
-  signing: SigningState | undefined;
 }) {
   const api = useCashoutApi();
   const { prepare, send, canSign } = useWalletSend();
@@ -285,7 +283,9 @@ export function WalletCashout({
 
   const rehearsal = info.mode === "mock" ? (
     <p className="mt-3 rounded-2xl border border-[color:var(--glass-border)] bg-surface-muted px-3 py-2 text-[13px] font-medium text-ink-soft">
-      Rehearsal mode: no bank is paid and no naira moves. Test money only.
+      {config.network === "mainnet"
+        ? "Rehearsal mode: no bank is paid and no naira moves. The dollars you send are real and go to ReeF's test address."
+        : "Rehearsal mode: no bank is paid and no naira moves. Test money only."}
     </p>
   ) : null;
 
@@ -395,15 +395,6 @@ export function WalletCashout({
   }
 
   // ---- form ------------------------------------------------------------------
-  if (signing === "not-enabled") {
-    return (
-      <Card className="p-5">
-        <h2 className="text-lg font-bold">Cash out</h2>
-        <p className="mt-1 text-sm text-ink-soft">Cash-out opens as soon as sending is switched on for this wallet.</p>
-      </Card>
-    );
-  }
-
   return (
     <Card className="p-5">
       <h2 className="text-lg font-bold">Cash out to your bank</h2>

@@ -73,6 +73,12 @@ export interface CashoutServiceConfig {
   maxSkewMs?: number;
   /** Linq webhook signing secret; webhooks are refused without it */
   webhookSecret?: string;
+  /**
+   * If set, only these wallets (full lower-case addresses) may use cash-out;
+   * everyone else is told it isn't available. Used to rehearse on mainnet,
+   * where the stand-in for Linq would otherwise take real dollars from anyone.
+   */
+  allowedOwners?: ReadonlySet<string>;
 }
 
 export interface CashoutServiceDeps {
@@ -92,6 +98,8 @@ export interface CashoutService {
   handle(body: unknown): Promise<CashoutResponse>;
   /** Handle a Linq webhook. Returns the HTTP status to answer with. */
   webhook(rawBody: string, signatureHeader: string | null | undefined): Promise<number>;
+  /** Whether `owner` may use cash-out at all (see `allowedOwners`). */
+  allows(owner: string): boolean;
 }
 
 const TEN_MINUTES = 10 * 60_000;
@@ -368,6 +376,10 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
     return { action: "list", orders: fresh.map(view) };
   }
 
+  function allows(owner: string): boolean {
+    return !config.allowedOwners || config.allowedOwners.has(owner.toLowerCase());
+  }
+
   async function handle(body: unknown): Promise<CashoutResponse> {
     const parsed = SignedCashoutSchema.safeParse(body);
     if (!parsed.success) throw new CashoutError("bad_request", "That request isn't valid.", 400);
@@ -382,6 +394,7 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
       log(`[cashout] signature check errored: ${e instanceof Error ? e.message : String(e)}`);
     }
     if (!ok) throw new CashoutError("unauthorized", "We couldn't confirm this request came from your wallet. Sign in again and retry.", 401);
+    if (!allows(m.owner)) throw new CashoutError("unavailable", "Cash-out isn't available for this wallet yet.", 503);
 
     switch (m.action) {
       case "verify-bank":
@@ -429,5 +442,5 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
     return 200;
   }
 
-  return { rate, handle, webhook };
+  return { rate, handle, webhook, allows };
 }

@@ -481,6 +481,35 @@ describe("webhooks", () => {
   });
 });
 
+describe("a rehearsal limited to named wallets", () => {
+  it("serves only the wallets it names, and only after checking the signature", async () => {
+    const s = createCashoutService({
+      store,
+      linq: fakeLinq(),
+      verifyOwner,
+      now: () => clock,
+      config: { network: "mainnet", coins: { usdc: { type: USDC, decimals: 6 } }, allowedOwners: new Set([OWNER]) },
+    });
+    expect(s.allows(OWNER)).toBe(true);
+    expect(s.allows(OWNER.toUpperCase().replace("0X", "0x"))).toBe(true);
+    expect(s.allows(OTHER)).toBe(false);
+    expect(s.allows("")).toBe(false);
+
+    expect((await s.handle(signed(createMsg()))).action).toBe("create");
+    await rejects(s.handle(signed(createMsg({ owner: OTHER }))), "unavailable", 503);
+    // someone who isn't named can't even look up a bank account
+    await rejects(s.handle(signed({ action: "verify-bank", owner: OTHER, bankCode: "033", accountNumber: "1234567890", timestamp: clock })), "unavailable", 503);
+    // a forged request is still just "unauthorized": no hint about who is allowed
+    await rejects(s.handle(signed(createMsg({ owner: OTHER }), OWNER)), "unauthorized", 401);
+    expect(linqCalls.create).toHaveLength(1);
+  });
+
+  it("is open to every wallet when no list is set", () => {
+    expect(service.allows(OTHER)).toBe(true);
+    expect(service.allows("")).toBe(true);
+  });
+});
+
 describe("rate", () => {
   it("caches the rate for 30 seconds and serves a recent one if Linq goes down", async () => {
     expect((await service.rate()).rate).toBe(RATE);

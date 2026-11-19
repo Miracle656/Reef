@@ -26,15 +26,17 @@ export type CashoutInfo =
       rate: number | null;
     };
 
-/** Whether cash-out is on for this deployment, its limits and today's rate. */
-export function useCashoutInfo() {
+/** Whether cash-out is on for this wallet, its limits and today's rate. (A
+ *  rehearsal on mainnet is open to named wallets only, so the server is asked
+ *  about this address.) */
+export function useCashoutInfo(address: string | null) {
   return useQuery({
-    queryKey: ["cashout-info"],
-    enabled: Boolean(WALLET_NETWORK),
+    queryKey: ["cashout-info", address],
+    enabled: Boolean(WALLET_NETWORK && address),
     staleTime: 30_000,
     refetchInterval: 60_000,
     queryFn: async (): Promise<CashoutInfo> => {
-      const res = await fetch("/api/cashout", { cache: "no-store" });
+      const res = await fetch(`/api/cashout?owner=${encodeURIComponent(normalizeSuiAddress(address!))}`, { cache: "no-store" });
       if (!res.ok) return { available: false };
       return (await res.json()) as CashoutInfo;
     },
