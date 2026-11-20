@@ -115,7 +115,11 @@ describe("signed messages", () => {
     ];
     for (const message of bad) expect(cashout.SignedCashoutSchema.safeParse({ message, signature: "sig" }).success, JSON.stringify(message)).toBe(false);
     expect(cashout.SignedCashoutSchema.safeParse({ message: create, signature: "" }).success).toBe(false);
-    expect(cashout.SignedCashoutSchema.safeParse({ message: create }).success).toBe(false);
+    // a bare message is a valid shape (the service only lets a bank lookup through that way) ...
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create }).success).toBe(true);
+    // ... but a body with a broken proof attached is not quietly treated as one
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: "sig" }).success).toBe(false);
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create, extra: 1 }).success).toBe(false);
     // a session can stand in for the request's own signature
     expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: { issuedAt: 1_800_000_000_000, signature: "sig" } }).success).toBe(true);
     expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: { issuedAt: 1.5, signature: "sig" } }).success).toBe(false);

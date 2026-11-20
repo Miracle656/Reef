@@ -6,8 +6,9 @@
  *
  * Every POST is proven to come from the wallet that owns the order: by a
  * session (one message the wallet signed in the last half hour) or by its own
- * signature. The rules (who may do what, limits, checks on Linq's answers) are
- * in `@umbra/core/server` `createCashoutService`.
+ * signature. The one exception is looking up the name on a bank account, which
+ * needs no proof and is throttled instead. The rules (who may do what, limits,
+ * checks on Linq's answers) are in `@umbra/core/server` `createCashoutService`.
  */
 import { CashoutError } from "@umbra/core/server";
 import { getCashout } from "@/lib/server/cashout";
@@ -51,7 +52,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    return Response.json(await c.service.handle(body), { headers: NO_STORE });
+    // Who is asking, at the network level: only used to throttle bank lookups.
+    const caller = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || undefined;
+    return Response.json(await c.service.handle(body, caller), { headers: NO_STORE });
   } catch (e) {
     if (e instanceof CashoutError) return Response.json({ error: e.message, code: e.code }, { status: e.status, headers: NO_STORE });
     console.error("[cashout] unexpected error:", e instanceof Error ? e.stack ?? e.message : e);

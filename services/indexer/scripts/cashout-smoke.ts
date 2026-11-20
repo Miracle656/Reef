@@ -59,6 +59,16 @@ check("looks up the account name", r.status === 200 && /TEST/.test(r.body.accoun
 r = await call(user, { action: "verify-bank", bankCode: "033", accountNumber: "1234560000" });
 check("says so when the account doesn't exist", r.status === 400 && /couldn't find that account/.test(r.body.error), r.body.error);
 
+// --- a bank lookup needs no signature; nothing else works without one
+const bare = async (message: Record<string, unknown>) => {
+  const res = await fetch(`${base}/api/cashout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: { ...message, owner, timestamp: Date.now() } }) });
+  return { status: res.status, body: (await res.json()) as Record<string, any> };
+};
+r = await bare({ action: "verify-bank", bankCode: "033", accountNumber: "1234567890" });
+check("looks up an account with no signature at all", r.status === 200 && /TEST/.test(r.body.account?.accountName), JSON.stringify(r.body));
+r = await bare({ action: "list" });
+check("but refuses anything else without one", r.status === 401, r.body.error);
+
 // --- refusals
 const orderId = randomUUID();
 const create = { action: "create" as const, orderId, coin: "usdc" as const, amountKind: "ngn" as const, amount: "3000", bankCode: "033", accountNumber: "1234567890" };

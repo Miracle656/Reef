@@ -35,7 +35,9 @@ const RateSchema = z.object({ rate: z.number().positive(), currency: z.string().
 
 const BankAccountSchema = z.object({
   accountName: z.string().min(1),
-  bankName: z.string().min(1),
+  // Linq sends this empty for some banks (OPay, seen 2026-11-20). The name on
+  // the account is what matters; the caller knows which bank it asked about.
+  bankName: z.string().optional(),
   accountNumber: z.string().optional(),
   bankCode: z.string().optional(),
 });
