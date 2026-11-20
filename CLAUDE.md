@@ -275,6 +275,7 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
   - **A passkey is tied to its web address for good** (the WebAuthn RP ID). On mainnet `NEXT_PUBLIC_PASSKEY_RP_ID` must be set on purpose or no wallet can be made, so a wallet is never bound to a preview URL. Moving to another domain later means either keeping the old address alive or serving `/.well-known/webauthn` from it (Related Origin Requests), so choose the address before real users arrive (#9).
   - **No recovery yet.** If the passkey is deleted the money can't be reached; a synced passkey (Google Password Manager, iCloud Keychain) survives a lost phone. A second passkey through `address_alias` (as #10 does for Google accounts) is the planned backup.
   - `NEXT_PUBLIC_WALLET_ONLY=1` shows the wallet-only app on testnet, to try all of this with test money.
+  - To walk through the passkey screens without a device prompt (or from a script), paste `apps/web/dev/soft-passkey.js` into the console on a local dev page: a software passkey answers `navigator.credentials`, and everything else is the app's real code.
   - Live check, read-only: `pnpm --filter @umbra/indexer passkey:probe <mainnet|testnet>` (a node accepts the app's passkey signatures and refuses wrong ones). A passkey-signed transaction really executing is covered on testnet by `sponsor:smoke`.
 
 ## TODO
