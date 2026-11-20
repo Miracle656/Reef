@@ -277,6 +277,13 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
   - `NEXT_PUBLIC_WALLET_ONLY=1` shows the wallet-only app on testnet, to try all of this with test money.
   - To walk through the passkey screens without a device prompt (or from a script), paste `apps/web/dev/soft-passkey.js` into the console on a local dev page: a software passkey answers `navigator.credentials`, and everything else is the app's real code.
   - Live check, read-only: `pnpm --filter @umbra/indexer passkey:probe <mainnet|testnet>` (a node accepts the app's passkey signatures and refuses wrong ones). A passkey-signed transaction really executing is covered on testnet by `sponsor:smoke`.
+- **D-16** (2026-11) **The wallet swaps SUI for USDC on DeepBook, and counts SUI in its total.** People get paid in SUI, but the wallet is about dollars and cash-out only takes dollars.
+  - The swap trades straight against DeepBook v3's public SUI/USDC pool: no ReeF fee and no account with anyone. Mainnet only (the testnet DeepBook trades its own test dollar, not the wallet's test USDC). The rules are `swap` in `@umbra/core` (`packages/core/src/wallet/swap.ts`).
+  - Measured on mainnet 2026-11-20: the pool sells SUI in steps of 0.1 with a 1 SUI minimum, and takes a 0.025% fee out of the SUI going in, so no DEEP is needed. The wallet therefore hands over the typed quantity plus that fee (`offerFor`), and keeps 0.05 SUI back as the gas budget (`SWAP_FEE_RESERVE`; the SDK's own default budget of 0.25 SUI is more than a small wallet holds).
+  - Same flow as sending: quote, build, dry-run, show that result, sign exactly those bytes. The least the swap may pay out (the quote less 1%) is inside the signed transaction.
+  - **A swap under the pool's minimum "succeeds" and does nothing, and the pool skips its own minimum-out check when that happens.** So `buildSwapTx` enforces the minimum itself: it takes `minOut` out of the bought coin and puts it back, which aborts if the coin holds less. It also merges unsold SUI back into the gas coin and destroys the empty DEEP coin, so a swap leaves one new object, the USDC.
+  - The total adds SUI at its market price (`wallet.walletValue`). The price is the mid of the same order book, read by `/api/prices` on the server (CDN-cached for 30 seconds), so a phone doesn't download the DeepBook SDK to see a balance; the swap screen is loaded on demand for the same reason. A book whose two sides are more than 2% apart gives no price, and the page then says SUI isn't counted. The price is for display only: no amount that moves money is worked out from it. (Pyth's public Hermes API has needed a key since 2026, which is why it isn't the source.)
+  - Live check, read-only: `pnpm --filter @umbra/indexer swap:probe [address] [amount]` simulates the app's exact swap on mainnet.
 
 ## TODO
 
@@ -295,6 +302,7 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [x] Web wallet at `/wallet` (D-13): balances, receive (address + QR), gasless USDC/USDSUI send. Off until `NEXT_PUBLIC_WALLET_NETWORK` is set.
 - [x] Passkey sign-in for the wallet-only app (D-15), and cash-out on one confirmation per session (D-14).
 - [ ] Go live on mainnet: choose the wallet's web address first (a custom domain if there will ever be one, #9), then set `NEXT_PUBLIC_PASSKEY_RP_ID` to it and `NEXT_PUBLIC_SUI_NETWORK=mainnet` on Vercel. Then create a wallet and send a small amount: the first real transfer signed by a passkey from the app.
+- [x] Swap SUI to USDC in the wallet, and SUI counted in the total (D-16). The other direction (USDC to SUI) and USDSUI aren't built.
 - [ ] A backup passkey for the mainnet wallet (`address_alias`), so a lost passkey isn't lost money.
 - [x] Naira cash-out (D-14): Linq client, rules, order table, API routes and the Cash out screen in `/wallet`, with a rehearsal mode. Off until `LINQ_API_KEY` or `CASHOUT_MODE=mock` is set.
 - [ ] Cash-out go-live: rehearse on production with your own wallet (`CASHOUT_MODE=mock` + `CASHOUT_MOCK_ALLOWED_OWNERS`), get the Linq key (register the webhook URL at signup), confirm Linq detects address-balance (gasless) deposits, get the full bank list (`nigerian-banks.json`; only the 15 banks in Linq's guide are listed), then one small real cash-out.

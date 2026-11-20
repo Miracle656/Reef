@@ -284,6 +284,7 @@ describe("describePasskeyError", () => {
 
   it("words a closed prompt for what was being done", () => {
     expect(passkey.describePasskeyError(named("NotAllowedError"), "send").message).toContain("Nothing was sent");
+    expect(passkey.describePasskeyError(named("NotAllowedError"), "swap").message).toContain("Nothing was swapped");
     expect(passkey.describePasskeyError(named("AbortError"), "create").message).toContain("no wallet was made");
     expect(passkey.describePasskeyError(named("NotAllowedError"), "confirm").message).toContain("Nothing was changed");
   });

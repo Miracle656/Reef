@@ -53,6 +53,30 @@ export function useWalletBalances(address: string | null) {
   });
 }
 
+/**
+ * What SUI is worth in dollars, for showing a total (see /api/prices). Display
+ * only. Empty while loading or when the price can't be read: the wallet then
+ * says the coin isn't counted rather than guessing.
+ */
+export function useUsdPrices() {
+  return useQuery({
+    queryKey: ["usd-prices", WALLET_NETWORK],
+    enabled: Boolean(WALLET_NETWORK),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    queryFn: async (): Promise<wallet.UsdPrices> => {
+      try {
+        const res = await fetch("/api/prices");
+        if (!res.ok) return {};
+        const body = (await res.json()) as { sui?: string | null };
+        return typeof body.sui === "string" && /^\d+$/.test(body.sui) ? { SUI: BigInt(body.sui) } : {};
+      } catch {
+        return {};
+      }
+    },
+  });
+}
+
 type SignTransactionFeature = {
   signTransaction: (input: {
     transaction: Transaction;
@@ -177,9 +201,54 @@ export function sendErrorMessage(e: unknown): string {
   return raw.length > 160 ? "The transfer couldn't be prepared. Nothing was sent." : raw;
 }
 
-export function useWalletSend() {
+/** What the network says a transaction did, as much as the wallet's screens need. */
+export interface Executed {
+  digest: string;
+  balanceChanges: { coinType: string; address: string; amount: string }[];
+  gasUsed: { computationCost: string; storageCost: string; storageRebate: string } | null;
+}
+
+/**
+ * Sign exactly these transaction bytes as the wallet's account and run them.
+ * What was reviewed is what is signed: the signer signs these bytes or throws.
+ * `failed` is what to say if the network runs the transaction and it fails.
+ */
+export function useWalletExecute() {
   const signer = useWalletSigner();
   const qc = useQueryClient();
+
+  const execute = useCallback(
+    async (bytes: Uint8Array, failed: string): Promise<Executed> => {
+      if (!walletClient || !WALLET_NETWORK) throw new Error("The wallet isn't switched on");
+      if (!signer) throw new Error(NOT_SIGNED_IN);
+      const signature = await signer.signTransaction(bytes);
+
+      const res = await walletClient.core.executeTransaction({
+        transaction: bytes,
+        signatures: [signature],
+        include: { effects: true, balanceChanges: true },
+      });
+      // Either way the balances may have moved (a failed transaction still pays its fee).
+      const done = res.Transaction ?? res.FailedTransaction;
+      if (done?.digest) await walletClient.core.waitForTransaction({ digest: done.digest }).catch(() => {});
+      await qc.invalidateQueries({ queryKey: ["wallet-balances"] });
+      if (res.$kind !== "Transaction" || done?.effects?.status.success === false) throw new Error(failed);
+
+      const g = res.Transaction.effects?.gasUsed;
+      return {
+        digest: res.Transaction.digest,
+        balanceChanges: (res.Transaction.balanceChanges ?? []).map((c) => ({ coinType: c.coinType, address: c.address, amount: String(c.amount) })),
+        gasUsed: g ? { computationCost: String(g.computationCost), storageCost: String(g.storageCost), storageRebate: String(g.storageRebate) } : null,
+      };
+    },
+    [signer, qc],
+  );
+
+  return { execute, canSign: Boolean(signer) };
+}
+
+export function useWalletSend() {
+  const { execute, canSign } = useWalletExecute();
 
   /** Build and dry-run the transfer from `sender`, so the review screen shows
    *  what will really happen (free or not, and that the chain accepts it).
@@ -202,23 +271,11 @@ export function useWalletSend() {
     [],
   );
 
-  /** Sign exactly the reviewed bytes and execute them. What was reviewed is
-   *  what is signed: the signer signs these bytes or throws. */
+  /** Sign exactly the reviewed bytes and execute them. */
   const send = useCallback(
-    async (prepared: PreparedSend): Promise<{ digest: string }> => {
-      if (!walletClient || !WALLET_NETWORK) throw new Error("The wallet isn't switched on");
-      if (!signer) throw new Error(NOT_SIGNED_IN);
-      const signature = await signer.signTransaction(prepared.bytes);
-
-      const res = await walletClient.core.executeTransaction({ transaction: prepared.bytes, signatures: [signature] });
-      if (res.$kind !== "Transaction") throw new Error("The transfer failed on the network. Nothing was sent.");
-      const digest = res.Transaction.digest;
-      await walletClient.core.waitForTransaction({ digest }).catch(() => {});
-      await qc.invalidateQueries({ queryKey: ["wallet-balances"] });
-      return { digest };
-    },
-    [signer, qc],
+    async (prepared: PreparedSend): Promise<{ digest: string }> => execute(prepared.bytes, "The transfer failed on the network. Nothing was sent."),
+    [execute],
   );
 
-  return { prepare, send, canSign: Boolean(signer) };
+  return { prepare, send, canSign };
 }

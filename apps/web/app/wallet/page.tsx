@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { wallet } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
 import { PasskeySignIn } from "@/components/passkey-sign-in";
@@ -11,9 +12,21 @@ import { WalletReceive } from "@/components/wallet-receive";
 import { WalletSend } from "@/components/wallet-send";
 import { useCashoutInfo } from "@/lib/cashout";
 import { SIGN_IN, walletConfig } from "@/lib/config";
-import { useWalletBalances, useWalletOwner } from "@/lib/wallet";
+import { useUsdPrices, useWalletBalances, useWalletOwner } from "@/lib/wallet";
 
 const ICONS: Record<string, string> = { USDC: "/usdc.png", SUI: "/sui.png" };
+
+// The swap screen brings the DeepBook SDK with it, so it is fetched only when opened.
+const WalletSwap = dynamic(() => import("@/components/wallet-swap").then((m) => m.WalletSwap), {
+  ssr: false,
+  loading: () => (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 text-sm text-ink-faint">
+        <Spinner /> Loading…
+      </div>
+    </Card>
+  ),
+});
 
 function CoinIcon({ symbol }: { symbol: string }) {
   const src = ICONS[symbol];
@@ -45,6 +58,16 @@ function BankIcon() {
     </svg>
   );
 }
+function SwapIcon() {
+  return (
+    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 4 3 8l4 4" />
+      <path d="M3 8h14" />
+      <path d="m17 12 4 4-4 4" />
+      <path d="M21 16H7" />
+    </svg>
+  );
+}
 function ArrowUp() {
   return (
     <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -53,7 +76,7 @@ function ArrowUp() {
   );
 }
 
-type Panel = "receive" | "send" | "cashout" | null;
+type Panel = "receive" | "send" | "swap" | "cashout" | null;
 
 export default function WalletPage() {
   // The signed-in account lives in the browser: render wallet state after mount.
@@ -63,6 +86,7 @@ export default function WalletPage() {
 
   const { address, viewOnly } = useWalletOwner();
   const balances = useWalletBalances(address);
+  const prices = useUsdPrices();
   const cashoutInfo = useCashoutInfo(address);
 
   if (!walletConfig) {
@@ -76,7 +100,11 @@ export default function WalletPage() {
   }
 
   const test = walletConfig.network === "testnet";
-  const dollars = balances.data ? wallet.stableTotal(balances.data) : null;
+  // Dollar coins at face value, plus SUI at its market price when there is one.
+  const value = balances.data ? wallet.walletValue(balances.data, prices.data) : null;
+  const suiHeld = balances.data?.find((b) => b.coin.symbol === "SUI")?.total ?? 0n;
+  // Swapping SUI for dollars exists on mainnet only, and only matters to someone holding SUI.
+  const canSwap = walletConfig.network === wallet.SWAP_NETWORK && suiHeld > 0n;
   const toggle = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
   const cashoutOn = cashoutInfo.data?.available ? cashoutInfo.data : null;
 
@@ -105,8 +133,20 @@ export default function WalletPage() {
               </div>
             </div>
             <p className="mt-2 text-[44px] font-black leading-none tracking-tight">
-              {dollars === null ? <span className="text-ink-faint">$—</span> : `$${wallet.formatAmount(dollars, 6)}`}
+              {value === null ? <span className="text-ink-faint">$—</span> : `$${wallet.formatAmount(value.total, 6)}`}
             </p>
+            {value && Object.keys(value.priced).length > 0 ? (
+              <p className="mt-2 text-[13px] text-ink-soft">
+                {value.dollars > 0n ? `$${wallet.formatAmount(value.dollars, 6)} in dollars, plus your ` : "Your "}
+                SUI at today&apos;s price (about ${wallet.formatAmount(prices.data?.SUI ?? 0n, 6, 4)} each).
+              </p>
+            ) : null}
+            {value && value.unpriced.length > 0 ? (
+              <p className="mt-2 text-[13px] text-ink-soft">
+                Not counting your {value.unpriced.map((b) => `${wallet.formatAmount(b.total, b.coin.decimals, 4)} ${b.coin.symbol}`).join(" and ")}:
+                {prices.isLoading ? " its price is loading." : " its price isn't available right now."}
+              </p>
+            ) : null}
             {balances.isError ? (
               <p className="mt-3 text-sm text-danger">
                 Couldn&apos;t load your balance.{" "}
@@ -122,6 +162,11 @@ export default function WalletPage() {
               <Button variant={panel === "send" ? "primary" : "accent"} onClick={() => toggle("send")} aria-expanded={panel === "send"} disabled={!balances.data}>
                 <ArrowUp /> Send
               </Button>
+              {canSwap ? (
+                <Button variant={panel === "swap" ? "primary" : "outline"} onClick={() => toggle("swap")} aria-expanded={panel === "swap"}>
+                  <SwapIcon /> Swap
+                </Button>
+              ) : null}
               {cashoutOn ? (
                 <Button variant={panel === "cashout" ? "primary" : "outline"} onClick={() => toggle("cashout")} aria-expanded={panel === "cashout"} disabled={!balances.data}>
                   <BankIcon /> Cash out
@@ -133,6 +178,9 @@ export default function WalletPage() {
           {panel === "receive" ? <WalletReceive address={address} config={walletConfig} /> : null}
           {panel === "send" && balances.data ? (
             <WalletSend address={address} config={walletConfig} balances={balances.data} viewOnly={viewOnly} />
+          ) : null}
+          {panel === "swap" && balances.data && canSwap ? (
+            <WalletSwap address={address} config={walletConfig} balances={balances.data} price={prices.data?.SUI} viewOnly={viewOnly} />
           ) : null}
           {panel === "cashout" && balances.data && cashoutOn ? (
             <WalletCashout address={address} config={walletConfig} balances={balances.data} info={cashoutOn} viewOnly={viewOnly} />
@@ -156,6 +204,9 @@ export default function WalletPage() {
                       {wallet.formatAmount(b.total, b.coin.decimals, b.coin.stable ? 2 : 4)}
                     </p>
                     {b.coin.gasless ? <p className="text-xs text-ink-faint">No fee to send</p> : null}
+                    {value?.priced[b.coin.symbol] !== undefined ? (
+                      <p className="text-xs text-ink-faint">about ${wallet.formatAmount(value.priced[b.coin.symbol] ?? 0n, 6)}</p>
+                    ) : null}
                   </div>
                 </div>
               ))

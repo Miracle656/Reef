@@ -21,6 +21,8 @@ export * from "./auth/sponsor-client";
 
 // wallet on the value network: balances + gasless stablecoin transfers
 export * as wallet from "./wallet/index";
+// swap SUI for USDC on DeepBook (pulls in the DeepBook SDK: load it lazily in apps)
+export * as swap from "./wallet/swap";
 
 // passkey wallets: the account is a passkey (the wallet-only app on mainnet)
 export * as passkey from "./passkey/index";

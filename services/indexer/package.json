@@ -15,6 +15,7 @@
     "walrus:renew": "tsx scripts/walrus-renew.ts",
     "wallet:probe": "tsx scripts/wallet-probe.ts",
     "passkey:probe": "tsx scripts/passkey-probe.ts",
+    "swap:probe": "tsx scripts/swap-probe.ts",
     "cashout:smoke": "tsx scripts/cashout-smoke.ts",
     "sponsor:fund": "tsx scripts/sponsor-fund.ts",
     "sponsor:smoke": "tsx scripts/sponsor-smoke.ts",
