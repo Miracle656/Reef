@@ -170,6 +170,35 @@ describe("checking an amount before asking the network", () => {
     }
   });
 
+  it("fills in a share of the balance for the 25% / 50% / Max buttons", () => {
+    // a share of what is held, in whole steps
+    expect(swap.swapShare(rules, sui("10"), 25n)).toBe(sui("2.5"));
+    expect(swap.swapShare(rules, sui("10"), 50n)).toBe(sui("5"));
+    expect(swap.swapShare(rules, sui("4.07"), 25n)).toBe(sui("1")); // 1.0175, down to a step
+    // "Max" is the most that can be swapped, not the whole balance
+    expect(swap.swapShare(rules, sui("10"), 100n)).toBe(swap.maxSwap(rules, sui("10")));
+    expect(swap.swapShare(rules, sui("10"), 100n)).toBe(sui("9.9"));
+    // a small wallet: a quarter or a half is under the 1 SUI minimum, so those buttons are off
+    expect(swap.swapShare(rules, sui("1.5005"), 25n)).toBe(0n);
+    expect(swap.swapShare(rules, sui("1.5005"), 50n)).toBe(0n);
+    expect(swap.swapShare(rules, sui("1.5005"), 100n)).toBe(sui("1.4"));
+    expect(swap.swapShare(rules, sui("3.9"), 25n)).toBe(0n); // 0.975, under the minimum
+    // never more than can be swapped once the fees are kept back
+    expect(swap.swapShare(rules, sui("1.14"), 99n)).toBe(sui("1"));
+    // nothing to swap, or nothing asked for
+    expect(swap.swapShare(rules, 0n, 100n)).toBe(0n);
+    expect(swap.swapShare(rules, sui("1.05"), 100n)).toBe(0n);
+    expect(swap.swapShare(rules, sui("10"), 0n)).toBe(0n);
+    expect(swap.swapShare(rules, sui("10"), -25n)).toBe(0n);
+    // whatever a button fills in passes the check
+    for (const have of ["1.0503", "1.14", "1.5005", "2.2", "4", "7.77", "313694.136543"]) {
+      for (const percent of [25n, 50n, 75n, 99n, 100n]) {
+        const part = swap.swapShare(rules, sui(have), percent);
+        if (part > 0n) expect(check(part, sui(have)), `${percent}% of ${have}`).not.toThrow();
+      }
+    }
+  });
+
   it("turns what was typed into a quantity and what to hand over", () => {
     expect(swap.planSwap(market, rules, sui("1.4"), sui("1.5005"))).toEqual({ quantity: sui("1.4"), offer: 1_400_350_001n });
     // a part step is dropped, not refused

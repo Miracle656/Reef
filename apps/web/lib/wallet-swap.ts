@@ -41,6 +41,13 @@ export function swapErrorMessage(e: unknown): string {
   // Our own floor inside the transaction (see buildSwapTx).
   if (/InsufficientCoinBalance/i.test(raw)) return "That amount is too small for this market to swap.";
   if (/MoveAbort/i.test(raw)) return "The market couldn't take this swap right now. Try again in a moment.";
+  // A swap is built against the wallet's SUI at that instant, down to the last unit of its address
+  // balance. The amount was already checked against the balance on the screen, so the network saying
+  // "insufficient" here means the balance moved in between (spent from another device or app). Seen on
+  // mainnet with wallets that trade every few seconds; "you don't have enough" would contradict the screen.
+  if (/withdraw reservation|insufficient address balance|unable to perform gas selection/i.test(raw)) {
+    return "Your SUI balance changed while this swap was being prepared. Nothing was swapped. Try again.";
+  }
   // Everything else (not enough for the fee, network trouble) reads the same as for sending.
   return sendErrorMessage(e).replace("transfer", "swap").replace("Nothing was sent", "Nothing was swapped");
 }
@@ -55,8 +62,29 @@ export function useSwapRules(sender: string | null) {
   });
 }
 
+/** What the market would pay for what was typed, right now. An estimate: the review step has the exact figures. */
+export interface SwapEstimate {
+  /** what will be sold: the typed amount rounded down to a whole step */
+  quantity: bigint;
+  /** USDC out, in base units */
+  out: bigint;
+}
+
 export function useWalletSwap() {
   const { execute, canSign } = useWalletExecute();
+
+  /**
+   * Ask the market what the typed `amount` would fetch. Moves nothing and needs
+   * no signature; it is what fills in the "you get" side while someone types.
+   * Throws a WalletInputError when the amount can't be swapped from `held`.
+   */
+  const estimate = useCallback(async (sender: string, amount: bigint, held: bigint, rules: swap.SwapRules): Promise<SwapEstimate> => {
+    if (!walletClient || !swapMarket) throw new Error("Swapping isn't available here");
+    const { quantity, offer } = swap.planSwap(swapMarket, rules, amount, held);
+    const quote = await swap.quoteSwap(swap.createSwapClient(walletClient, swapMarket, sender), swapMarket, offer);
+    if (quote.out <= 0n) throw new wallet.WalletInputError("The market won't take that amount right now. Try a different amount.");
+    return { quantity, out: quote.out };
+  }, []);
 
   /**
    * Quote, build and dry-run a swap of the `amount` typed (base units of SUI)
@@ -97,5 +125,5 @@ export function useWalletSwap() {
     [execute],
   );
 
-  return { prepare, run, canSign };
+  return { estimate, prepare, run, canSign };
 }
