@@ -10,7 +10,7 @@ import { WalletReceive } from "@/components/wallet-receive";
 import { WalletSend } from "@/components/wallet-send";
 import { useCashoutInfo } from "@/lib/cashout";
 import { walletConfig } from "@/lib/config";
-import { useWalletBalances, useWalletOwner, useWalletSigning } from "@/lib/wallet";
+import { useWalletBalances, useWalletOwner } from "@/lib/wallet";
 
 const ICONS: Record<string, string> = { USDC: "/usdc.png", SUI: "/sui.png" };
 
@@ -62,8 +62,7 @@ export default function WalletPage() {
 
   const { address, viewOnly } = useWalletOwner();
   const balances = useWalletBalances(address);
-  const signing = useWalletSigning();
-  const cashoutInfo = useCashoutInfo();
+  const cashoutInfo = useCashoutInfo(address);
 
   if (!walletConfig) {
     return (
@@ -132,10 +131,10 @@ export default function WalletPage() {
 
           {panel === "receive" ? <WalletReceive address={address} config={walletConfig} /> : null}
           {panel === "send" && balances.data ? (
-            <WalletSend address={address} config={walletConfig} balances={balances.data} viewOnly={viewOnly} signing={signing.data} />
+            <WalletSend address={address} config={walletConfig} balances={balances.data} viewOnly={viewOnly} />
           ) : null}
           {panel === "cashout" && balances.data && cashoutOn ? (
-            <WalletCashout address={address} config={walletConfig} balances={balances.data} info={cashoutOn} viewOnly={viewOnly} signing={signing.data} />
+            <WalletCashout address={address} config={walletConfig} balances={balances.data} info={cashoutOn} viewOnly={viewOnly} />
           ) : null}
 
           <Card className="p-2">

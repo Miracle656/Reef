@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSocialAccount } from "@/lib/account";
 import { walrus } from "@umbra/core";
@@ -10,8 +11,9 @@ import { ComposeForm } from "@/components/compose-box";
 import { Feed } from "@/components/feed";
 import { Landing } from "@/components/landing";
 import { RightSidebar } from "@/components/right-sidebar";
+import { WalletLanding } from "@/components/wallet-landing";
 import { Avatar, Button, Card } from "@/components/ui";
-import { isConfigured, umbraConfig } from "@/lib/config";
+import { isConfigured, umbraConfig, WALLET_ONLY } from "@/lib/config";
 import { trpc } from "@/lib/trpc";
 
 export default function HomePage() {
@@ -20,8 +22,15 @@ export default function HomePage() {
   const profile = useQuery({
     queryKey: ["profile-by-addr", account?.address],
     queryFn: () => trpc.profileByAddress.query({ address: account!.address }),
-    enabled: Boolean(account),
+    enabled: Boolean(account) && !WALLET_ONLY,
   });
+
+  // On mainnet the app is the wallet alone: there is no feed to show here.
+  const router = useRouter();
+  useEffect(() => {
+    if (WALLET_ONLY && account) router.replace("/wallet");
+  }, [account, router]);
+  if (WALLET_ONLY) return account ? null : <WalletLanding />;
 
   // Signed-out visitors get the full animated landing (no app chrome).
   if (!account) return <Landing />;

@@ -56,13 +56,13 @@ CORS is already open (`app.use("*", cors())`), so the Vercel origin can call it.
 1. **New Project** → import `github.com/Miracle656/Reef`.
 2. **Root Directory: `apps/web`** (this is the key monorepo setting — Vercel installs at the workspace root and builds the app). `apps/web/vercel.json` pins the framework + build command (it runs `prisma generate` so the tRPC `AppRouter` type resolves on a clean build).
 3. **Environment Variables** (see `apps/web/.env.example` — all are `NEXT_PUBLIC_*`, safe to expose):
-   - `NEXT_PUBLIC_SUI_NETWORK=testnet`
+   - `NEXT_PUBLIC_SUI_NETWORK` = `testnet` (the full app, on test money) or `mainnet` (the wallet alone: feed, trade, predict, messages and the rest are hidden and their pages redirect to `/wallet`). **Before switching to `mainnet`, enable Mainnet on the Enoki public API key in the Enoki portal**, or nobody can sign in (the button says "Sign-in opens soon").
    - `NEXT_PUBLIC_UMBRA_PACKAGE_ID`, `NEXT_PUBLIC_UMBRA_REGISTRY_ID`
    - `NEXT_PUBLIC_ENOKI_PUBLIC_API_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
    - `NEXT_PUBLIC_INDEXER_URL` = the indexer URL from step 1
    - `NEXT_PUBLIC_SPONSOR_API_URL` = `<indexer URL>/sponsor`
    - `NEXT_PUBLIC_WALRUS_BLOB_OWNER` = the address whose key the indexer holds as `WALRUS_RENEWER_SECRET_KEY` (so uploaded media can be renewed)
-   - `NEXT_PUBLIC_WALLET_NETWORK` (optional) = `testnet` or `mainnet` to switch on the wallet at `/wallet`; leave it unset for no wallet. It needs no indexer and no sponsor: USDC and USDSUI are sent with Sui's gasless stablecoin transfers. For `mainnet`, first enable **Mainnet** on the Enoki **public** API key in the Enoki portal. Without that, Google sign-in can't sign on mainnet, so users can receive money but the Send panel says sending isn't switched on. Rehearse on `testnet` first with free test USDC from https://faucet.circle.com.
+   - `NEXT_PUBLIC_WALLET_NETWORK=testnet` (optional, testnet only): also show the wallet at `/wallet` next to the social app, with free test USDC from https://faucet.circle.com. On mainnet the wallet is always on and this is ignored. The wallet needs no indexer and no sponsor: USDC and USDSUI are sent with Sui's gasless stablecoin transfers.
 4. **Deploy.**
 
 ### Cash-out to naira (optional)
@@ -74,19 +74,20 @@ These variables are **server-side**: set them in Vercel **without** a `NEXT_PUBL
 | Var | Needed for | What |
 |---|---|---|
 | `DATABASE_URL` | both modes | Postgres (the Neon database is fine). Holds the `CashoutOrder` table, which is created automatically on first use. It is also in `services/indexer/prisma/schema.prisma`, so `pnpm db:push` keeps it |
-| `CASHOUT_MODE=mock` | rehearsal | No Linq, no bank, no real payout. Use it with `NEXT_PUBLIC_WALLET_NETWORK=testnet` to run the whole flow with test USDC |
-| `CASHOUT_MOCK_DEPOSIT_ADDRESS` | rehearsal | Where rehearsal deposits are sent. Use an address you control, so the test USDC isn't lost |
-| `LINQ_API_KEY` | live | Linq B2B API key. Live mode needs `NEXT_PUBLIC_WALLET_NETWORK=mainnet`: Linq has no test network, every order is real |
+| `CASHOUT_MODE=mock` | rehearsal | No Linq, no bank, no real payout: a stand-in walks an order through its steps |
+| `CASHOUT_MOCK_DEPOSIT_ADDRESS` | rehearsal | Where rehearsal deposits are sent. Use an address you control, so the money isn't lost |
+| `CASHOUT_MOCK_ALLOWED_OWNERS` | rehearsal on mainnet | Comma-separated wallet addresses allowed to use the rehearsal. Required on mainnet, where a rehearsal sends **real** dollars to the rehearsal address; every other wallet is told cash-out isn't available |
+| `LINQ_API_KEY` | live | Linq B2B API key. Live mode needs the app on mainnet: Linq has no test network, every order is real |
 | `LINQ_WEBHOOK_SECRET` | live (recommended) | Verifies Linq's webhooks. Without it webhooks are refused and status comes only from polling, which still works |
 | `LINQ_BASE_URL` | optional | Override Linq's base URL |
 | `CASHOUT_MIN_USD` / `CASHOUT_MAX_USD` | optional | Per-order limits, default `1` and `500` |
 
-**Rehearse first.** Set `NEXT_PUBLIC_WALLET_NETWORK=testnet`, `CASHOUT_MODE=mock`, `CASHOUT_MOCK_DEPOSIT_ADDRESS` and `DATABASE_URL`, redeploy, get test USDC from https://faucet.circle.com, then use **Cash out** in the wallet. A banner says it is a rehearsal. Any account number works; one ending `0000` rehearses "account not found".
+**Rehearse first.** On mainnet: set `CASHOUT_MODE=mock`, `CASHOUT_MOCK_DEPOSIT_ADDRESS` (an address you control), `CASHOUT_MOCK_ALLOWED_OWNERS` (your own wallet address, shown in Settings) and `DATABASE_URL`, redeploy, then use **Cash out** with a dollar or two. The dollars are real and land at your rehearsal address; no bank is paid. A banner says it is a rehearsal, and other wallets don't see Cash out at all. On testnet (`NEXT_PUBLIC_WALLET_NETWORK=testnet`) the same works with free test USDC and no allowlist. Any account number works; one ending `0000` rehearses "account not found".
 
 **Going live.**
 1. When you sign up with Linq (`POST /b2b/signup`), register the webhook URL `https://<your domain>/api/webhooks/linq`. Their guide has no way to change it later.
-2. Enable Mainnet on the Enoki public key and set `NEXT_PUBLIC_WALLET_NETWORK=mainnet` (see the wallet variable above).
-3. Remove `CASHOUT_MODE`, set `LINQ_API_KEY` and `LINQ_WEBHOOK_SECRET`, redeploy.
+2. Enable Mainnet on the Enoki public key, then set `NEXT_PUBLIC_SUI_NETWORK=mainnet`.
+3. Remove `CASHOUT_MODE` and the two `CASHOUT_MOCK_*` variables, set `LINQ_API_KEY` and `LINQ_WEBHOOK_SECRET`, redeploy.
 4. Do one small real cash-out yourself before telling anyone. In particular confirm Linq sees the deposit: the wallet pays with a gasless transfer, which lands in the deposit address's **address balance**, not as a separate coin object.
 
 Limits built in: every request is signed by the wallet that owns the order; 3 new orders per 10 minutes and 20 per day per wallet (Linq allows our whole key 10 a minute); `$1` to `$500` per order by default. Check a deployment in rehearsal mode with `pnpm --filter @umbra/indexer cashout:smoke https://<your domain> <LINQ_WEBHOOK_SECRET>`; it refuses to run against a live one.
@@ -98,6 +99,6 @@ Limits built in: every request is signed by the wallet that owns the order; 3 ne
 ---
 
 ## Notes
-- **The social app is testnet only** — never point it at mainnet in Phase 1. The wallet and cash-out are the exception: they follow `NEXT_PUBLIC_WALLET_NETWORK`.
+- **The social app is testnet only** — never point it at mainnet in Phase 1. Switching `NEXT_PUBLIC_SUI_NETWORK` to `mainnet` shows the wallet (and cash-out) alone.
 - The `ENOKI_PRIVATE_API_KEY` must **only** ever live on the indexer service, never in the web env. The web app's only secrets are the cash-out ones above (`LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, `DATABASE_URL`), all server-side.
 - The indexer's poller ingests on-chain events continuously; if it can't reach Postgres the feed/profile/trending data will be empty (the API still serves). Neon free-tier auto-suspends — the first request after idle may be slow while it wakes.

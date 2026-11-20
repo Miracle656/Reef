@@ -1,7 +1,7 @@
 /**
  * Cash-out API.
  *
- *   GET  /api/cashout   is cash-out available here, its limits, and today's indicative rate
+ *   GET  /api/cashout?owner=0x…   is cash-out available to this wallet, its limits, today's indicative rate
  *   POST /api/cashout   one signed request: { message, signature } (see @umbra/core `cashout`)
  *
  * Every POST is a personal message signed by the wallet that owns the order;
@@ -22,9 +22,15 @@ const NO_STORE = { "Cache-Control": "no-store" };
 /** A signed request is 1-3 KB (a zkLogin or passkey signature is the bulk of it); refuse anything that clearly isn't one. */
 const MAX_BODY_BYTES = 16_384;
 
-export async function GET() {
+export async function GET(req: Request) {
   const c = await getCashout();
   if (!c.ok) return Response.json({ available: false, reason: c.reason }, { headers: NO_STORE });
+  // A mainnet rehearsal is open to named wallets only; this is just what the
+  // button shows. The real check is on every signed request.
+  const owner = new URL(req.url).searchParams.get("owner") ?? "";
+  if (!c.service.allows(owner)) {
+    return Response.json({ available: false, reason: "Cash-out isn't available for this wallet yet." }, { headers: NO_STORE });
+  }
   // The rate is only an estimate for the form; cash-out still works without it.
   const rate = await c.service.rate().catch(() => null);
   return Response.json({ available: true, ...c.info, rate: rate?.rate ?? null, rateAtMs: rate?.atMs ?? null }, { headers: NO_STORE });

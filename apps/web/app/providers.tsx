@@ -8,7 +8,6 @@ import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { enokiConfig } from "@/lib/enoki";
 import { umbraConfig } from "@/lib/config";
-import { walletClient } from "@/lib/wallet";
 
 const { networkConfig } = createNetworkConfig({
   testnet: { url: umbraConfig.fullnodeUrl, network: "testnet" },
@@ -27,11 +26,6 @@ function RegisterEnokiWallets() {
   useEffect(() => {
     if (!isEnokiNetwork(network)) return;
     if (!enokiConfig.enokiApiKey || !enokiConfig.googleClientId) return;
-    // The social app signs on `network`. The wallet can live on another network
-    // (mainnet money, testnet social), so Enoki gets that client too and the
-    // same Google account can sign there. Enoki keeps one zkLogin session per
-    // network: sign-in creates this one, the first wallet send creates the other.
-    const clients = walletClient && walletClient.network !== network ? [client, walletClient] : [client];
     const { unregister } = registerEnokiWallets({
       apiKey: enokiConfig.enokiApiKey,
       providers: {
@@ -43,8 +37,10 @@ function RegisterEnokiWallets() {
           redirectUrl: `${window.location.origin}/`,
         },
       },
-      clients,
-      getCurrentNetwork: () => network,
+      // One network for everything: the wallet runs on the app's own network
+      // (lib/config NETWORK), so signing in creates the only session it needs.
+      client,
+      network,
     });
     return unregister;
   }, [client, network]);
