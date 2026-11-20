@@ -164,7 +164,13 @@ export const CashoutSessionSchema = z.object({
 });
 export type CashoutSession = z.infer<typeof CashoutSessionSchema>;
 
-/** A request is proven either by its own signature or by a session. */
+/**
+ * A request is proven either by its own signature or by a session. Looking up
+ * the name on a bank account is the one thing allowed with neither: it tells
+ * nobody anything about a wallet, and asking for a passkey prompt just to check
+ * an account number is friction with nothing behind it. (The lookup is
+ * throttled instead; see the service.)
+ */
 export const SignedCashoutSchema = z.union([
   z.object({
     message: CashoutMessageSchema,
@@ -172,6 +178,8 @@ export const SignedCashoutSchema = z.union([
     signature: z.string().min(1),
   }),
   z.object({ message: CashoutMessageSchema, session: CashoutSessionSchema }),
+  // strict: a body with a malformed signature or session is a bad request, not an unsigned one
+  z.object({ message: CashoutMessageSchema }).strict(),
 ]);
 export type SignedCashout = z.infer<typeof SignedCashoutSchema>;
 

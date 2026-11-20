@@ -155,7 +155,8 @@ export default function WalletPage() {
                 </button>
               </p>
             ) : null}
-            <div className="mt-5 flex flex-wrap gap-3">
+            {/* Two even columns on a phone; a row on anything wider. */}
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
               <Button variant={panel === "receive" ? "primary" : "outline"} onClick={() => toggle("receive")} aria-expanded={panel === "receive"}>
                 <ArrowDown /> Receive
               </Button>
@@ -183,7 +184,14 @@ export default function WalletPage() {
             <WalletSwap address={address} config={walletConfig} balances={balances.data} price={prices.data?.SUI} viewOnly={viewOnly} />
           ) : null}
           {panel === "cashout" && balances.data && cashoutOn ? (
-            <WalletCashout address={address} config={walletConfig} balances={balances.data} info={cashoutOn} viewOnly={viewOnly} />
+            <WalletCashout
+              address={address}
+              config={walletConfig}
+              balances={balances.data}
+              info={cashoutOn}
+              viewOnly={viewOnly}
+              onSwap={canSwap ? () => setPanel("swap") : undefined}
+            />
           ) : null}
 
           <Card className="p-2">

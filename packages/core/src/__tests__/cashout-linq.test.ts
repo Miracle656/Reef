@@ -99,6 +99,27 @@ describe("Linq client", () => {
     expect(f.calls[1]!.headers["X-API-Key"]).toBe("k");
   });
 
+  it("accepts an account whose bank name Linq left empty, or out", async () => {
+    // Exactly what Linq answered for an OPay account on 2026-11-20.
+    const f = fakeFetch([
+      json({ accountName: "ADA OBI", accountNumber: "9012365123", bankCode: "100004", bankName: "" }),
+      json({ accountName: "ADA OBI" }),
+    ]);
+    const linq = createLinqClient({ apiKey: "k", fetch: f.impl });
+    expect(await linq.verifyBank({ bankCode: "100004", accountNumber: "9012365123" })).toMatchObject({ accountName: "ADA OBI", bankName: "" });
+    expect((await linq.verifyBank({ bankCode: "100004", accountNumber: "9012365123" })).accountName).toBe("ADA OBI");
+    expect(f.calls).toHaveLength(2);
+  });
+
+  it("still refuses an answer with no name on the account", async () => {
+    const f = fakeFetch([json({ accountName: "", bankName: "OPay" })]);
+    const linq = createLinqClient({ apiKey: "k", fetch: f.impl });
+    const err = await linq.verifyBank({ bankCode: "100004", accountNumber: "9012365123" }).catch((e) => e);
+    expect(err).toBeInstanceOf(LinqError);
+    expect(err).toMatchObject({ status: 502, transient: false });
+    expect(f.calls).toHaveLength(1); // not retried: asking again won't change it
+  });
+
   it("turns Linq's error body into a LinqError and doesn't retry a refusal", async () => {
     const f = fakeFetch([json({ message: "invalid bank account" }, 400)]);
     const linq = createLinqClient({ apiKey: "k", fetch: f.impl });

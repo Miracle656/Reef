@@ -94,6 +94,7 @@ export class CashoutLockedError extends Error {
  * The wallet confirms once (one signature: a passkey prompt, or nothing visible
  * for a Google account) and that confirmation is sent with every request for
  * the next half hour. Pass `{ quiet: true }` from anything that isn't a tap.
+ * Looking up the name on a bank account needs no confirmation at all.
  */
 export function useCashoutApi() {
   const sign = useWalletSignMessage();
@@ -103,7 +104,9 @@ export function useCashoutApi() {
       const owner = normalizeSuiAddress(address);
 
       let session = sessions.get(owner);
-      if (!session || Date.now() - session.issuedAt > SESSION_USE_MS) {
+      if (session && Date.now() - session.issuedAt > SESSION_USE_MS) session = undefined;
+      // A bank lookup says nothing about any wallet, so it is never worth a prompt.
+      if (!session && draft.action !== "verify-bank") {
         if (opts.quiet && SIGN_IN === "passkey") throw new CashoutLockedError();
         let pending = signing.get(owner);
         if (!pending) {
@@ -124,7 +127,7 @@ export function useCashoutApi() {
       const res = await fetch("/api/cashout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, session }),
+        body: JSON.stringify(session ? { message, session } : { message }),
         cache: "no-store",
       });
       const json = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;

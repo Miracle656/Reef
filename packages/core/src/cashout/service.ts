@@ -5,7 +5,9 @@
  *
  * What it guarantees:
  * - every request is proven to come from the wallet that owns the order, by its
- *   own signature or by a session that wallet signed, and is recent
+ *   own signature or by a session that wallet signed, and is recent. The one
+ *   exception is looking up the name on a bank account, which needs no proof
+ *   and is throttled instead
  * - an order can be read or changed only by the address that made it
  * - order creation is idempotent (the client's order id is Linq's idempotency
  *   key) and throttled per address, because Linq rate-limits our whole key
@@ -17,6 +19,7 @@
 import { isValidSuiAddress, normalizeStructTag, normalizeSuiAddress } from "@mysten/sui/utils";
 import { toBaseUnits } from "../wallet/index";
 import {
+  BANKS,
   canonicalCashoutBytes,
   canonicalCashoutSessionBytes,
   CASHOUT_SESSION_MS,
@@ -99,8 +102,13 @@ export interface CashoutServiceDeps {
 export interface CashoutService {
   /** Indicative naira-per-dollar rate, cached briefly. */
   rate(): Promise<CashoutRate>;
-  /** Handle one request (the parsed JSON body of `POST /api/cashout`): `{ message, signature }` or `{ message, session }`. */
-  handle(body: unknown): Promise<CashoutResponse>;
+  /**
+   * Handle one request (the parsed JSON body of `POST /api/cashout`):
+   * `{ message, signature }`, `{ message, session }`, or a bare `{ message }`
+   * for a bank lookup. `caller` is whatever identifies who is asking at the
+   * network level (their IP address); it only feeds the lookup throttle.
+   */
+  handle(body: unknown, caller?: string): Promise<CashoutResponse>;
   /** Handle a Linq webhook. Returns the HTTP status to answer with. */
   webhook(rawBody: string, signatureHeader: string | null | undefined): Promise<number>;
   /** Whether `owner` may use cash-out at all (see `allowedOwners`). */
@@ -113,7 +121,13 @@ const RATE_TTL_MS = 30_000;
 const RATE_STALE_OK_MS = 10 * 60_000;
 /** don't ask Linq about the same order more often than this */
 const REFRESH_EVERY_MS = 4_000;
+/** bank lookups a minute: per wallet, per caller, and for everyone together (the Linq key is shared and rate-limited) */
 const VERIFY_BANK_PER_MINUTE = 10;
+const VERIFY_BANK_PER_CALLER = 20;
+const VERIFY_BANK_PER_MINUTE_ALL = 60;
+/** a looked-up account name is kept this long, so checking and then ordering asks Linq once */
+const ACCOUNT_NAME_TTL_MS = 10 * 60_000;
+const MAX_ACCOUNT_NAMES = 500;
 const LIST_LIMIT = 20;
 /** sessions this instance has already verified (see `sessionIsValid`) */
 const MAX_KNOWN_SESSIONS = 500;
@@ -165,6 +179,7 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
 
   let cachedRate: CashoutRate | null = null;
   const bankLookups = new Map<string, number[]>();
+  const accountNames = new Map<string, { atMs: number; bankName: string; accountName: string }>();
 
   async function rate(): Promise<CashoutRate> {
     const t = now();
@@ -262,24 +277,63 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
     }
   }
 
-  async function verifyBank(m: Extract<CashoutMessage, { action: "verify-bank" }>): Promise<CashoutResponse> {
-    const t = now();
-    const recent = (bankLookups.get(m.owner) ?? []).filter((x) => t - x < 60_000);
-    if (recent.length >= VERIFY_BANK_PER_MINUTE) throw new CashoutError("throttled", "Too many lookups. Wait a minute and try again.", 429);
+  /** Count one lookup against `key`; false once it has had `limit` in the last minute. */
+  function lookupAllowed(key: string, limit: number, t: number): boolean {
+    const recent = (bankLookups.get(key) ?? []).filter((x) => t - x < 60_000);
+    if (recent.length >= limit) {
+      bankLookups.set(key, recent);
+      return false;
+    }
     recent.push(t);
-    bankLookups.set(m.owner, recent);
+    bankLookups.set(key, recent);
+    return true;
+  }
+
+  /**
+   * Anyone may ask, so this is throttled three ways: per wallet named, per
+   * caller, and for everyone together. The counters live in this instance's
+   * memory, which is a brake rather than a wall; Linq's own limit is behind it.
+   */
+  async function verifyBank(m: Extract<CashoutMessage, { action: "verify-bank" }>, caller: string | undefined): Promise<CashoutResponse> {
+    const t = now();
+    const ok =
+      lookupAllowed(`wallet:${m.owner}`, VERIFY_BANK_PER_MINUTE, t) &&
+      (caller === undefined || lookupAllowed(`caller:${caller}`, VERIFY_BANK_PER_CALLER, t)) &&
+      lookupAllowed("everyone", VERIFY_BANK_PER_MINUTE_ALL, t);
+    if (!ok) throw new CashoutError("throttled", "Too many lookups. Wait a minute and try again.", 429);
     const account = await lookupAccount(m.bankCode, m.accountNumber);
     return { action: "verify-bank", account: { bankCode: m.bankCode, bankName: account.bankName, accountName: account.accountName } };
   }
 
-  async function lookupAccount(bankCode: string, accountNumber: string) {
+  async function lookupAccount(bankCode: string, accountNumber: string): Promise<{ bankName: string; accountName: string }> {
+    const t = now();
+    const key = `${bankCode}:${accountNumber}`;
+    const known = accountNames.get(key);
+    if (known && t - known.atMs < ACCOUNT_NAME_TTL_MS) return known;
     try {
-      return await linq.verifyBank({ bankCode, accountNumber });
+      const found = await linq.verifyBank({ bankCode, accountNumber });
+      // Linq leaves the bank's name empty for some banks. We know which bank was asked about.
+      const bankName = found.bankName?.trim() || BANKS.find((b) => b.code === bankCode)?.name || `Bank ${bankCode}`;
+      const account = { atMs: t, bankName, accountName: found.accountName };
+      if (accountNames.size >= MAX_ACCOUNT_NAMES) {
+        for (const oldest of accountNames.keys()) {
+          accountNames.delete(oldest);
+          break;
+        }
+      }
+      accountNames.set(key, account);
+      return account;
     } catch (e) {
-      if (e instanceof LinqError && !e.transient && e.status !== 401 && e.status !== 403) {
+      const said = e instanceof Error ? e.message : String(e);
+      // Linq itself saying no (a 4xx that isn't about our key or its rate limit)
+      // means the account doesn't exist. Anything else, including an answer we
+      // can't read, is a fault on our side or theirs and must never be reported
+      // as a wrong account number.
+      if (e instanceof LinqError && e.status >= 400 && e.status < 500 && ![401, 403, 408, 429].includes(e.status)) {
+        log(`[cashout] verify-bank: Linq found no account at bank ${bankCode} (HTTP ${e.status}: ${said})`);
         throw new CashoutError("bad_request", "We couldn't find that account. Check the bank and the account number.", 400);
       }
-      log(`[cashout] verify-bank failed: ${e instanceof Error ? e.message : String(e)}`);
+      log(`[cashout] verify-bank failed for bank ${bankCode}: ${said}`);
       throw new CashoutError("provider", "We couldn't check that account right now. Try again in a minute.", 502);
     }
   }
@@ -421,7 +475,7 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
     return true;
   }
 
-  async function handle(body: unknown): Promise<CashoutResponse> {
+  async function handle(body: unknown, caller?: string): Promise<CashoutResponse> {
     const parsed = SignedCashoutSchema.safeParse(body);
     if (!parsed.success) throw new CashoutError("bad_request", "That request isn't valid.", 400);
     const request = parsed.data;
@@ -437,15 +491,18 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
         throw new CashoutError("unauthorized", "Confirm it's you again to carry on.", 401);
       }
       ok = await sessionIsValid(m.owner, issuedAt, signature);
-    } else {
+    } else if ("signature" in request) {
       ok = await verify(m.owner, canonicalCashoutBytes(m), request.signature);
+    } else {
+      // No proof of who is asking: enough to look up the name on a bank account, and nothing else.
+      ok = m.action === "verify-bank";
     }
     if (!ok) throw new CashoutError("unauthorized", "We couldn't confirm this request came from your wallet. Sign in again and retry.", 401);
     if (!allows(m.owner)) throw new CashoutError("unavailable", "Cash-out isn't available for this wallet yet.", 503);
 
     switch (m.action) {
       case "verify-bank":
-        return verifyBank(m);
+        return verifyBank(m, caller);
       case "create":
         return create(m);
       case "deposit":

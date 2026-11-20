@@ -32,6 +32,8 @@ let linqStatus: string | Error;
 let tamper: (o: LinqOfframpOrder) => LinqOfframpOrder;
 let createError: Error | null;
 let bankError: Error | null;
+/** what the fake Linq puts in `bankName`; undefined = a made-up name per bank code */
+let bankNameFromLinq: string | undefined;
 let rateError: Error | null;
 let seq = 0;
 
@@ -47,7 +49,7 @@ function fakeLinq(): LinqClient {
     async verifyBank({ bankCode, accountNumber }) {
       linqCalls.verifyBank++;
       if (bankError) throw bankError;
-      return { accountName: "ADA OBI", bankName: `Bank ${bankCode}`, accountNumber, bankCode };
+      return { accountName: "ADA OBI", bankName: bankNameFromLinq === undefined ? `Bank ${bankCode}` : bankNameFromLinq, accountNumber, bankCode };
     },
     async createOfframp(input) {
       linqCalls.create.push(input);
@@ -122,6 +124,7 @@ beforeEach(() => {
   linqStatus = "initiated";
   tamper = (o) => o;
   createError = bankError = rateError = null;
+  bankNameFromLinq = undefined;
   verified.length = 0;
   service = createCashoutService({
     store,
@@ -302,28 +305,116 @@ describe("a session: one signature for many requests", () => {
 });
 
 describe("verify-bank", () => {
-  const lookup = (accountNumber = "1234567890") => service.handle(signed({ action: "verify-bank", owner: OWNER, bankCode: "033", accountNumber, timestamp: clock }));
+  const ask = (accountNumber = "1234567890", owner = OWNER, bankCode = "033") => ({ action: "verify-bank" as const, owner, bankCode, accountNumber, timestamp: clock });
+  const lookup = (accountNumber?: string) => service.handle(signed(ask(accountNumber)));
+  /** ten digits, different every time */
+  const account = (n: number) => String(1_000_000_000 + n);
 
   it("returns the name the bank holds", async () => {
     expect(await lookup()).toEqual({ action: "verify-bank", account: { bankCode: "033", bankName: "Bank 033", accountName: "ADA OBI" } });
   });
 
+  it("needs no signature, because it says nothing about any wallet", async () => {
+    expect(await service.handle({ message: ask() })).toEqual({ action: "verify-bank", account: { bankCode: "033", bankName: "Bank 033", accountName: "ADA OBI" } });
+    expect(verified).toHaveLength(0);
+  });
+
+  it("is the only thing that works without one", async () => {
+    const order = await makeOrder();
+    for (const message of [
+      createMsg(),
+      { action: "get" as const, owner: OWNER, orderId: order.id, timestamp: clock },
+      { action: "list" as const, owner: OWNER, timestamp: clock },
+      { action: "deposit" as const, owner: OWNER, orderId: order.id, digest: DIGEST, timestamp: clock },
+    ]) {
+      await rejects(service.handle({ message }), "unauthorized", 401);
+    }
+    expect(linqCalls.create).toHaveLength(1);
+    // and a lookup still has to be fresh
+    await rejects(service.handle({ message: { ...ask(), timestamp: clock - 6 * 60_000 } }), "unauthorized", 401);
+  });
+
+  it("fills in the bank's name when Linq leaves it empty (it does for OPay)", async () => {
+    for (const nothing of ["", "   "]) {
+      bankNameFromLinq = nothing;
+      const res = await service.handle({ message: ask(account(nothing.length), OWNER, "100004") });
+      expect(res).toEqual({ action: "verify-bank", account: { bankCode: "100004", bankName: "OPay", accountName: "ADA OBI" } });
+    }
+    // a bank that isn't in our list still gets something readable
+    bankNameFromLinq = "";
+    const odd = await service.handle({ message: ask(account(9), OWNER, "999") });
+    expect(odd.action === "verify-bank" && odd.account.bankName).toBe("Bank 999");
+    // and the order made for that account carries the name too
+    const order = await makeOrder({ bankCode: "100004", accountNumber: account(0) });
+    expect(order.bankName).toBe("OPay");
+  });
+
   it("says the account wasn't found when Linq refuses it, and that it's our side when Linq is down", async () => {
     bankError = new LinqError(400, "could not resolve account");
     expect((await rejects(lookup(), "bad_request", 400)).message).toMatch(/couldn't find that account/);
+    bankError = new LinqError(404, "not found");
+    await rejects(lookup(account(1)), "bad_request", 400);
     bankError = new LinqError(503, "upstream");
-    await rejects(lookup(), "provider", 502);
-    // a rejected API key is our problem, not a wrong account number
-    bankError = new LinqError(401, "invalid api key");
-    await rejects(lookup(), "provider", 502);
+    await rejects(lookup(account(2)), "provider", 502);
+    // a rejected API key or a rate limit is our problem, not a wrong account number
+    for (const status of [401, 403, 429]) {
+      bankError = new LinqError(status, "no");
+      await rejects(lookup(account(3)), "provider", 502);
+    }
+  });
+
+  it("never calls an answer it couldn't read 'account not found'", async () => {
+    // what the Linq client throws when the account exists but the answer has an unexpected shape
+    bankError = new LinqError(502, "Linq sent an answer we don't understand (/b2b/verifybank)", false);
+    const err = await rejects(lookup(), "provider", 502);
+    expect(err.message).toMatch(/couldn't check that account right now/);
+    expect(logs.some((l) => l.includes("verify-bank failed") && l.includes("don't understand"))).toBe(true);
   });
 
   it("limits lookups to 10 a minute per wallet", async () => {
-    for (let i = 0; i < 10; i++) await lookup();
-    await rejects(lookup(), "throttled", 429);
+    for (let i = 0; i < 10; i++) await lookup(account(i));
+    await rejects(lookup(account(10)), "throttled", 429);
     expect(linqCalls.verifyBank).toBe(10);
     clock += 60_001;
+    expect((await lookup(account(11))).action).toBe("verify-bank");
+  });
+
+  it("limits lookups per caller too, whatever wallets they name", async () => {
+    const from = (caller: string, i: number) => service.handle({ message: ask(account(i), "0x" + i.toString(16).padStart(64, "0")) }, caller);
+    for (let i = 0; i < 20; i++) await from("203.0.113.7", i);
+    await rejects(from("203.0.113.7", 20), "throttled", 429);
+    // someone else is not held back by them
+    expect((await from("198.51.100.9", 21)).action).toBe("verify-bank");
+    clock += 60_001;
+    expect((await from("203.0.113.7", 22)).action).toBe("verify-bank");
+  });
+
+  it("stops at 60 a minute for everyone together", async () => {
+    const from = (i: number) => service.handle({ message: ask(account(i), "0x" + (i + 1).toString(16).padStart(64, "0")) }, `198.51.100.${i}`);
+    for (let i = 0; i < 60; i++) await from(i);
+    await rejects(from(60), "throttled", 429);
+    expect(linqCalls.verifyBank).toBe(60);
+  });
+
+  it("asks Linq once for the same account, for ten minutes", async () => {
+    await lookup();
+    await lookup();
+    await service.handle({ message: ask("1234567890", OTHER) });
+    expect(linqCalls.verifyBank).toBe(1);
+    // creating an order for that account doesn't ask again either
+    await makeOrder();
+    expect(linqCalls.verifyBank).toBe(1);
+    clock += 10 * 60_000 + 1;
+    await lookup();
+    expect(linqCalls.verifyBank).toBe(2);
+  });
+
+  it("doesn't remember a lookup that failed", async () => {
+    bankError = new LinqError(503, "upstream");
+    await rejects(lookup(), "provider", 502);
+    bankError = null;
     expect((await lookup()).action).toBe("verify-bank");
+    expect(linqCalls.verifyBank).toBe(2);
   });
 });
 

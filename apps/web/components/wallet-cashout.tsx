@@ -59,12 +59,15 @@ export function WalletCashout({
   balances,
   info,
   viewOnly,
+  onSwap,
 }: {
   address: string;
   config: wallet.WalletConfig;
   balances: wallet.WalletBalance[];
   info: LiveInfo;
   viewOnly: boolean;
+  /** open the swap screen, when the wallet holds SUI it could turn into dollars first */
+  onSwap?: () => void;
 }) {
   const api = useCashoutApi();
   const { prepare, send, canSign } = useWalletSend();
@@ -82,7 +85,12 @@ export function WalletCashout({
   const [accountNumber, setAccountNumber] = useState("");
   const [account, setAccount] = useState<(cashout.BankAccountName & { accountNumber: string }) | null>(null);
   const [step, setStep] = useState<Step>({ name: "form" });
-  const [busy, setBusy] = useState<null | "lookup" | "create" | "send" | "resume" | "list">(null);
+  const [busy, setBusy] = useState<null | "create" | "send" | "resume" | "list">(null);
+  /** the bank account is looked up by itself as soon as it is complete */
+  const [checking, setChecking] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [lookupAgain, setLookupAgain] = useState(0);
+  const lookupSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<Order[] | null>(null);
   const [resumable, setResumable] = useState<string | null>(null);
@@ -93,6 +101,32 @@ export function WalletCashout({
   const pendingOrderId = useRef<string | null>(null);
 
   useEffect(() => setResumable(activeOrder.get(address)), [address]);
+
+  // Look the account up once the bank and all ten digits are in. No tap and no
+  // passkey prompt: the name on a bank account says nothing about a wallet.
+  useEffect(() => {
+    if (!bankCode || !cashout.isAccountNumber(accountNumber)) {
+      setChecking(false);
+      setAccountError(null);
+      return;
+    }
+    if (account && account.bankCode === bankCode && account.accountNumber === accountNumber) return;
+    const seq = ++lookupSeq.current;
+    setChecking(true);
+    setAccountError(null);
+    // A short pause, so a pasted or corrected number is looked up once.
+    const wait = setTimeout(async () => {
+      try {
+        const { account: found } = await api(address, { action: "verify-bank", bankCode, accountNumber });
+        if (lookupSeq.current === seq) setAccount({ ...found, accountNumber });
+      } catch (e) {
+        if (lookupSeq.current === seq) setAccountError(errorText(e));
+      } finally {
+        if (lookupSeq.current === seq) setChecking(false);
+      }
+    }, 450);
+    return () => clearTimeout(wait);
+  }, [bankCode, accountNumber, account, address, api, lookupAgain]);
 
   // A ticking clock for the deadline, only while it matters.
   useEffect(() => {
@@ -162,26 +196,28 @@ export function WalletCashout({
   }
 
   const accountMatches = account !== null && account.bankCode === bankCode && account.accountNumber === accountNumber;
-  const canLookup = bankCode !== "" && cashout.isAccountNumber(accountNumber);
   const blocked = viewOnly || !canSign;
+
+  // Both sides of the amount are shown; whichever was typed last is the one the order is made from.
+  const sendValue = kind === "stable" ? amount : cents !== null ? cashout.fromHundredths(cents) : "";
+  const getValue = kind === "ngn" ? amount : kobo !== null ? cashout.fromHundredths(kobo) : "";
+  // What still stands in the way of Continue, in the order a person would fix it.
+  const todo =
+    typed === null || typed <= 0n
+      ? null
+      : cents !== null && cents < minCents
+        ? `The smallest cash-out is ${dollars(minCents)}.`
+        : cents !== null && cents > maxCents
+          ? `The most you can cash out at once is ${dollars(maxCents)}.`
+          : cents !== null && cents > haveCents
+            ? `You only have ${amountOf(selected.total)}.`
+            : !accountMatches
+              ? "Add the bank account to pay."
+              : null;
 
   function changed() {
     setError(null);
     pendingOrderId.current = null;
-  }
-
-  async function lookup() {
-    setError(null);
-    setBusy("lookup");
-    try {
-      const { account: found } = await api(address, { action: "verify-bank", bankCode, accountNumber });
-      setAccount({ ...found, accountNumber });
-    } catch (e) {
-      setAccount(null);
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
   }
 
   async function create() {
@@ -412,6 +448,7 @@ export function WalletCashout({
   }
 
   // ---- form ------------------------------------------------------------------
+  const field = "min-w-0 flex-1 bg-transparent text-right font-mono text-[17px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none";
   return (
     <Card className="p-5">
       <h2 className="text-lg font-bold">Cash out to your bank</h2>
@@ -427,175 +464,211 @@ export function WalletCashout({
         </div>
       ) : null}
 
-      {sellable.length > 1 ? (
-        <div className="mt-4 flex flex-wrap gap-2" role="radiogroup" aria-label="Coin to cash out">
-          {sellable.map((b) => {
-            const on = b.coin.symbol === coin.symbol;
-            return (
-              <button
-                key={b.coin.symbol}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  setSymbol(b.coin.symbol);
-                  changed();
-                }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  on ? "bg-ink text-on-ink" : "border border-[color:var(--glass-border)] text-ink-soft hover:text-ink"
-                }`}
-              >
-                {b.coin.symbol}
-              </button>
-            );
-          })}
+      {selected.total === 0n ? (
+        <div className="mt-4 rounded-2xl border border-[color:var(--glass-border)] bg-surface-muted px-4 py-3">
+          <p className="text-sm font-semibold">You have no {coin.symbol} to cash out yet.</p>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">
+            {onSwap ? "Swap some of your SUI for USDC first, or get paid in dollars." : "Get paid in USDC or USDSUI first."} You can still check your bank
+            details below.
+          </p>
+          {onSwap ? (
+            <Button size="sm" variant="outline" className="mt-2.5" onClick={onSwap}>
+              Swap SUI to USDC
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="mt-4">
-        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          <label htmlFor="cashout-amount">{kind === "ngn" ? "Naira to receive" : `${coin.symbol} to sell`}</label>
-          <button
-            type="button"
-            className="normal-case tracking-normal text-accent hover:underline"
-            onClick={() => {
-              setKind(kind === "ngn" ? "stable" : "ngn");
-              setAmount("");
-              changed();
-            }}
-          >
-            {kind === "ngn" ? `Enter ${coin.symbol} instead` : "Enter naira instead"}
-          </button>
-        </div>
-        <div className="relative mt-1.5">
-          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] font-semibold text-ink-soft">{kind === "ngn" ? "₦" : "$"}</span>
-          <Input
-            id="cashout-amount"
+      {/* ---- how much ---- */}
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Amount</p>
+        {sellable.length > 1 ? (
+          <div className="flex gap-1.5" role="radiogroup" aria-label="Coin to cash out">
+            {sellable.map((b) => {
+              const on = b.coin.symbol === coin.symbol;
+              return (
+                <button
+                  key={b.coin.symbol}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => {
+                    setSymbol(b.coin.symbol);
+                    changed();
+                  }}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    on ? "bg-ink text-on-ink" : "border border-[color:var(--glass-border)] text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {b.coin.symbol}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-2 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-surface-glass backdrop-blur-xl">
+        <label className="flex items-center gap-3 px-4 py-3.5">
+          <span className="w-[4.5rem] shrink-0 text-sm text-ink-soft">You send</span>
+          <input
             inputMode="decimal"
             autoComplete="off"
             placeholder="0.00"
-            value={amount}
+            aria-label={`${coin.symbol} to send`}
+            value={sendValue}
             onChange={(e) => {
+              setKind("stable");
               setAmount(e.target.value);
               changed();
             }}
-            className={`pl-9 font-mono ${kind === "stable" ? "pr-20" : ""}`}
+            className={field}
           />
-          {kind === "stable" ? (
-            <button
-              type="button"
-              disabled={haveCents <= 0n}
-              onClick={() => {
-                setAmount(cashout.fromHundredths(haveCents < maxCents ? haveCents : maxCents));
-                changed();
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-xs font-bold text-accent hover:bg-surface-muted disabled:opacity-40"
-            >
-              Max
-            </button>
-          ) : null}
-        </div>
-        <p className="mt-1.5 text-[13px] text-ink-soft">
-          {kind === "ngn"
-            ? cents !== null
-              ? `About ${dollars(cents)} of your ${coin.symbol}.`
-              : `You have ${amountOf(selected.total)}.`
-            : kobo !== null
-              ? `About ${formatNgn(cashout.fromHundredths(kobo))} at today's rate.`
-              : `You have ${amountOf(selected.total)}.`}
-          {info.rate ? ` Today: ${formatNgn(info.rate.toFixed(2))} per $1.` : ""}
-        </p>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Bank</span>
-          <select
-            value={bankCode}
-            onChange={(e) => {
-              setBankCode(e.target.value);
-              setAccount(null);
-              changed();
-            }}
-            className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--glass-border)] bg-surface-glass px-4 text-[15px] text-ink backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--accent)_45%,transparent)]"
-          >
-            <option value="">Choose a bank</option>
-            {cashout.BANKS.map((b) => (
-              <option key={b.code} value={b.code}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <span className="w-14 shrink-0 text-sm font-semibold">{coin.symbol}</span>
         </label>
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Account number</span>
-          <Input
-            inputMode="numeric"
+        <label className="flex items-center gap-3 border-t border-[color:var(--glass-border)] px-4 py-3.5">
+          <span className="w-[4.5rem] shrink-0 text-sm text-ink-soft">You get</span>
+          <input
+            inputMode="decimal"
             autoComplete="off"
-            maxLength={10}
-            placeholder="10 digits"
-            value={accountNumber}
+            placeholder="0.00"
+            aria-label="Naira to receive"
+            value={getValue}
             onChange={(e) => {
-              setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 10));
-              setAccount(null);
+              setKind("ngn");
+              setAmount(e.target.value);
               changed();
             }}
-            className="mt-1.5 font-mono"
+            className={field}
           />
+          <span className="w-14 shrink-0 text-sm font-semibold">NGN</span>
         </label>
       </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        {accountMatches ? (
-          <p className="text-sm">
-            <span className="text-ink-soft">Account name: </span>
-            <span className="font-bold">{account!.accountName}</span>
-          </p>
-        ) : (
-          <Button size="sm" variant="outline" disabled={!canLookup || busy !== null || blocked} onClick={lookup}>
-            {busy === "lookup" ? <Spinner /> : null} Check account
-          </Button>
-        )}
-      </div>
-
-      {viewOnly ? <p className="mt-3 text-sm font-medium text-ink-soft">Preview only: sign in on the live site to cash out.</p> : null}
-      {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
-
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <Button disabled={busy !== null || blocked || !amount.trim() || !accountMatches} onClick={create}>
-          {busy === "create" ? <Spinner className="border-on-ink" /> : null}
-          {busy === "create" ? "Getting your rate…" : "Continue"}
-        </Button>
-        <button type="button" disabled={busy !== null || blocked} onClick={loadRecent} className="text-sm font-medium text-ink-soft hover:underline disabled:opacity-50">
-          {busy === "list" ? "Loading…" : "Recent cash-outs"}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px] text-ink-soft">
+        <span>{info.rate ? `${formatNgn(info.rate.toFixed(2))} per $1 today. The exact rate is set on the next step.` : "Today's rate isn't available right now."}</span>
+        <button
+          type="button"
+          disabled={haveCents <= 0n}
+          onClick={() => {
+            setKind("stable");
+            setAmount(cashout.fromHundredths(haveCents < maxCents ? haveCents : maxCents));
+            changed();
+          }}
+          className="font-semibold text-accent hover:underline disabled:text-ink-faint disabled:no-underline"
+        >
+          Use all {amountOf(selected.total)}
         </button>
       </div>
 
-      {recent ? (
-        <div className="mt-4 border-t border-[color:var(--glass-border)] pt-3">
-          {recent.length === 0 ? (
-            <p className="text-sm text-ink-faint">No cash-outs yet.</p>
-          ) : (
-            recent.slice(0, 8).map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                disabled={busy !== null}
-                onClick={() => setStep({ name: "status", order: o })}
-                className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-muted"
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{formatNgn(o.amountNgn)}</span>
-                  <span className="block truncate text-xs text-ink-faint">
-                    {o.bankName} {o.accountNumberMasked} · {new Date(o.createdAtMs).toLocaleDateString()}
+      {/* ---- where to ---- */}
+      <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-ink-faint">Pay to</p>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+        <select
+          aria-label="Bank"
+          value={bankCode}
+          onChange={(e) => {
+            setBankCode(e.target.value);
+            setAccount(null);
+            changed();
+          }}
+          className="h-11 w-full rounded-2xl border border-[color:var(--glass-border)] bg-surface-glass px-4 text-[15px] text-ink backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--accent)_45%,transparent)]"
+        >
+          <option value="">Choose a bank</option>
+          {cashout.BANKS.map((b) => (
+            <option key={b.code} value={b.code}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <Input
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={10}
+          aria-label="Account number"
+          placeholder="Account number (10 digits)"
+          value={accountNumber}
+          onChange={(e) => {
+            setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 10));
+            setAccount(null);
+            changed();
+          }}
+          className="font-mono"
+        />
+      </div>
+
+      <div className="mt-2.5" aria-live="polite">
+        {accountMatches ? (
+          <div className="flex items-center gap-3 rounded-2xl bg-[color:color-mix(in_srgb,#16c784_14%,transparent)] px-3.5 py-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#16c784] text-white">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-bold">{account!.accountName}</span>
+              <span className="block text-xs text-ink-soft">
+                {account!.bankName} {cashout.maskAccountNumber(accountNumber)}
+              </span>
+            </span>
+          </div>
+        ) : checking ? (
+          <p className="flex items-center gap-2 text-sm text-ink-soft">
+            <Spinner /> Checking the account…
+          </p>
+        ) : accountError ? (
+          <p className="text-sm text-danger">
+            {accountError}{" "}
+            <button type="button" className="font-semibold underline" onClick={() => setLookupAgain((n) => n + 1)}>
+              Try again
+            </button>
+          </p>
+        ) : (
+          <p className="text-[13px] text-ink-faint">Choose the bank and enter the account number. The name on the account shows here to confirm it.</p>
+        )}
+      </div>
+
+      {viewOnly ? <p className="mt-4 text-sm font-medium text-ink-soft">Preview only: sign in on the live site to cash out.</p> : null}
+      {todo && !error ? <p className="mt-4 text-[13px] font-medium text-ink-soft">{todo}</p> : null}
+      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+
+      <Button className="mt-4 w-full sm:w-auto" disabled={busy !== null || blocked || typed === null || typed <= 0n || todo !== null} onClick={create}>
+        {busy === "create" ? <Spinner className="border-on-ink" /> : null}
+        {busy === "create" ? "Getting your rate…" : "Continue"}
+      </Button>
+      <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+        Next you confirm it&apos;s you, then see the exact rate. Nothing is sent until you approve it there.
+      </p>
+
+      <div className="mt-4 border-t border-[color:var(--glass-border)] pt-3">
+        <button type="button" disabled={busy !== null || blocked} onClick={loadRecent} className="text-sm font-medium text-ink-soft hover:underline disabled:opacity-50">
+          {busy === "list" ? "Loading…" : recent ? "Refresh recent cash-outs" : "See recent cash-outs"}
+        </button>
+        {recent ? (
+          <div className="mt-2">
+            {recent.length === 0 ? (
+              <p className="text-sm text-ink-faint">No cash-outs yet.</p>
+            ) : (
+              recent.slice(0, 8).map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => setStep({ name: "status", order: o })}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-muted"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{formatNgn(o.amountNgn)}</span>
+                    <span className="block truncate text-xs text-ink-faint">
+                      {o.bankName} {o.accountNumberMasked} · {new Date(o.createdAtMs).toLocaleDateString()}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-ink-soft">{STATUS_TEXT[o.status].title}</span>
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
+                  <span className="shrink-0 text-xs font-semibold text-ink-soft">{STATUS_TEXT[o.status].title}</span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
     </Card>
   );
 }
