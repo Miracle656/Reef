@@ -55,8 +55,29 @@ export function useSwapRules(sender: string | null) {
   });
 }
 
+/** What the market would pay for what was typed, right now. An estimate: the review step has the exact figures. */
+export interface SwapEstimate {
+  /** what will be sold: the typed amount rounded down to a whole step */
+  quantity: bigint;
+  /** USDC out, in base units */
+  out: bigint;
+}
+
 export function useWalletSwap() {
   const { execute, canSign } = useWalletExecute();
+
+  /**
+   * Ask the market what the typed `amount` would fetch. Moves nothing and needs
+   * no signature; it is what fills in the "you get" side while someone types.
+   * Throws a WalletInputError when the amount can't be swapped from `held`.
+   */
+  const estimate = useCallback(async (sender: string, amount: bigint, held: bigint, rules: swap.SwapRules): Promise<SwapEstimate> => {
+    if (!walletClient || !swapMarket) throw new Error("Swapping isn't available here");
+    const { quantity, offer } = swap.planSwap(swapMarket, rules, amount, held);
+    const quote = await swap.quoteSwap(swap.createSwapClient(walletClient, swapMarket, sender), swapMarket, offer);
+    if (quote.out <= 0n) throw new wallet.WalletInputError("The market won't take that amount right now. Try a different amount.");
+    return { quantity, out: quote.out };
+  }, []);
 
   /**
    * Quote, build and dry-run a swap of the `amount` typed (base units of SUI)
@@ -97,5 +118,5 @@ export function useWalletSwap() {
     [execute],
   );
 
-  return { prepare, run, canSign };
+  return { estimate, prepare, run, canSign };
 }

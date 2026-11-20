@@ -133,6 +133,21 @@ export function maxSwap(rules: SwapRules, balance: bigint): bigint {
 }
 
 /**
+ * What a "25%" or "50%" button fills in: that share of `balance`, as a whole
+ * number of steps and never more than {@link maxSwap}. 100 is the most that can
+ * be swapped. 0 when the share is under the pool's minimum, so the button can
+ * be switched off instead of filling in an amount that would be refused.
+ */
+export function swapShare(rules: SwapRules, balance: bigint, percent: bigint): bigint {
+  const most = maxSwap(rules, balance);
+  if (most <= 0n || percent <= 0n) return 0n;
+  if (percent >= 100n) return most;
+  const part = sellable(rules, (balance * percent) / 100n);
+  const capped = part > most ? most : part;
+  return capped >= rules.smallest ? capped : 0n;
+}
+
+/**
  * Check a quantity to sell before asking the network about it. `quantity` and
  * `balance` are in base units of what is sold. Throws {@link WalletInputError}
  * with a sentence for the screen.
