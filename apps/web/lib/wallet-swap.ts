@@ -41,6 +41,13 @@ export function swapErrorMessage(e: unknown): string {
   // Our own floor inside the transaction (see buildSwapTx).
   if (/InsufficientCoinBalance/i.test(raw)) return "That amount is too small for this market to swap.";
   if (/MoveAbort/i.test(raw)) return "The market couldn't take this swap right now. Try again in a moment.";
+  // A swap is built against the wallet's SUI at that instant, down to the last unit of its address
+  // balance. The amount was already checked against the balance on the screen, so the network saying
+  // "insufficient" here means the balance moved in between (spent from another device or app). Seen on
+  // mainnet with wallets that trade every few seconds; "you don't have enough" would contradict the screen.
+  if (/withdraw reservation|insufficient address balance|unable to perform gas selection/i.test(raw)) {
+    return "Your SUI balance changed while this swap was being prepared. Nothing was swapped. Try again.";
+  }
   // Everything else (not enough for the fee, network trouble) reads the same as for sending.
   return sendErrorMessage(e).replace("transfer", "swap").replace("Nothing was sent", "Nothing was swapped");
 }
