@@ -181,6 +181,10 @@ export function PasskeySignIn({ size = "md" }: { size?: ButtonProps["size"] }) {
       <p className="text-[13px] leading-relaxed text-ink-faint">
         Your wallet opens with a passkey: your fingerprint, face or screen lock. No password, and no seed phrase to write down.
       </p>
+      <p className="text-[13px] leading-relaxed text-ink-soft">
+        <span className="font-semibold text-ink">Made a wallet on another phone or computer?</span> Choose &ldquo;I already have a wallet&rdquo; and use
+        that device&apos;s passkey. Creating one here makes a second, empty wallet.
+      </p>
     </div>
   );
 }

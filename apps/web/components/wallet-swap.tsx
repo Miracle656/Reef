@@ -231,6 +231,7 @@ export function WalletSwap({
       </p>
       {rules.data && most <= 0n ? (
         <p className="mt-2 text-[13px] font-medium text-ink-soft">
+          {held === 0n ? `This wallet has no ${from.symbol} to swap yet. ` : ""}
           You need a little over {fromText(rules.data.smallest + swap.SWAP_FEE_RESERVE, 2)} in this wallet to make a swap.
         </p>
       ) : null}

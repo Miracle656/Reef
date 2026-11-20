@@ -103,8 +103,12 @@ export default function WalletPage() {
   // Dollar coins at face value, plus SUI at its market price when there is one.
   const value = balances.data ? wallet.walletValue(balances.data, prices.data) : null;
   const suiHeld = balances.data?.find((b) => b.coin.symbol === "SUI")?.total ?? 0n;
-  // Swapping SUI for dollars exists on mainnet only, and only matters to someone holding SUI.
-  const canSwap = walletConfig.network === wallet.SWAP_NETWORK && suiHeld > 0n;
+  // Swapping SUI for dollars exists on mainnet only. The button is always there:
+  // hiding it from a wallet with no SUI made the feature look missing.
+  const canSwap = walletConfig.network === wallet.SWAP_NETWORK;
+  // Nothing in the wallet at all. Usually a brand-new wallet, but also what someone sees after
+  // making a second wallet on another device by mistake, so the page says which it could be.
+  const empty = balances.data !== undefined && balances.data.every((b) => b.total === 0n);
   const toggle = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
   const cashoutOn = cashoutInfo.data?.available ? cashoutInfo.data : null;
 
@@ -145,6 +149,12 @@ export default function WalletPage() {
               <p className="mt-2 text-[13px] text-ink-soft">
                 Not counting your {value.unpriced.map((b) => `${wallet.formatAmount(b.total, b.coin.decimals, 4)} ${b.coin.symbol}`).join(" and ")}:
                 {prices.isLoading ? " its price is loading." : " its price isn't available right now."}
+              </p>
+            ) : null}
+            {empty && !viewOnly ? (
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
+                This wallet is empty. Tap Receive to get paid into it. If your money is in a wallet you made on another phone or computer, this is
+                a different one: sign out in Settings, then choose &ldquo;I already have a wallet&rdquo;.
               </p>
             ) : null}
             {balances.isError ? (
@@ -190,7 +200,7 @@ export default function WalletPage() {
               balances={balances.data}
               info={cashoutOn}
               viewOnly={viewOnly}
-              onSwap={canSwap ? () => setPanel("swap") : undefined}
+              onSwap={canSwap && suiHeld > 0n ? () => setPanel("swap") : undefined}
             />
           ) : null}
 
