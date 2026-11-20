@@ -42,6 +42,9 @@ export interface WalletConfig {
 
 export const SUI_COIN_TYPE = "0x2::sui::SUI";
 
+/** The only network the wallet can swap on (see `swap` in this package: SUI to USDC on DeepBook). */
+export const SWAP_NETWORK: WalletNetwork = "mainnet";
+
 /** Circle's native USDC on Sui mainnet. */
 export const MAINNET_USDC_TYPE = "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC";
 /** USDsui ("Sui Dollar", issued through Bridge) on Sui mainnet. */
@@ -148,6 +151,44 @@ export function stableTotal(balances: WalletBalance[]): bigint {
     const d = b.coin.decimals;
     return sum + (d >= 6 ? b.total / 10n ** BigInt(d - 6) : b.total * 10n ** BigInt(6 - d));
   }, 0n);
+}
+
+/**
+ * Dollar prices of coins that aren't dollars themselves (SUI), by symbol, in
+ * millionths of a dollar per whole coin. A missing entry means "no price right now".
+ */
+export type UsdPrices = Readonly<Record<string, bigint | undefined>>;
+
+export interface WalletValue {
+  /** everything that could be valued, in millionths of a dollar */
+  total: bigint;
+  /** the dollar coins alone (exact) */
+  dollars: bigint;
+  /** what each priced coin is worth at its market price, by symbol (an estimate) */
+  priced: Record<string, bigint>;
+  /** coins held that have no price right now, so they are NOT in `total` */
+  unpriced: WalletBalance[];
+}
+
+/**
+ * What the wallet is worth in dollars: the dollar coins at face value, plus
+ * every other coin at its market price. Rounded DOWN, like every amount shown.
+ * A coin that is held but has no price is left out of the total and listed in
+ * `unpriced`, so the screen can say so instead of quietly showing less.
+ */
+export function walletValue(balances: WalletBalance[], prices: UsdPrices = {}): WalletValue {
+  const value: WalletValue = { total: 0n, dollars: stableTotal(balances), priced: {}, unpriced: [] };
+  for (const b of balances) {
+    if (b.coin.stable || b.total <= 0n) continue;
+    const price = prices[b.coin.symbol];
+    if (price === undefined || price <= 0n) {
+      value.unpriced.push(b);
+      continue;
+    }
+    value.priced[b.coin.symbol] = (b.total * price) / 10n ** BigInt(b.coin.decimals);
+  }
+  value.total = value.dollars + Object.values(value.priced).reduce((sum, v) => sum + v, 0n);
+  return value;
 }
 
 // ---- sending ----------------------------------------------------------------

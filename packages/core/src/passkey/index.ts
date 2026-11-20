@@ -263,13 +263,14 @@ export function findPasskey(provider: PasskeyProvider, challenge: () => Uint8Arr
 // ---- errors, in words ---------------------------------------------------------------
 
 /** What was being done when a passkey step failed (it changes the wording). */
-export type PasskeyStep = "create" | "check" | "find" | "send" | "confirm";
+export type PasskeyStep = "create" | "check" | "find" | "send" | "swap" | "confirm";
 
 const CLOSED: Record<PasskeyStep, string> = {
   create: "The passkey prompt was closed before it finished, so no wallet was made.",
   check: "The passkey prompt was closed before the check finished. Try again.",
   find: "The passkey prompt was closed, or this device has no ReeF passkey. If your wallet lives on another phone or computer, open ReeF there.",
   send: "The passkey prompt was closed before it finished. Nothing was sent.",
+  swap: "The passkey prompt was closed before it finished. Nothing was swapped.",
   confirm: "The passkey prompt was closed before it finished. Nothing was changed.",
 };
 
