@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useSocialAccount } from "@/lib/account";
+import { useSignedInAddress, useSocialAccount } from "@/lib/account";
 import { walrus } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
 import { ComposeForm } from "@/components/compose-box";
@@ -25,12 +25,13 @@ export default function HomePage() {
     enabled: Boolean(account) && !WALLET_ONLY,
   });
 
-  // On mainnet the app is the wallet alone: there is no feed to show here.
+  // The wallet-only app (mainnet) has no feed: home is the wallet, or the way in.
+  const signedIn = useSignedInAddress();
   const router = useRouter();
   useEffect(() => {
-    if (WALLET_ONLY && account) router.replace("/wallet");
-  }, [account, router]);
-  if (WALLET_ONLY) return account ? null : <WalletLanding />;
+    if (WALLET_ONLY && signedIn) router.replace("/wallet");
+  }, [signedIn, router]);
+  if (WALLET_ONLY) return signedIn ? null : <WalletLanding />;
 
   // Signed-out visitors get the full animated landing (no app chrome).
   if (!account) return <Landing />;

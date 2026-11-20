@@ -7,7 +7,7 @@ import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { enokiConfig } from "@/lib/enoki";
-import { umbraConfig } from "@/lib/config";
+import { SIGN_IN, umbraConfig } from "@/lib/config";
 
 const { networkConfig } = createNetworkConfig({
   testnet: { url: umbraConfig.fullnodeUrl, network: "testnet" },
@@ -20,7 +20,8 @@ const { networkConfig } = createNetworkConfig({
 const createClient = (_name: string, config: { url: string; network: "testnet" | "mainnet" }) =>
   new SuiGrpcClient({ baseUrl: config.url, network: config.network }) as unknown as SuiJsonRpcClient;
 
-/** Registers Enoki Google zkLogin wallets with dapp-kit. No-op without env. */
+/** Registers Enoki Google zkLogin wallets with dapp-kit. No-op without env.
+ *  Not used by the wallet-only app, which signs in with a passkey instead. */
 function RegisterEnokiWallets() {
   const { client, network } = useSuiClientContext();
   useEffect(() => {
@@ -52,7 +53,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider networks={networkConfig} createClient={createClient} defaultNetwork={enokiConfig.suiNetwork as "testnet" | "mainnet"}>
-        <RegisterEnokiWallets />
+        {SIGN_IN === "google" ? <RegisterEnokiWallets /> : null}
         <WalletProvider autoConnect>{children}</WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>

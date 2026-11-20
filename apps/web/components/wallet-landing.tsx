@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SignInButton } from "./sign-in-button";
+import { PasskeySignIn } from "./passkey-sign-in";
 
 /**
- * The signed-out home page when the app is on mainnet, where it is the wallet
- * alone. The full animated landing describes the social app, which is
- * testnet-only, so it isn't shown here.
+ * The signed-out home page of the wallet-only app (mainnet). The full animated
+ * landing describes the social app, which is testnet-only, so it isn't shown
+ * here.
  */
 export function WalletLanding() {
-  // dapp-kit hooks (inside the sign-in button) are client-only.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
       <div className="flex items-center gap-3">
@@ -24,10 +19,12 @@ export function WalletLanding() {
         Your dollars, <span className="text-accent">on Sui.</span>
       </h1>
       <p className="mt-5 text-[17px] leading-relaxed text-ink-soft">
-        Hold USDC and USDSUI, and send them with no network fee. Sign in with Google: no seed phrase and nothing to install.
+        Hold USDC and USDSUI, and send them with no network fee. Nothing to install: your wallet opens with your fingerprint, face or screen lock.
       </p>
 
-      <div className="mt-8">{mounted ? <SignInButton size="lg" /> : null}</div>
+      <div className="mt-8">
+        <PasskeySignIn size="lg" />
+      </div>
 
       <ul className="mt-10 space-y-3 text-sm text-ink-soft">
         <li>

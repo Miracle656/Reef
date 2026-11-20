@@ -8,7 +8,8 @@
 **Current phase:** Phase 1 (identity → on-chain graph → storage → indexer → feed).
 **Network:** one switch, `NEXT_PUBLIC_SUI_NETWORK`. The social app is testnet
 only: never mainnet in Phase 1. Switched to `mainnet`, the app is the wallet
-alone and every testnet feature is hidden (D-13).
+alone, every testnet feature is hidden (D-13), and people sign in with a
+passkey instead of Google (D-15).
 **Status:** contracts published to testnet; `@umbra/core`, the indexer, the web
 app and the mobile app are built. See `README.md` for the current status table.
 
@@ -18,7 +19,7 @@ app and the mobile app are built. See `README.md` for the current status table.
 
 | Capability | Primitive / tool |
 |---|---|
-| Identity (walletless) | zkLogin via **Enoki** (Google → self-custodial address) |
+| Identity (walletless) | zkLogin via **Enoki** (Google → self-custodial address) on the testnet app; a **passkey** on the mainnet wallet (D-15) |
 | Gasless tx | **Enoki sponsored transactions** (backend-signed) |
 | Handles | app-level registry now; **SuiNS** link reserved (see decision D-3) |
 | Profiles / posts / follows | **Sui Move objects** (owned-first for parallelism) |
@@ -255,18 +256,27 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - **D-13** (2026-11) **On mainnet the app is the wallet alone, and stablecoin sends are gasless.** The owner wants production on mainnet showing only the wallet (with cash-out), and everything else kept testnet-only and hidden until it is ready. `NEXT_PUBLIC_SUI_NETWORK` is the one switch: `testnet` is the full app on test money; `mainnet` is the wallet only (`WALLET_ONLY` in `apps/web/lib/config.ts`). In that mode `apps/web/middleware.ts` sends every page that isn't on its short allowlist to `/wallet`, the nav is Wallet + Settings, the home page is a wallet landing, and nothing calls the (testnet) indexer. A zkLogin or passkey address is the same on both networks, so it is the same account. On testnet the wallet is opt-in (`NEXT_PUBLIC_WALLET_NETWORK=testnet`). Never show a mainnet wallet next to testnet features: real money and test money must not share a screen.
   - `@umbra/core`'s `wallet` namespace holds the coin list (mainnet USDC + USDSUI + SUI; testnet Circle test USDC + SUI), exact bigint amount math and `buildSendTx`.
   - USDC and USDSUI are sent with `0x2::balance::send_funds` alone. Sui runs that shape with gas price 0 ("gasless stablecoin transfers": mainnet since May 2026, also on testnet), so users need no SUI and there is no sponsor. The SDK detects it when the tx is built with a gRPC client. Minimum 0.01; the recipient is credited in its **address balance**, not a new `Coin` object. SUI is sent the ordinary way and pays its own gas.
-  - Sign-in creates the zkLogin session on the app's own network, so there is one session and one Google window. The Enoki **public** key must have that network enabled in the portal (mainnet was not on 2026-11-19); the sign-in button checks first and shows "Sign-in opens soon" instead of opening a blank window.
+  - The wallet always runs on the app's own network, so there is one account and one sign-in: a passkey on the wallet-only app (D-15), Google on the full testnet app.
   - The send flow builds and dry-runs first, shows that result for review, then signs exactly those bytes.
   - Live check, read-only: `pnpm --filter @umbra/indexer wallet:probe <mainnet|testnet> <address>`.
 - **D-14** (2026-11) **Naira cash-out runs in the web app, through Linq, without custody.** Linq's B2B offramp API takes USDC/USDSUI on Sui and pays a Nigerian bank account. It is mainnet only and has no sandbox.
   - **Where it runs:** Next route handlers in `apps/web` (`/api/cashout`, `/api/webhooks/linq`), not the indexer, so cash-out doesn't depend on the indexer host. They are thin: the rules are `createCashoutService` in `@umbra/core/server` (`packages/core/src/cashout`), with Linq, the store and signature verification injected, so the whole flow is unit-tested.
   - **No custody.** The server asks Linq for an order; the wallet then sends the dollars (a gasless transfer, D-13) straight to that order's one-time deposit address. `manualDeposit: true` is hard-coded in the Linq client: users hold their own keys, so the payout must follow what really arrived.
-  - **Auth without a login:** every request is a personal message signed by the wallet (`cashout.canonicalCashoutBytes`), verified on the wallet's network, fresh within 5 minutes. An order can be read or changed only by the address that made it.
+  - **Auth without a login:** the wallet proves who it is by signing a personal message, verified on the wallet's network. Either each request carries its own signature (`cashout.canonicalCashoutBytes`), or the wallet signs once to open a 30-minute **session** (`cashout.canonicalCashoutSessionBytes`) and sends that with every request. The web app uses a session, because a passkey shows a prompt for every signature: one cash-out is then two prompts (the session, and the transfer) instead of five or more. A session only opens this API for its own wallet; money moves by a transaction signed separately. Every request must still be fresh within 5 minutes, and an order can be read or changed only by the address that made it.
   - **Linq's answers are checked** before the app is told where to send: chain, coin type, a real Sui address that isn't the user's own, an amount within the limit, numbers that add up. The account name comes from our own bank lookup, never from the client.
   - **Order ids are chosen by the client** and double as Linq's idempotency key, so a retry can't create a second order. 3 orders per 10 minutes and 20 a day per wallet; $1 to $500 per order by default.
   - **Status** comes from polling Linq when the app asks; Linq's webhook (HMAC-verified on the raw body) only speeds it up, since Linq sends each event once. A status only moves forward and `paid` is final.
   - **Storage:** one Postgres table, `CashoutOrder`, plain SQL over Neon's HTTP driver; the full account number is never stored. The table is also in the Prisma schema so `db push` keeps it, and the SQL is tested against a real in-process Postgres (PGlite).
   - **Rehearsal mode** (`CASHOUT_MODE=mock`) replaces Linq with a stand-in so the flow can be run with test USDC. `pnpm --filter @umbra/indexer cashout:smoke <url> [webhook secret]` drives a rehearsal deployment end to end. On mainnet a rehearsal moves real dollars to the rehearsal address, so it runs only for the wallets named in `CASHOUT_MOCK_ALLOWED_OWNERS`.
+- **D-15** (2026-11) **On the mainnet wallet the account is a passkey.** Enoki's mainnet access is a paid plan, so the wallet-only app has no Google sign-in and no Enoki at all (owner's decision, 2026-11-20). The passkey's secp256r1 public key gives the Sui address and the passkey signs every transaction (SIP-9; `passkey_auth` is on for mainnet). There is no server account, and what the browser remembers (public key + credential id) is not secret. The rules are `passkey` in `@umbra/core` (unit-tested with a software authenticator); the WebAuthn calls are `apps/web/lib/passkey.ts`.
+  - **Making a wallet is two taps.** The first creates the passkey. The second signs a fixed check message, and the app asks a Sui node (`SignatureVerificationService.VerifySignature`) whether that signature belongs to the new address. Only then is the wallet remembered and its address shown. A browser or password manager that hands back a key it can't sign with is caught before any money is sent there.
+  - **Opening a wallet again is two taps too**, with nothing stored anywhere. A passkey never gives its public key out again, so it is worked back from signatures: one signature fits two possible keys, a second from the same passkey leaves one. The second prompt is held to the passkey picked in the first. Signing out only makes the browser forget the wallet.
+  - **Every signature is a prompt, and a prompt must follow a tap** (Safari enforces it). So each prompt has its own button, nothing signs from an effect or a timer, and cash-out signs once per session (D-14).
+  - **A passkey is tied to its web address for good** (the WebAuthn RP ID). On mainnet `NEXT_PUBLIC_PASSKEY_RP_ID` must be set on purpose or no wallet can be made, so a wallet is never bound to a preview URL. Moving to another domain later means either keeping the old address alive or serving `/.well-known/webauthn` from it (Related Origin Requests), so choose the address before real users arrive (#9).
+  - **No recovery yet.** If the passkey is deleted the money can't be reached; a synced passkey (Google Password Manager, iCloud Keychain) survives a lost phone. A second passkey through `address_alias` (as #10 does for Google accounts) is the planned backup.
+  - `NEXT_PUBLIC_WALLET_ONLY=1` shows the wallet-only app on testnet, to try all of this with test money.
+  - To walk through the passkey screens without a device prompt (or from a script), paste `apps/web/dev/soft-passkey.js` into the console on a local dev page: a software passkey answers `navigator.credentials`, and everything else is the app's real code.
+  - Live check, read-only: `pnpm --filter @umbra/indexer passkey:probe <mainnet|testnet>` (a node accepts the app's passkey signatures and refuses wrong ones). A passkey-signed transaction really executing is covered on testnet by `sponsor:smoke`.
 
 ## TODO
 
@@ -283,10 +293,12 @@ sui client new-address ed25519        # then fund at https://faucet.sui.io
 - [ ] Finish the `umbra` → ReeF code rename (`@umbra/*`, `UMBRA_*`, bundle id, Expo scheme/slug).
 - [ ] Wire on-chain SuiNS leaf-subname mint (needs testnet parent name).
 - [x] Web wallet at `/wallet` (D-13): balances, receive (address + QR), gasless USDC/USDSUI send. Off until `NEXT_PUBLIC_WALLET_NETWORK` is set.
-- [ ] Go live on mainnet: enable Mainnet on the Enoki public key first (sign-in depends on it), then set `NEXT_PUBLIC_SUI_NETWORK=mainnet` on Vercel.
+- [x] Passkey sign-in for the wallet-only app (D-15), and cash-out on one confirmation per session (D-14).
+- [ ] Go live on mainnet: choose the wallet's web address first (a custom domain if there will ever be one, #9), then set `NEXT_PUBLIC_PASSKEY_RP_ID` to it and `NEXT_PUBLIC_SUI_NETWORK=mainnet` on Vercel. Then create a wallet and send a small amount: the first real transfer signed by a passkey from the app.
+- [ ] A backup passkey for the mainnet wallet (`address_alias`), so a lost passkey isn't lost money.
 - [x] Naira cash-out (D-14): Linq client, rules, order table, API routes and the Cash out screen in `/wallet`, with a rehearsal mode. Off until `LINQ_API_KEY` or `CASHOUT_MODE=mock` is set.
 - [ ] Cash-out go-live: rehearse on production with your own wallet (`CASHOUT_MODE=mock` + `CASHOUT_MOCK_ALLOWED_OWNERS`), get the Linq key (register the webhook URL at signup), confirm Linq detects address-balance (gasless) deposits, get the full bank list (`nigerian-banks.json`; only the 15 banks in Linq's guide are listed), then one small real cash-out.
-- [ ] Wallet on mobile; passkey sign-in (needs the custom domain first, #9).
+- [ ] Wallet on mobile (passkeys there need the app's own domain association, #9).
 - [x] Walrus blob ownership + renewal job (`services/indexer/src/walrus-renew.ts`; uploads `send_object_to` the blob owner, job calls `system::extend_blob`). Needs `WALRUS_RENEWER_SECRET_KEY` + `*_WALRUS_BLOB_OWNER` set in prod.
 
 ---

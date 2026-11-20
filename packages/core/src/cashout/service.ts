@@ -4,7 +4,8 @@
  * unit-tested with a fake Linq and an in-memory store.
  *
  * What it guarantees:
- * - every request is signed by the wallet that owns the order, and recent
+ * - every request is proven to come from the wallet that owns the order, by its
+ *   own signature or by a session that wallet signed, and is recent
  * - an order can be read or changed only by the address that made it
  * - order creation is idempotent (the client's order id is Linq's idempotency
  *   key) and throttled per address, because Linq rate-limits our whole key
@@ -17,6 +18,8 @@ import { isValidSuiAddress, normalizeStructTag, normalizeSuiAddress } from "@mys
 import { toBaseUnits } from "../wallet/index";
 import {
   canonicalCashoutBytes,
+  canonicalCashoutSessionBytes,
+  CASHOUT_SESSION_MS,
   centsForNgn,
   DEPOSIT_WINDOW_MS,
   fromHundredths,
@@ -71,6 +74,8 @@ export interface CashoutServiceConfig {
   maxOrdersPerDay?: number;
   /** how far a request's timestamp may be from the server clock (default 5 minutes) */
   maxSkewMs?: number;
+  /** how long a session signature is honoured (default 30 minutes) */
+  sessionMs?: number;
   /** Linq webhook signing secret; webhooks are refused without it */
   webhookSecret?: string;
   /**
@@ -94,7 +99,7 @@ export interface CashoutServiceDeps {
 export interface CashoutService {
   /** Indicative naira-per-dollar rate, cached briefly. */
   rate(): Promise<CashoutRate>;
-  /** Handle one signed request (the parsed JSON body of `POST /api/cashout`). */
+  /** Handle one request (the parsed JSON body of `POST /api/cashout`): `{ message, signature }` or `{ message, session }`. */
   handle(body: unknown): Promise<CashoutResponse>;
   /** Handle a Linq webhook. Returns the HTTP status to answer with. */
   webhook(rawBody: string, signatureHeader: string | null | undefined): Promise<number>;
@@ -110,6 +115,8 @@ const RATE_STALE_OK_MS = 10 * 60_000;
 const REFRESH_EVERY_MS = 4_000;
 const VERIFY_BANK_PER_MINUTE = 10;
 const LIST_LIMIT = 20;
+/** sessions this instance has already verified (see `sessionIsValid`) */
+const MAX_KNOWN_SESSIONS = 500;
 
 const RANK: Record<CashoutStatus, number> = { awaiting_deposit: 0, processing: 1, paid: 2, failed: 2, expired: 2 };
 
@@ -154,6 +161,7 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
   const maxPer10 = config.maxOrdersPer10Min ?? 3;
   const maxPerDay = config.maxOrdersPerDay ?? 20;
   const maxSkew = config.maxSkewMs ?? 5 * 60_000;
+  const sessionMs = config.sessionMs ?? CASHOUT_SESSION_MS;
 
   let cachedRate: CashoutRate | null = null;
   const bankLookups = new Map<string, number[]>();
@@ -380,18 +388,57 @@ export function createCashoutService(deps: CashoutServiceDeps): CashoutService {
     return !config.allowedOwners || config.allowedOwners.has(owner.toLowerCase());
   }
 
+  /**
+   * Sessions already verified here, so a wallet following an order isn't
+   * re-verified every few seconds (for a Google account that check is a network
+   * call). The key is the whole claim and is only ever stored after a real
+   * check, so a hit means exactly this owner, time and signature were proven.
+   * Whether the session has run out is decided on every request, before this.
+   */
+  const knownSessions = new Set<string>();
+
+  async function verify(owner: string, bytes: Uint8Array, signature: string): Promise<boolean> {
+    try {
+      return await verifyOwner(owner, bytes, signature);
+    } catch (e) {
+      log(`[cashout] signature check errored: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }
+
+  async function sessionIsValid(owner: string, issuedAt: number, signature: string): Promise<boolean> {
+    const key = `${owner}:${issuedAt}:${signature}`;
+    if (knownSessions.has(key)) return true;
+    if (!(await verify(owner, canonicalCashoutSessionBytes(config.network, owner, issuedAt), signature))) return false;
+    if (knownSessions.size >= MAX_KNOWN_SESSIONS) {
+      // A Set keeps insertion order: drop the oldest.
+      for (const oldest of knownSessions) {
+        knownSessions.delete(oldest);
+        break;
+      }
+    }
+    knownSessions.add(key);
+    return true;
+  }
+
   async function handle(body: unknown): Promise<CashoutResponse> {
     const parsed = SignedCashoutSchema.safeParse(body);
     if (!parsed.success) throw new CashoutError("bad_request", "That request isn't valid.", 400);
-    const { message: m, signature } = parsed.data;
+    const request = parsed.data;
+    const m = request.message;
     if (Math.abs(now() - m.timestamp) > maxSkew) {
       throw new CashoutError("unauthorized", "That request is too old. Check your device's clock and try again.", 401);
     }
-    let ok = false;
-    try {
-      ok = await verifyOwner(m.owner, canonicalCashoutBytes(m), signature);
-    } catch (e) {
-      log(`[cashout] signature check errored: ${e instanceof Error ? e.message : String(e)}`);
+    let ok: boolean;
+    if ("session" in request) {
+      const { issuedAt, signature } = request.session;
+      // Run out, or dated in the future (a clock set ahead can't buy a longer session).
+      if (now() - issuedAt > sessionMs || issuedAt - now() > maxSkew) {
+        throw new CashoutError("unauthorized", "Confirm it's you again to carry on.", 401);
+      }
+      ok = await sessionIsValid(m.owner, issuedAt, signature);
+    } else {
+      ok = await verify(m.owner, canonicalCashoutBytes(m), request.signature);
     }
     if (!ok) throw new CashoutError("unauthorized", "We couldn't confirm this request came from your wallet. Sign in again and retry.", 401);
     if (!allows(m.owner)) throw new CashoutError("unavailable", "Cash-out isn't available for this wallet yet.", 503);

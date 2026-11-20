@@ -167,6 +167,140 @@ describe("who may call", () => {
   });
 });
 
+describe("a session: one signature for many requests", () => {
+  /** What the wallet signs once. The fake wallet's signature is "sig:<signer>". */
+  const session = (owner = OWNER, issuedAt = clock, signer = owner) => ({ issuedAt, signature: `sig:${signer}` });
+  const sessionText = (owner: string, issuedAt: number) => new TextDecoder().decode(cashout.canonicalCashoutSessionBytes("mainnet", owner, issuedAt));
+
+  it("lets one signature carry a whole cash-out", async () => {
+    const mine = session();
+    const bank = await service.handle({ message: { action: "verify-bank", owner: OWNER, bankCode: "033", accountNumber: "1234567890", timestamp: clock }, session: mine });
+    expect(bank.action).toBe("verify-bank");
+
+    const made = await service.handle({ message: createMsg(), session: mine });
+    if (made.action !== "create") throw new Error("unexpected");
+    const id = made.order.id;
+
+    clock += 60_000;
+    expect((await service.handle({ message: { action: "deposit", owner: OWNER, orderId: id, digest: DIGEST, timestamp: clock }, session: mine })).action).toBe("deposit");
+    clock += 60_000;
+    expect((await service.handle({ message: { action: "get", owner: OWNER, orderId: id, timestamp: clock }, session: mine })).action).toBe("get");
+    const listed = await service.handle({ message: { action: "list", owner: OWNER, timestamp: clock }, session: mine });
+    expect(listed.action === "list" && listed.orders.map((o) => o.id)).toEqual([id]);
+
+    // The wallet was asked about once, and about the session, not about each request.
+    expect(verified).toEqual([sessionText(OWNER, mine.issuedAt)]);
+  });
+
+  it("signs the network, the wallet and the time, and nothing else", () => {
+    expect(sessionText(OWNER, 1_800_000_000_000)).toBe(`reef:cashout:session:mainnet:${OWNER}:1800000000000`);
+    // never the same bytes as a request, whatever the request
+    const request = new TextDecoder().decode(cashout.canonicalCashoutBytes({ action: "list", owner: OWNER, timestamp: 1_800_000_000_000 }));
+    expect(request).not.toBe(sessionText(OWNER, 1_800_000_000_000));
+    expect(request.startsWith("reef:cashout:list:")).toBe(true);
+  });
+
+  it("only opens the wallet that signed it", async () => {
+    const mine = session(OWNER);
+    const order = await makeOrder();
+    // my session can't act as someone else
+    await rejects(service.handle({ message: createMsg({ owner: OTHER }), session: mine }), "unauthorized", 401);
+    // someone else's session can't act as me, or read my order
+    const theirs = session(OTHER);
+    await rejects(service.handle({ message: createMsg({ owner: OWNER }), session: theirs }), "unauthorized", 401);
+    await rejects(service.handle({ message: { action: "get", owner: OTHER, orderId: order.id, timestamp: clock }, session: theirs }), "not_found", 404);
+    // a session claimed for me but signed by another wallet
+    await rejects(service.handle({ message: { action: "list", owner: OWNER, timestamp: clock }, session: session(OWNER, clock, OTHER) }), "unauthorized", 401);
+    expect(linqCalls.create).toHaveLength(1);
+  });
+
+  it("runs out after 30 minutes, and can't be dated ahead to last longer", async () => {
+    const mine = session();
+    const list = () => service.handle({ message: { action: "list", owner: OWNER, timestamp: clock }, session: mine });
+    await list();
+    clock += cashout.CASHOUT_SESSION_MS;
+    await list(); // exactly at the limit still counts
+    clock += 1;
+    const err = await rejects(list(), "unauthorized", 401);
+    expect(err.message).toContain("Confirm it's you again");
+
+    // a session dated in the future is refused before any signature is checked
+    verified.length = 0;
+    const ahead = session(OWNER, clock + 6 * 60_000);
+    await rejects(service.handle({ message: { action: "list", owner: OWNER, timestamp: clock }, session: ahead }), "unauthorized", 401);
+    expect(verified).toHaveLength(0);
+    // a clock a little ahead is tolerated
+    await service.handle({ message: { action: "list", owner: OWNER, timestamp: clock }, session: session(OWNER, clock + 60_000) });
+  });
+
+  it("still needs every request to be fresh", async () => {
+    const mine = session();
+    await rejects(service.handle({ message: { action: "list", owner: OWNER, timestamp: clock - 6 * 60_000 }, session: mine }), "unauthorized", 401);
+  });
+
+  it("remembers a verified session, but never lets a different claim ride on it", async () => {
+    const mine = session();
+    const list = (s: { issuedAt: number; signature: string }, owner = OWNER) =>
+      service.handle({ message: { action: "list", owner, timestamp: clock }, session: s });
+    await list(mine);
+    await list(mine);
+    expect(verified).toHaveLength(1);
+
+    // same wallet and time, a different signature: checked, and refused
+    await rejects(list({ issuedAt: mine.issuedAt, signature: "sig:forged" }), "unauthorized", 401);
+    // same signature, another time: checked again (the fake wallet accepts it, a real one signs the time)
+    await list({ issuedAt: mine.issuedAt + 1, signature: mine.signature });
+    // same time and signature, claimed for another wallet: checked, and refused
+    await rejects(list(mine, OTHER), "unauthorized", 401);
+    expect(verified).toHaveLength(4);
+  });
+
+  it("never remembers a session that failed, and survives the wallet check erroring", async () => {
+    const flaky = createCashoutService({
+      store,
+      linq: fakeLinq(),
+      verifyOwner: async () => {
+        throw new Error("node unreachable");
+      },
+      now: () => clock,
+      log: (m) => logs.push(m),
+      config: { network: "mainnet", coins: { usdc: { type: USDC, decimals: 6 } } },
+    });
+    const body = { message: { action: "list", owner: OWNER, timestamp: clock }, session: session() };
+    await rejects(flaky.handle(body), "unauthorized", 401);
+    await rejects(flaky.handle(body), "unauthorized", 401);
+    expect(logs.filter((l) => l.includes("signature check errored"))).toHaveLength(2);
+  });
+
+  it("honours a shorter session when configured, and the wallet allowlist", async () => {
+    const strict = createCashoutService({
+      store,
+      linq: fakeLinq(),
+      verifyOwner,
+      now: () => clock,
+      config: { network: "testnet", coins: { usdc: { type: USDC, decimals: 6 } }, sessionMs: 60_000, allowedOwners: new Set([OWNER]) },
+    });
+    const mine = session();
+    const list = (owner = OWNER, s = mine) => strict.handle({ message: { action: "list", owner, timestamp: clock }, session: s });
+    await list();
+    // the session is tied to the network it was signed for
+    expect(verified.at(-1)).toBe(`reef:cashout:session:testnet:${OWNER}:${mine.issuedAt}`);
+    await rejects(list(OTHER, session(OTHER)), "unavailable", 503);
+    clock += 60_001;
+    await rejects(list(), "unauthorized", 401);
+  });
+
+  it("takes a request's own signature as before, and prefers it when both are sent", async () => {
+    const m = createMsg();
+    await service.handle({ ...signed(m), session: session(OWNER, clock, OTHER) });
+    expect(verified).toEqual([new TextDecoder().decode(cashout.canonicalCashoutBytes(m))]);
+    // a session signature is not a request signature, and the other way round
+    for (const body of [{ message: createMsg(), session: { issuedAt: clock } }, { message: createMsg(), session: { signature: "sig" } }, { message: createMsg(), session: "sig" }]) {
+      await rejects(service.handle(body), "bad_request", 400);
+    }
+  });
+});
+
 describe("verify-bank", () => {
   const lookup = (accountNumber = "1234567890") => service.handle(signed({ action: "verify-bank", owner: OWNER, bankCode: "033", accountNumber, timestamp: clock }));
 

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { normalizeStructTag } from "@mysten/sui/utils";
 import { cashout, wallet } from "@umbra/core";
-import { activeOrder, CashoutApiError, formatNgn, useCashoutApi, type CashoutInfo } from "@/lib/cashout";
+import { activeOrder, CashoutApiError, CashoutLockedError, formatNgn, useCashoutApi, type CashoutInfo } from "@/lib/cashout";
 import { sendErrorMessage, useWalletSend, type PreparedSend } from "@/lib/wallet";
 import { toast } from "./toaster";
 import { Badge, Button, Card, Input, Spinner } from "./ui";
@@ -87,6 +87,8 @@ export function WalletCashout({
   const [recent, setRecent] = useState<Order[] | null>(null);
   const [resumable, setResumable] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  /** following an order has stopped until the wallet confirms again (a passkey prompt needs a tap) */
+  const [paused, setPaused] = useState(false);
   /** one id per distinct request, so a retry after a dropped connection can't make a second order */
   const pendingOrderId = useRef<string | null>(null);
 
@@ -99,19 +101,22 @@ export function WalletCashout({
     return () => clearInterval(t);
   }, [step.name]);
 
-  // Follow the order until it is finished.
-  const following = step.name === "status" && !cashout.isTerminal(step.order.status) ? step.order.id : null;
+  // Follow the order until it is finished. This runs on a timer, so it may only
+  // reuse a confirmation the wallet already gave (`quiet`), never ask for one.
+  const following = step.name === "status" && !cashout.isTerminal(step.order.status) && !paused ? step.order.id : null;
   useEffect(() => {
     if (!following) return;
     let stopped = false;
     const t = setInterval(async () => {
       try {
-        const { order } = await api(address, { action: "get", orderId: following });
+        const { order } = await api(address, { action: "get", orderId: following }, { quiet: true });
         if (stopped) return;
         setStep((s) => (s.name === "status" && s.order.id === order.id ? { name: "status", order } : s));
         if (cashout.isTerminal(order.status)) activeOrder.set(address, null);
-      } catch {
-        /* keep the last known state; the next tick tries again */
+      } catch (e) {
+        // The confirmation ran out: stop and offer a button. Anything else:
+        // keep the last known state; the next tick tries again.
+        if (e instanceof CashoutLockedError && !stopped) setPaused(true);
       }
     }, POLL_MS);
     return () => {
@@ -229,10 +234,12 @@ export function WalletCashout({
       toast(`Sent ${amountOf(prepared.amount)} ✓`);
       let next: Order = { ...order, depositDigest: digest };
       try {
-        next = (await api(address, { action: "deposit", orderId: order.id, digest })).order;
+        // `quiet`: the tap was spent on the transfer, so this must not prompt again.
+        next = (await api(address, { action: "deposit", orderId: order.id, digest }, { quiet: true })).order;
       } catch {
         /* the transfer is what matters; the status page keeps working without this note */
       }
+      setPaused(false);
       setStep({ name: "status", order: next });
     } catch (e) {
       setError(errorText(e));
@@ -248,6 +255,7 @@ export function WalletCashout({
       const { order } = await api(address, { action: "get", orderId });
       if (cashout.isTerminal(order.status)) activeOrder.set(address, null);
       setResumable(null);
+      setPaused(false);
       setStep({ name: "status", order });
     } catch (e) {
       // An order we can no longer read isn't worth offering again.
@@ -337,6 +345,15 @@ export function WalletCashout({
             </a>
           ) : null}
         </div>
+        {!done && paused ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--glass-border)] px-3 py-2.5">
+            <p className="text-sm font-medium">Confirm it&apos;s you to keep following this cash-out.</p>
+            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => open(o.id, "resume")}>
+              {busy === "resume" ? <Spinner /> : null} Check again
+            </Button>
+          </div>
+        ) : null}
+        {!done && error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
         {!done ? <p className="mt-3 text-xs text-ink-faint">You can close this page. Come back to Cash out to see where it is.</p> : null}
       </Card>
     );

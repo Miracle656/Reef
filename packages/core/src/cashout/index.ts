@@ -144,11 +144,35 @@ export const CashoutMessageSchema = z.discriminatedUnion("action", [
 ]);
 export type CashoutMessage = z.infer<typeof CashoutMessageSchema>;
 
-export const SignedCashoutSchema = z.object({
-  message: CashoutMessageSchema,
-  /** base64 personal-message signature by `message.owner` over {@link canonicalCashoutBytes} */
+/**
+ * How long one confirmation lets a wallet use cash-out (a "session").
+ *
+ * A request can carry its own signature, but a passkey wallet shows a prompt
+ * for every signature, and one cash-out is five or more requests plus a status
+ * check every few seconds. So the wallet may instead sign once and send that
+ * one signature with each request until it runs out. A session only opens this
+ * API for its own wallet: money still moves by a transaction the wallet signs
+ * separately, on its own prompt.
+ */
+export const CASHOUT_SESSION_MS = 30 * 60_000;
+
+export const CashoutSessionSchema = z.object({
+  /** when the wallet signed it (ms) */
+  issuedAt: Timestamp,
+  /** base64 personal-message signature by the owner over {@link canonicalCashoutSessionBytes} */
   signature: z.string().min(1),
 });
+export type CashoutSession = z.infer<typeof CashoutSessionSchema>;
+
+/** A request is proven either by its own signature or by a session. */
+export const SignedCashoutSchema = z.union([
+  z.object({
+    message: CashoutMessageSchema,
+    /** base64 personal-message signature by `message.owner` over {@link canonicalCashoutBytes} */
+    signature: z.string().min(1),
+  }),
+  z.object({ message: CashoutMessageSchema, session: CashoutSessionSchema }),
+]);
 export type SignedCashout = z.infer<typeof SignedCashoutSchema>;
 
 /**
@@ -176,6 +200,14 @@ export function canonicalCashoutBytes(m: CashoutMessage): Uint8Array {
       break;
   }
   return new TextEncoder().encode(`${head}:${body}:${m.timestamp}`);
+}
+
+/**
+ * The exact bytes a wallet signs to open a session on `network`. "session" is
+ * not an action, so this can never be read as a request, nor a request as this.
+ */
+export function canonicalCashoutSessionBytes(network: string, owner: string, issuedAt: number): Uint8Array {
+  return new TextEncoder().encode(`reef:cashout:session:${network}:${owner}:${issuedAt}`);
 }
 
 // ---- what the server answers -------------------------------------------------

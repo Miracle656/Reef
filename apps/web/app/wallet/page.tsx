@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { wallet } from "@umbra/core";
 import { AppShell } from "@/components/app-shell";
+import { PasskeySignIn } from "@/components/passkey-sign-in";
 import { SignInButton } from "@/components/sign-in-button";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
 import { WalletCashout } from "@/components/wallet-cashout";
 import { WalletReceive } from "@/components/wallet-receive";
 import { WalletSend } from "@/components/wallet-send";
 import { useCashoutInfo } from "@/lib/cashout";
-import { walletConfig } from "@/lib/config";
+import { SIGN_IN, walletConfig } from "@/lib/config";
 import { useWalletBalances, useWalletOwner } from "@/lib/wallet";
 
 const ICONS: Record<string, string> = { USDC: "/usdc.png", SUI: "/sui.png" };
@@ -55,7 +56,7 @@ function ArrowUp() {
 type Panel = "receive" | "send" | "cashout" | null;
 
 export default function WalletPage() {
-  // dapp-kit hooks are client-only: render wallet state after mount.
+  // The signed-in account lives in the browser: render wallet state after mount.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const [panel, setPanel] = useState<Panel>(null);
@@ -88,10 +89,10 @@ export default function WalletPage() {
       ) : !address ? (
         <Card className="p-6">
           <h2 className="text-lg font-bold">Your wallet</h2>
-          <p className="mt-1 text-sm text-ink-soft">Sign in to see your balance, get paid and send money.</p>
-          <div className="mt-4">
-            <SignInButton />
-          </div>
+          <p className="mt-1 text-sm text-ink-soft">
+            {SIGN_IN === "passkey" ? "Create a wallet, or open yours, to get paid and send money." : "Sign in to see your balance, get paid and send money."}
+          </p>
+          <div className="mt-4">{SIGN_IN === "passkey" ? <PasskeySignIn /> : <SignInButton />}</div>
         </Card>
       ) : (
         <div className="mx-auto max-w-xl space-y-4">

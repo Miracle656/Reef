@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { walrus } from "@umbra/core";
-import { useSocialAccount } from "@/lib/account";
+import { useSignedInAddress } from "@/lib/account";
 import { umbraConfig, WALLET_NETWORK, WALLET_ONLY } from "@/lib/config";
 import { MSGS_SEEN_EVENT, readMsgsSeen } from "@/lib/msg-seen";
 import { trpc } from "@/lib/trpc";
@@ -85,9 +85,11 @@ export function useUnreadMessages(address?: string): number {
 }
 
 function useNav() {
-  const account = useSocialAccount();
+  // The passkey wallet on the wallet-only app, the Google account on the full app.
+  const address = useSignedInAddress();
+  const account = address ? { address } : null;
   const pathname = usePathname();
-  // On mainnet the app is the wallet alone: no profile, no feed, and nothing
+  // The wallet-only app (mainnet) has no profile and no feed, and nothing
   // here may call the (testnet) indexer.
   const social = !WALLET_ONLY;
   const profile = useQuery({
