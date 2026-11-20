@@ -116,6 +116,10 @@ describe("signed messages", () => {
     for (const message of bad) expect(cashout.SignedCashoutSchema.safeParse({ message, signature: "sig" }).success, JSON.stringify(message)).toBe(false);
     expect(cashout.SignedCashoutSchema.safeParse({ message: create, signature: "" }).success).toBe(false);
     expect(cashout.SignedCashoutSchema.safeParse({ message: create }).success).toBe(false);
+    // a session can stand in for the request's own signature
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: { issuedAt: 1_800_000_000_000, signature: "sig" } }).success).toBe(true);
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: { issuedAt: 1.5, signature: "sig" } }).success).toBe(false);
+    expect(cashout.SignedCashoutSchema.safeParse({ message: create, session: { issuedAt: 1_800_000_000_000, signature: "" } }).success).toBe(false);
   });
 });
 

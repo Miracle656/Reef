@@ -2,7 +2,9 @@
  * End-to-end check of the cash-out HTTP API in REHEARSAL mode (no Linq, no bank,
  * no real money). It signs requests with a throwaway key and drives a running
  * web server through a whole order: account lookup, create, deposit, status,
- * list, the webhook, and the refusals that must happen.
+ * list, the webhook, and the refusals that must happen. Then it does a second
+ * order the way a passkey wallet does: one confirmation (a session) for every
+ * request, signed by a software passkey.
  *
  * Start the web app in rehearsal mode first, then run this against it:
  *
@@ -16,8 +18,10 @@
  */
 import { createHmac, randomUUID } from "node:crypto";
 import process from "node:process";
+import type { Signer } from "@mysten/sui/cryptography";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { cashout } from "@umbra/core";
+import { softwarePasskey } from "../src/dev/software-passkey";
 
 const base = (process.argv[2] ?? "http://localhost:3100").replace(/\/+$/, "");
 const webhookSecret = process.argv[3];
@@ -115,6 +119,39 @@ if (webhookSecret) {
 } else {
   console.log("SKIP  webhook checks (pass the server's LINQ_WEBHOOK_SECRET as the second argument)");
 }
+
+// --- a passkey wallet: one confirmation covers every request
+const wallet = softwarePasskey();
+const walletOwner = wallet.toSuiAddress();
+async function confirm(signer: Signer, as: string, issuedAt = Date.now()) {
+  const { signature } = await signer.signPersonalMessage(cashout.canonicalCashoutSessionBytes(info.network, as, issuedAt));
+  return { issuedAt, signature };
+}
+async function withSession(session: cashout.CashoutSession, m: Unsigned<cashout.CashoutMessage>, as = walletOwner) {
+  const message = { ...m, owner: as, timestamp: Date.now() } as cashout.CashoutMessage;
+  const res = await fetch(`${base}/api/cashout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, session }) });
+  return { status: res.status, body: (await res.json()) as Record<string, any> };
+}
+const session = await confirm(wallet, walletOwner);
+const sessionOrder = randomUUID();
+r = await withSession(session, { action: "verify-bank", bankCode: "033", accountNumber: "1234567890" });
+check("a passkey wallet's confirmation is accepted (account lookup)", r.status === 200 && /TEST/.test(r.body.account?.accountName), JSON.stringify(r.body));
+r = await withSession(session, { ...create, orderId: sessionOrder });
+check("the same confirmation creates an order", r.status === 200 && r.body.order?.id === sessionOrder, JSON.stringify(r.body.error ?? ""));
+r = await withSession(session, { action: "get", orderId: sessionOrder });
+check("and reads it back", r.status === 200 && r.body.order?.status === "awaiting_deposit");
+r = await withSession(session, { action: "list" });
+check("and lists only that wallet's orders", r.status === 200 && r.body.orders?.length === 1 && r.body.orders[0].id === sessionOrder);
+r = await withSession(session, { action: "list" }, owner);
+check("a confirmation can't be used for another wallet", r.status === 401, r.body.error);
+r = await withSession(await confirm(stranger, walletOwner), { action: "get", orderId: sessionOrder });
+check("nor can someone else confirm for this wallet", r.status === 401, r.body.error);
+r = await withSession(await confirm(wallet, walletOwner, Date.now() - cashout.CASHOUT_SESSION_MS - 60_000), { action: "list" });
+check("a confirmation that has run out is refused", r.status === 401, r.body.error);
+r = await withSession(await confirm(wallet, walletOwner, Date.now() + 10 * 60_000), { action: "list" });
+check("and one dated in the future", r.status === 401, r.body.error);
+r = await withSession({ issuedAt: session.issuedAt, signature: (await wallet.signPersonalMessage(cashout.canonicalCashoutBytes({ action: "list", owner: walletOwner, timestamp: session.issuedAt }))).signature }, { action: "list" });
+check("a signature over a request is not a confirmation", r.status === 401, r.body.error);
 
 // --- throttle: 3 orders per 10 minutes per wallet (one made above)
 for (let i = 0; i < 2; i++) await call(user, { ...create, orderId: randomUUID() });

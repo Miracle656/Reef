@@ -2,14 +2,14 @@
 
 /**
  * Client side of cash-out: talks to ReeF's own `/api/cashout`, never to Linq.
- * Every request is a personal message signed by the wallet (see `@umbra/core`
+ * The wallet signs one message to confirm who it is (see `@umbra/core`
  * `cashout`), so the server can tell whose orders these are without a login.
  */
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { useQuery } from "@tanstack/react-query";
 import { cashout } from "@umbra/core";
-import { WALLET_NETWORK } from "./config";
+import { SIGN_IN, WALLET_NETWORK } from "./config";
 import { useWalletSignMessage } from "./wallet";
 
 export type CashoutInfo =
@@ -60,40 +60,77 @@ export type CashoutDraft = Draft<cashout.CashoutMessage>;
 
 type ResponseFor<A extends cashout.CashoutMessage["action"]> = Extract<cashout.CashoutResponse, { action: A }>;
 
-/** The server accepts a signed request for 5 minutes; reuse a read for less than that. */
-const REUSE_SIGNED_READ_MS = 3 * 60_000;
+/** Use a confirmation for a little less time than the server allows it. */
+const SESSION_USE_MS = cashout.CASHOUT_SESSION_MS - 2 * 60_000;
 
 /**
- * `call(address, draft)` signs and sends one cash-out request.
+ * The wallet's confirmations, by owner. Memory only: a reload asks again.
+ * `signing` holds a confirmation that is being made, so two requests that start
+ * together share one prompt.
+ */
+const sessions = new Map<string, cashout.CashoutSession>();
+const signing = new Map<string, Promise<cashout.CashoutSession>>();
+
+/** Forget every confirmation (signing out). */
+export function forgetCashoutSessions() {
+  sessions.clear();
+}
+
+/**
+ * A confirmation is needed and this isn't the moment to ask for one: the call
+ * was `quiet` (made from a timer, not a tap) and the wallet signs with a
+ * passkey, whose prompt browsers only allow straight after a tap.
+ */
+export class CashoutLockedError extends Error {
+  constructor() {
+    super("Confirm it's you to carry on.");
+    this.name = "CashoutLockedError";
+  }
+}
+
+/**
+ * `call(address, draft)` sends one cash-out request.
  *
- * Reads of the same order are polled every few seconds; signing each poll
- * would be wasteful, so a signed "get" is reused for a few minutes.
+ * The wallet confirms once (one signature: a passkey prompt, or nothing visible
+ * for a Google account) and that confirmation is sent with every request for
+ * the next half hour. Pass `{ quiet: true }` from anything that isn't a tap.
  */
 export function useCashoutApi() {
   const sign = useWalletSignMessage();
-  const reads = useRef(new Map<string, { body: string; atMs: number }>());
 
   return useCallback(
-    async <D extends CashoutDraft>(address: string, draft: D): Promise<ResponseFor<D["action"]>> => {
+    async <D extends CashoutDraft>(address: string, draft: D, opts: { quiet?: boolean } = {}): Promise<ResponseFor<D["action"]>> => {
       const owner = normalizeSuiAddress(address);
-      const key = draft.action === "get" ? `${owner}:${(draft as { orderId: string }).orderId}` : null;
-      const cached = key ? reads.current.get(key) : undefined;
 
-      let body: string;
-      if (cached && Date.now() - cached.atMs < REUSE_SIGNED_READ_MS) {
-        body = cached.body;
-      } else {
-        const message = { ...draft, owner, timestamp: Date.now() } as cashout.CashoutMessage;
-        const signature = await sign(cashout.canonicalCashoutBytes(message));
-        body = JSON.stringify({ message, signature });
-        if (key) reads.current.set(key, { body, atMs: message.timestamp });
+      let session = sessions.get(owner);
+      if (!session || Date.now() - session.issuedAt > SESSION_USE_MS) {
+        if (opts.quiet && SIGN_IN === "passkey") throw new CashoutLockedError();
+        let pending = signing.get(owner);
+        if (!pending) {
+          const issuedAt = Date.now();
+          pending = sign(cashout.canonicalCashoutSessionBytes(WALLET_NETWORK ?? "", owner, issuedAt))
+            .then((signature) => {
+              const made = { issuedAt, signature };
+              sessions.set(owner, made);
+              return made;
+            })
+            .finally(() => signing.delete(owner));
+          signing.set(owner, pending);
+        }
+        session = await pending;
       }
 
-      const res = await fetch("/api/cashout", { method: "POST", headers: { "Content-Type": "application/json" }, body, cache: "no-store" });
+      const message = { ...draft, owner, timestamp: Date.now() } as cashout.CashoutMessage;
+      const res = await fetch("/api/cashout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, session }),
+        cache: "no-store",
+      });
       const json = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
       if (!res.ok) {
-        // A rejected signature may mean the cached one aged out: sign afresh next time.
-        if (key) reads.current.delete(key);
+        // The server no longer takes this confirmation: the next tap makes a new one.
+        if (res.status === 401) sessions.delete(owner);
         throw new CashoutApiError(json?.error ?? "Cash-out isn't answering. Try again in a minute.", json?.code ?? "provider", res.status);
       }
       return json as ResponseFor<D["action"]>;

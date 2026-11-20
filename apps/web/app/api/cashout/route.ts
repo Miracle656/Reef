@@ -2,11 +2,12 @@
  * Cash-out API.
  *
  *   GET  /api/cashout?owner=0x…   is cash-out available to this wallet, its limits, today's indicative rate
- *   POST /api/cashout   one signed request: { message, signature } (see @umbra/core `cashout`)
+ *   POST /api/cashout   one request: { message, session } or { message, signature } (see @umbra/core `cashout`)
  *
- * Every POST is a personal message signed by the wallet that owns the order;
- * the rules (who may do what, limits, checks on Linq's answers) are in
- * `@umbra/core/server` `createCashoutService`.
+ * Every POST is proven to come from the wallet that owns the order: by a
+ * session (one message the wallet signed in the last half hour) or by its own
+ * signature. The rules (who may do what, limits, checks on Linq's answers) are
+ * in `@umbra/core/server` `createCashoutService`.
  */
 import { CashoutError } from "@umbra/core/server";
 import { getCashout } from "@/lib/server/cashout";
